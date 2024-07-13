@@ -176,9 +176,16 @@ class OccHead(nn.Module):
                 B, W, H, D = coarse_occ_mask.shape
                 coarse_coord_x, coarse_coord_y, coarse_coord_z = torch.meshgrid(torch.arange(W).to(coarse_occ.device),
                             torch.arange(H).to(coarse_occ.device), torch.arange(D).to(coarse_occ.device), indexing='ij')
-
-                if self.baseline_mode == "NearRefine":
-                    import pdb; pdb.set_trace()
+                
+                if self.baseline_mode == "NearRefine": # Provide near_range_mask
+                    w_mask = (torch.arange(W) >= 32) & (torch.arange(W) < 96)
+                    h_mask = (torch.arange(H) >= 32) & (torch.arange(H) < 96)
+                    w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
+                    h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
+                    w_h_mask = w_mask & h_mask
+                    w_h_mask = w_h_mask.expand(B, W, H, D)
+                    w_h_mask = w_h_mask.bool().to(coarse_occ_mask.device)
+                    coarse_occ_mask = coarse_occ_mask & w_h_mask
 
                 output['fine_output'] = []
                 output['fine_coord'] = []
