@@ -25,6 +25,7 @@ class OccHead(nn.Module):
         norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
         fine_topk=20000,
         point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
+        baseline_mode=None,
         final_occ_size=[256, 256, 20],
         empty_idx=0,
         visible_loss=False,
@@ -46,6 +47,7 @@ class OccHead(nn.Module):
         self.fine_topk = fine_topk
         
         self.point_cloud_range = torch.tensor(np.array(point_cloud_range)).float()
+        self.baseline_mode = baseline_mode
         self.final_occ_size = final_occ_size
         self.visible_loss = visible_loss
         self.cascade_ratio = cascade_ratio
@@ -169,11 +171,15 @@ class OccHead(nn.Module):
         if self.cascade_ratio != 1:
             if self.sample_from_img or self.sample_from_voxel:
                 coarse_occ_mask = coarse_occ.argmax(1) != self.empty_idx
+                
                 assert coarse_occ_mask.sum() > 0, 'no foreground in coarse voxel'
                 B, W, H, D = coarse_occ_mask.shape
                 coarse_coord_x, coarse_coord_y, coarse_coord_z = torch.meshgrid(torch.arange(W).to(coarse_occ.device),
                             torch.arange(H).to(coarse_occ.device), torch.arange(D).to(coarse_occ.device), indexing='ij')
-                
+
+                if self.baseline_mode == "NearRefine":
+                    import pdb; pdb.set_trace()
+
                 output['fine_output'] = []
                 output['fine_coord'] = []
 

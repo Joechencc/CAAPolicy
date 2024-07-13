@@ -54,6 +54,11 @@ data_config={
     'resize_test': 0.00,
 }
 
+# baseline_mode = "Basic"
+baseline_mode = "NearRefine"
+# baseline_mode = "Trajectory"
+# baseline_mode = "Zonotope"
+
 # downsample ratio in [x, y, z] when generating 3D volumes in LSS
 grid_config = {
     'xbound': [point_cloud_range[0], point_cloud_range[3], voxel_x*lss_downsample[0]],
@@ -127,6 +132,7 @@ model = dict(
             loss_voxel_geo_scal_weight=1.0,
             loss_voxel_lovasz_weight=1.0,
         ),
+        baseline_mode=baseline_mode,
     ),
     empty_idx=empty_idx,
 )
