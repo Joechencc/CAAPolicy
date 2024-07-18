@@ -13,8 +13,8 @@ plugin_dir = "projects/occ_plugin/"
 img_norm_cfg = None
 occ_path = "./data/nuScenes-Occupancy"
 depth_gt_path = './data/depth_gt'
-train_ann_file = "./data/nuscenes/nuscenes_occ_infos_train.pkl"
-val_ann_file = "./data/nuscenes/nuscenes_occ_infos_val.pkl"
+train_ann_file = "./data/nuscenes_occ_infos_train.pkl"
+val_ann_file = "./data/nuscenes_occ_infos_val.pkl"
 # For nuScenes we usually do 10-class detection
 class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
@@ -171,8 +171,8 @@ test_pipeline = [
     dict(type='LoadOccupancy', to_float32=True, use_semantic=True, occ_path=occ_path, grid_size=occ_size, use_vel=False,
         unoccupied=empty_idx, pc_range=point_cloud_range, cal_visible=visible_mask),
     dict(type='OccDefaultFormatBundle3D', class_names=class_names, with_label=False), 
-    dict(type='Collect3D', keys=['img_inputs', 'gt_occ'],
-            meta_keys=['pc_range', 'occ_size', 'scene_token', 'lidar_token']),
+    dict(type='Collect3D', keys=['img_inputs', 'gt_occ', 'ego2global_translation', 'ego2global_rotation'],
+            meta_keys=['pc_range', 'occ_size', 'scene_token', 'lidar_token', 'prev_idx', 'next_idx']),
 ]
 
 test_config=dict(
@@ -202,8 +202,8 @@ train_config=dict(
         box_type_3d='LiDAR'),
 
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=4,
+    samples_per_gpu=4,
+    workers_per_gpu=0,
     train=train_config,
     val=test_config,
     test=test_config,

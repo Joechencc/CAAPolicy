@@ -1,6 +1,7 @@
 cd $(readlink -f `dirname $0`)
-conda activate OpenOccupancy
 
+#source /scratch/cc7287/env.sh 
+#conda activate OpenOccupancy
 echo $1
 if [ -f $1 ]; then
   config=$1

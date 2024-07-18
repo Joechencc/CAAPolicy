@@ -196,11 +196,10 @@ def main():
         samples_per_gpu=samples_per_gpu,
         workers_per_gpu=cfg.data.workers_per_gpu,
         dist=distributed,
-        shuffle=True,
+        shuffle=False,
         #nonshuffler_sampler=cfg.data.nonshuffler_sampler,
         # shuffler_sampler=cfg.data.shuffler_sampler,
     )
-
     # build the model and load checkpoint
     cfg.model.train_cfg = None
     model = build_model(cfg.model, test_cfg=cfg.get('test_cfg'))

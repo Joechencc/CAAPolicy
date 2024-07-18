@@ -49,12 +49,21 @@ class NuscOCCDataset(NuScenesDataset):
 
         self.pre_pipeline(input_dict)
         example = self.pipeline(input_dict)
+
+        next_input_dict = self.get_data_info(index+1)
+
+        if next_input_dict is None:
+            return None
+
+        self.pre_pipeline(next_input_dict)
+        next_example = self.pipeline(next_input_dict)
+        example['ego2global_translation_next'] = next_example['ego2global_translation']
+        example['ego2global_rotation_next'] = next_example['ego2global_rotation']
         return example
 
     def get_data_info(self, index):
 
         info = self.data_infos[index]
-        
         # standard protocal modified from SECOND.Pytorch
         input_dict = dict(
             sample_idx=info['token'],
