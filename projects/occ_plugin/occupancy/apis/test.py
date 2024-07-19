@@ -74,7 +74,7 @@ def custom_single_gpu_test(model, data_loader, show=False, out_dir=None, show_sc
                 SSC_metric += result['SSC_metric']
             if 'SSC_metric_fine' in result.keys():
                 SSC_metric_fine += result['SSC_metric_fine']
-            batch_size = 1
+            batch_size = 2
 
         
         # logging evaluation_semantic
@@ -147,7 +147,7 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False, sh
                 SSC_metric.append(result['SSC_metric'])
             if 'SSC_metric_fine' in result.keys():
                 SSC_metric_fine.append(result['SSC_metric_fine'])
-            batch_size = 1
+            batch_size = 2
 
                 
         if rank == 0:

@@ -265,6 +265,7 @@ class OccNet(BEVDepth):
             img_feats=img_feats,
             pts_feats=pts_feats,
             transform=transform,
+            **kwargs,
         )
 
         pred_c = output['output_voxels'][0]
