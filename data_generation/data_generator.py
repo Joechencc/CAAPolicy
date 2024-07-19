@@ -196,7 +196,7 @@ class DataGenerator:
                 (cur_save_path / sensor).mkdir()
 
         total_frames = len(self._batch_data_frames)
-        thread_num = 10
+        thread_num = 16
         frames_for_thread = total_frames // thread_num
         thread_list = []
         for t_idx in range(thread_num):
@@ -242,7 +242,7 @@ class DataGenerator:
                         str(cur_save_path / sensor / ('%04d.png' % index)))
                 elif sensor.startswith('lidar'):
                     data_frame[sensor].save_to_disk(
-                        str(cur_save_path / 'lidar' / ('%04d.ply' % index)))
+                        str(cur_save_path / sensor  / ('%04d.ply' % index)))
 
             # save measurements
             imu_data = data_frame['imu']

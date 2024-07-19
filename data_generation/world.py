@@ -103,6 +103,8 @@ class World(object):
 
         self._need_init_ego_state = True
 
+        #lidar
+        self._lidar_config={}
     def restart(self, seed, target_index, ego_transform):
 
         # spawn static vehicles in the parking lot
@@ -245,51 +247,80 @@ class World(object):
         }
         self._cam_center = np.array([self._cam_config['width'] / 2.0, self._cam_config['height'] / 2.0])
         self._cam_specs = {
+
             'rgb_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
+                'x': 0.8, 'y': 0.0, 'z': 1.6,
+                'fov':70,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
+                'width':1600,
+                'height':900,
             },
-            'rgb_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+            'rgb_front_left': {
+                'x': 0.27, 'y': -0.55, 'z': 1.6,
+                'fov': 70,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.rgb',
+                'width': 1600,
+                'height': 900,
             },
-            'rgb_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+            'rgb_front_right': {
+                'x': 0.27, 'y': 0.55, 'z': 1.6,
+                'fov': 70,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.rgb',
+                'width': 1600,
+                'height': 900,
             },
-            'rgb_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+            'rgb_back': {
+                'x': -2.0, 'y': 0.0, 'z': 1.6,
+                'fov': 110,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 180.0,
                 'type': 'sensor.camera.rgb',
+                'width': 1600,
+                'height': 900,
             },
-            'depth_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.depth',
+            'rgb_back_left': {
+                'x': -0.32, 'y': -0.55, 'z': 1.6,
+                'fov': 70,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -110.0,
+                'type': 'sensor.camera.rgb',
+                'width': 1600,
+                'height': 900,
             },
-            'depth_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-                'type': 'sensor.camera.depth',
+            'rgb_back_right': {
+                'x': -0.32, 'y': 0.55, 'z': 1.6,
+                'fov': 70,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 110.0,
+                'type': 'sensor.camera.rgb',
+                'width': 1600,
+                'height': 900,
             },
-            'depth_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-                'type': 'sensor.camera.depth',
-            },
+
         }
 
         for key, value in self._cam_specs.items():
             self.spawn_rgb_camera(key, value)
 
+        #lidar
+        self._lidar_config = {
+            'lidar_front': {
+                'x': 0.0, 'y': 0.0, 'z': 1.6,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'channels': 32, 'range': 50, 'points_per_second': 1000000,
+                'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
+                'atmosphere_attenuation_rate': 0.1,
+                'horizontal_fov':360,
+                'upper_fov':10,
+                'lower_fov':-30,
+            },
+            # Repeat for each lidar configuration
+        }
+
+
+        for key, value in self._lidar_config.items():
+            #self.spawn_lidar(value)# Pass only the lidar specifications
+            self.spawn_semantic_lidar(value)
         # intrinsic
         w = self._cam_config['width']
         h = self._cam_config['height']
@@ -355,6 +386,31 @@ class World(object):
         lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
                                        attachment_type=carla.AttachmentType.Rigid)
         lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
+        self._sensor_list.append(lidar)
+
+    def spawn_semantic_lidar(self, lidar_specs):
+
+        blueprint_library = self.world.get_blueprint_library()
+        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
+        lidar_bp.set_attribute('rotation_frequency', str(lidar_specs['rotation_frequency']))
+        lidar_bp.set_attribute('points_per_second', str(lidar_specs['points_per_second']))
+        lidar_bp.set_attribute('channels', str(lidar_specs['channels']))
+        lidar_bp.set_attribute('upper_fov', str(lidar_specs['upper_fov']))
+        lidar_bp.set_attribute('lower_fov', str(lidar_specs['lower_fov']))
+        lidar_bp.set_attribute('range', str(lidar_specs['range']))
+        lidar_bp.set_attribute("horizontal_fov", str(lidar_specs['horizontal_fov']))
+
+
+        lidar_location = carla.Location(x=lidar_specs['x'], y=lidar_specs['y'], z=lidar_specs['z'])
+        lidar_rotation = carla.Rotation(pitch=lidar_specs['pitch'], roll=lidar_specs['roll'], yaw=lidar_specs['yaw'])
+        lidar_transform = carla.Transform(lidar_location, lidar_rotation)
+
+        lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
+                                       attachment_type=carla.AttachmentType.Rigid)
+
+        lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
+
+
         self._sensor_list.append(lidar)
 
     def next_weather(self, reverse=False):
