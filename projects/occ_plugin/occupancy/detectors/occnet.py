@@ -285,11 +285,13 @@ class OccNet(BEVDepth):
             SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
             SSC_metric_fine, SSC_occ_metric_fine = self.evaluation_semantic(pred_f, gt_occ, eval_type='SSC', visible_mask=visible_mask)
 
+        coarse_occ_mask = output['coarse_occ_mask']
         test_output = {
             'SC_metric': SC_metric,
             'SSC_metric': SSC_metric,
             'pred_c': pred_c,
             'pred_f': pred_f,
+            'coarse_occ_mask': output['coarse_occ_mask'],
         }
 
         if SSC_metric_fine is not None:

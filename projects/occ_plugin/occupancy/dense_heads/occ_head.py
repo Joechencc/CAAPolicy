@@ -182,9 +182,10 @@ class OccHead(nn.Module):
                     h_mask = (torch.arange(H) >= 32) & (torch.arange(H) < 96)
                     w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
                     h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
-                    w_h_mask = w_mask & h_mask
+                    w_h_mask = w_mask | h_mask
                     w_h_mask = w_h_mask.expand(B, W, H, D)
                     w_h_mask = w_h_mask.bool().to(coarse_occ_mask.device)
+                    out_mask = w_h_mask.clone()
                     coarse_occ_mask = coarse_occ_mask & w_h_mask
                 elif self.baseline_mode == "Trajectory": # Optimize along the trajectory
                     #calculate delta translation and delta rotation
@@ -200,7 +201,25 @@ class OccHead(nn.Module):
                     # Calculate 5 waypoints
                     trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
                     traj_mask = self.create_waypoint_mask(trajectory_waypoints, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
-                    coarse_occ_mask = coarse_occ_mask & w_h_mask
+                    out_mask = traj_mask.clone()
+                    coarse_occ_mask = coarse_occ_mask & traj_mask
+                elif self.baseline_mode == "Zonotope": # Optimize along the trajectory
+                    #calculate delta translation and delta rotation
+                    delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
+                    q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
+                    q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
+                    delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
+                    
+                    r1 = R.from_quat(q1.cpu())
+                    r2 = R.from_quat(q2.cpu())
+                    delta_rotation = r2 * r1.inv() 
+                    delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
+                    # Calculate 5 waypoints
+                    trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
+                    zonotopes = self.generate_zonotopes(trajectory_waypoints, coarse_occ_mask.device)
+                    zono_mask = self.create_waypoint_mask(zonotopes, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
+                    out_mask = zono_mask.clone()
+                    coarse_occ_mask = coarse_occ_mask & zono_mask
 
                 output['fine_output'] = []
                 output['fine_coord'] = []
@@ -255,6 +274,7 @@ class OccHead(nn.Module):
             'output_voxels': output['occ'],
             'output_voxels_fine': output.get('fine_output', None),
             'output_coords_fine': output.get('fine_coord', None),
+            'coarse_occ_mask': out_mask,
         }
         
         return res
@@ -277,15 +297,15 @@ class OccHead(nn.Module):
         return trajectory_waypoints
 
     def create_waypoint_mask(self, trajectory_waypoints, pc_range, occ_size, device):
-        waypoint_mask = torch.zeros(occ_size).to(device)
+        waypoint_mask = torch.zeros(occ_size).to(device).bool()
         grid_size = (pc_range[3]-pc_range[0]) / occ_size[1] 
         B, W, H, D = occ_size
         for waypoint in trajectory_waypoints:
             x_idx, y_idx, z_idx = self.point_to_grid_index(waypoint, pc_range, grid_size)
             x_idx -= int(W/2)
             y_idx -= int(H/2)
-            w_mask = (torch.arange(W).unsqueeze(0).repeat(2,1) >= (60+torch.tensor(x_idx)).unsqueeze(1)) & (torch.arange(W).unsqueeze(0).repeat(2,1) < (68+torch.tensor(x_idx)).unsqueeze(1))
-            h_mask = (torch.arange(H).unsqueeze(0).repeat(2,1) >= (60+torch.tensor(y_idx)).unsqueeze(1)) & (torch.arange(H).unsqueeze(0).repeat(2,1) < (68+torch.tensor(y_idx)).unsqueeze(1))
+            w_mask = (torch.arange(W).unsqueeze(0).repeat(x_idx.shape[0],1) >= (60+torch.tensor(x_idx)).unsqueeze(1)) & (torch.arange(W).unsqueeze(0).repeat(x_idx.shape[0],1) < (68+torch.tensor(x_idx)).unsqueeze(1))
+            h_mask = (torch.arange(H).unsqueeze(0).repeat(x_idx.shape[0],1) >= (60+torch.tensor(y_idx)).unsqueeze(1)) & (torch.arange(H).unsqueeze(0).repeat(x_idx.shape[0],1) < (68+torch.tensor(y_idx)).unsqueeze(1))
             w_mask = w_mask.view(B, W, 1, 1)  # Shape (B, W, 1, 1)
             h_mask = h_mask.view(B, 1, H, 1)  # Shape (B, 1, H, 1)
             w_h_mask = w_mask & h_mask
@@ -293,7 +313,28 @@ class OccHead(nn.Module):
             w_h_mask = w_h_mask.bool().to(device)
             waypoint_mask = waypoint_mask | w_h_mask
         return waypoint_mask
+    
+    def generate_zonotopes(self, trajectory_waypoints, device):
+        zonotopes = []
+        for waypoint in trajectory_waypoints:
+            center = waypoint.cpu().numpy()
+            # Example: Use identity matrix as generators for simplicity
+            generators = np.eye(3)
+            zonotope_vertices = self.calculate_zonotope(center, generators)
+            zonotopes.append(torch.tensor(zonotope_vertices).to(device))
+        zonotopes = torch.concat(zonotopes)
+        return zonotopes
+    
+    def calculate_zonotope(self, center, generators):
+        num_generators = generators.shape[1]
+        vertices = []
         
+        # Iterate over all combinations of generators
+        for i in range(1 << num_generators):
+            combination = np.array([1 if (i & (1 << j)) else -1 for j in range(num_generators)])
+            vertex = center + np.dot(generators, combination)
+            vertices.append(vertex)
+        return np.array(vertices)
     
     def point_to_grid_index(self, point, pc_range, grid_size=0.8):
         """

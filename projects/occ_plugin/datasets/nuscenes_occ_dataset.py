@@ -49,7 +49,12 @@ class NuscOCCDataset(NuScenesDataset):
 
         self.pre_pipeline(input_dict)
         example = self.pipeline(input_dict)
-
+        
+        if len(example['img_metas'].data['next_idx']) == 0:
+            example['ego2global_translation_next'] = example['ego2global_translation']
+            example['ego2global_rotation_next'] = example['ego2global_rotation']
+            return example 
+        
         next_input_dict = self.get_data_info(index+1)
 
         if next_input_dict is None:
