@@ -104,13 +104,14 @@ class World(object):
         self._need_init_ego_state = True
 
         #lidar
-        self._lidar_config={}
+        self._lidar_config = {}
+
     def restart(self, seed, target_index, ego_transform):
 
         # spawn static vehicles in the parking lot
         if self._shuffle_static_vhe:
             self.init_static_npc(seed, target_index)
-
+        self.init_single_bicycle(seed, (280.0, 235.73, 0.3))
         # init the player position
         self._player.set_transform(ego_transform)
         self._player.apply_control(carla.VehicleControl())
@@ -167,7 +168,6 @@ class World(object):
         # spawn npc vehicles
         for index in range(static_vehicle_num):
             spawn_point = parking_points_copy[index]
-
             if spawn_point == target_parking_goal:
                 self._all_parking_goals.append(spawn_point)
                 continue
@@ -179,8 +179,8 @@ class World(object):
                 npc.set_simulate_physics(False)
                 self._actor_list.append(npc)
             else:
-                # logging.info("try_spawn_actor %s at (%.3f, %.3f, %.3f) failed!",
-                #              npc_bp.id, spawn_point.x, spawn_point.y, spawn_point.z)
+                logging.info("try_spawn_actor %s at (%.3f, %.3f, %.3f) failed!",
+                             npc_bp.id, spawn_point.x, spawn_point.y, spawn_point.z)
                 self._all_parking_goals.append(spawn_point)
 
         # set parking goal
@@ -188,6 +188,57 @@ class World(object):
             self._all_parking_goals.append(parking_points_copy[index])
 
         logging.info('set %d parking goal', len(self._all_parking_goals))
+
+    def init_single_pergola(self, spawn_coordinate, width=10.0, height=3.0):
+        logging.info("Generating a pergola at the specified coordinate")
+
+        # 选择Pergola蓝图
+        blueprints = self._world.get_blueprint_library().filter("static.prop.pergola")
+
+        # 设置生成点
+        spawn_point = carla.Location(x=spawn_coordinate[0], y=spawn_coordinate[1], z=spawn_coordinate[2])
+
+        # 生成Pergola
+        pergola_transform = carla.Transform(spawn_point, rotation=random.choice(parking_vehicle_rotation))
+        pergola_bp = random.choice(blueprints)
+        pergola = self._world.try_spawn_actor(pergola_bp, pergola_transform)
+
+        if pergola is not None:
+            # 调整Pergola的尺寸（如果蓝图支持）
+            # pergola.set_attribute('width', str(width))
+            # pergola.set_attribute('height', str(height))
+            pergola.set_simulate_physics(False)
+            self._actor_list.append(pergola)
+            logging.info("Pergola spawned successfully at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y,
+                         spawn_point.z)
+        else:
+            logging.info("Failed to spawn pergola at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y, spawn_point.z)
+
+    def init_single_bicycle(self, spawn_coordinate):
+
+        logging.info("Generating a static bicycle at the specified coordinate")
+
+        # 选择自行车蓝图
+        blueprints = self._world.get_blueprint_library().filter("vehicle.bh.crossbike")
+
+        # 设置生成点
+        spawn_point = carla.Location(x=spawn_coordinate[0], y=spawn_coordinate[1], z=spawn_coordinate[2])
+
+        # 生成NPC自行车
+        npc_transform = carla.Transform(spawn_point, rotation=random.choice(parking_vehicle_rotation))
+        npc_bp = random.choice(blueprints)
+        npc = self._world.try_spawn_actor(npc_bp, npc_transform)
+
+        if npc is not None:
+            npc.set_simulate_physics(False)
+            self._actor_list.append(npc)
+            logging.info("Bicycle spawned successfully at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y,
+                         spawn_point.z)
+        else:
+            # logging.info("try_spawn_actor %s at (%.3f, %.3f, %.3f) failed!",
+            #              npc_bp.id, spawn_point.x, spawn_point.y, spawn_point.z)
+            self._all_parking_goals.append(spawn_point)
+            logging.info("Failed to spawn bicycle at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y, spawn_point.z)
 
     def init_sensors(self):
         self._collision_sensor = CollisionSensor(self._player, self._hud)
@@ -246,17 +297,108 @@ class World(object):
             'fov': 100,
         }
         self._cam_center = np.array([self._cam_config['width'] / 2.0, self._cam_config['height'] / 2.0])
+        # self._cam_specs = {
+        #
+        #     'rgb_front': {
+        #         'x': 0.8, 'y': 0.0, 'z': 1.6,
+        #         'fov':70,
+        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        #         'type': 'sensor.camera.rgb',
+        #         'width':1600,
+        #         'height':900,
+        #     },
+        #     'rgb_front_left': {
+        #         'x': 0.27, 'y': -0.55, 'z': 1.6,
+        #         'fov': 70,
+        #         'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        #         'type': 'sensor.camera.rgb',
+        #         'width': 1600,
+        #         'height': 900,
+        #     },
+        #     'rgb_front_right': {
+        #         'x': 0.27, 'y': 0.55, 'z': 1.6,
+        #         'fov': 70,
+        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        #         'type': 'sensor.camera.rgb',
+        #         'width': 1600,
+        #         'height': 900,
+        #     },
+        #     'rgb_back': {
+        #         'x': -2.0, 'y': 0.0, 'z': 1.6,
+        #         'fov': 110,
+        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 180.0,
+        #         'type': 'sensor.camera.rgb',
+        #         'width': 1600,
+        #         'height': 900,
+        #     },
+        #     'rgb_back_left': {
+        #         'x': -0.32, 'y': -0.55, 'z': 1.6,
+        #         'fov': 70,
+        #         'roll': 0.0, 'pitch': 0.0, 'yaw': -110.0,
+        #         'type': 'sensor.camera.rgb',
+        #         'width': 1600,
+        #         'height': 900,
+        #     },
+        #     'rgb_back_right': {
+        #         'x': -0.32, 'y': 0.55, 'z': 1.6,
+        #         'fov': 70,
+        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 110.0,
+        #         'type': 'sensor.camera.rgb',
+        #         'width': 1600,
+        #         'height': 900,
+        #     },
+        #
+        # }
         self._cam_specs = {
-
             'rgb_front': {
-                'x': 0.8, 'y': 0.0, 'z': 1.6,
-                'fov':70,
+                'x': 1.5, 'y': 0.0, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
-                'width':1600,
-                'height':900,
             },
-            'rgb_front_left': {
+            'rgb_left': {
+                'x': 0.0, 'y': -0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+                'type': 'sensor.camera.rgb',
+            },
+            'rgb_right': {
+                'x': 0.0, 'y': 0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+                'type': 'sensor.camera.rgb',
+            },
+            'rgb_rear': {
+                'x': -2.2, 'y': 0.0, 'z': 1.5,
+                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+                'type': 'sensor.camera.rgb',
+            },
+            'depth_front': {
+                'x': 1.5, 'y': 0.0, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_left': {
+                'x': 0.0, 'y': -0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_right': {
+                'x': 0.0, 'y': 0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_rear': {
+                'x': -2.2, 'y': 0.0, 'z': 1.5,
+                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+                'type': 'sensor.camera.depth',
+            },
+            'camera_front': {
+                'x': 0.8, 'y': 0.0, 'z': 1.6,
+                'fov': 70,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'type': 'sensor.camera.rgb',
+                'width': 1600,
+                'height': 900,
+            },
+            'camera_front_left': {
                 'x': 0.27, 'y': -0.55, 'z': 1.6,
                 'fov': 70,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
@@ -264,7 +406,7 @@ class World(object):
                 'width': 1600,
                 'height': 900,
             },
-            'rgb_front_right': {
+            'camera_front_right': {
                 'x': 0.27, 'y': 0.55, 'z': 1.6,
                 'fov': 70,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
@@ -272,7 +414,7 @@ class World(object):
                 'width': 1600,
                 'height': 900,
             },
-            'rgb_back': {
+            'camera_back': {
                 'x': -2.0, 'y': 0.0, 'z': 1.6,
                 'fov': 110,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 180.0,
@@ -280,7 +422,7 @@ class World(object):
                 'width': 1600,
                 'height': 900,
             },
-            'rgb_back_left': {
+            'camera_back_left': {
                 'x': -0.32, 'y': -0.55, 'z': 1.6,
                 'fov': 70,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': -110.0,
@@ -288,7 +430,7 @@ class World(object):
                 'width': 1600,
                 'height': 900,
             },
-            'rgb_back_right': {
+            'camera_back_right': {
                 'x': -0.32, 'y': 0.55, 'z': 1.6,
                 'fov': 70,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 110.0,
@@ -296,9 +438,7 @@ class World(object):
                 'width': 1600,
                 'height': 900,
             },
-
         }
-
         for key, value in self._cam_specs.items():
             self.spawn_rgb_camera(key, value)
 
@@ -310,13 +450,12 @@ class World(object):
                 'channels': 32, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
                 'atmosphere_attenuation_rate': 0.1,
-                'horizontal_fov':360,
-                'upper_fov':10,
-                'lower_fov':-30,
+                'horizontal_fov': 360,
+                'upper_fov': 10,
+                'lower_fov': -30,
             },
             # Repeat for each lidar configuration
         }
-
 
         for key, value in self._lidar_config.items():
             #self.spawn_lidar(value)# Pass only the lidar specifications
@@ -400,7 +539,6 @@ class World(object):
         lidar_bp.set_attribute('range', str(lidar_specs['range']))
         lidar_bp.set_attribute("horizontal_fov", str(lidar_specs['horizontal_fov']))
 
-
         lidar_location = carla.Location(x=lidar_specs['x'], y=lidar_specs['y'], z=lidar_specs['z'])
         lidar_rotation = carla.Rotation(pitch=lidar_specs['pitch'], roll=lidar_specs['roll'], yaw=lidar_specs['yaw'])
         lidar_transform = carla.Transform(lidar_location, lidar_rotation)
@@ -409,7 +547,6 @@ class World(object):
                                        attachment_type=carla.AttachmentType.Rigid)
 
         lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
-
 
         self._sensor_list.append(lidar)
 

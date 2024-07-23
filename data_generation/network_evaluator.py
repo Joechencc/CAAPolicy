@@ -7,15 +7,18 @@ import carla
 import numpy as np
 import pandas as pd
 import glob
-
+import cv2
 from datetime import datetime
-
+from data_generation.tools import encode_npy_to_pil
 from data_generation import parking_position
 from data_generation.world import World
+import json
+from threading import Thread
 
 
 class NetworkEvaluator:
     def __init__(self, carla_world, args):
+        self._task_index = 0
         self._seed = args.random_seed
         self._init_seed = args.random_seed
         random.seed(args.random_seed)
@@ -118,6 +121,7 @@ class NetworkEvaluator:
 
         self.init()
         self.start_eva_epoch()
+        self._batch_data_frames = []
 
     def init(self):
         logging.info("***************** Start init eva environment *****************")
@@ -201,6 +205,7 @@ class NetworkEvaluator:
                                                                                   self._eva_parking_idx)
         self._world.player.set_transform(self._ego_transform)
         self._world.init_static_npc(self._seed, self._parking_goal_index)
+        #self._world.init_single_pergola([290.9, -235.73, 0.3])
         self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 180]
 
         self._eva_task_idx = 0
@@ -342,6 +347,7 @@ class NetworkEvaluator:
 
         # check success parking
         if self.check_success_slot(closest_goal, t):
+            self.save_sensor_data(closest_goal)
             self.start_next_parking()
             return
 
@@ -525,6 +531,11 @@ class NetworkEvaluator:
         return x_out_bound or y_out_bound
 
     def world_tick(self):
+        step = self._world.step
+        if step % 3 == 0:
+            sensor_data_frame = self._world.sensor_data_frame
+            sensor_data_frame['bev_state'] = self._world.bev_state
+            self._batch_data_frames.append(sensor_data_frame.copy())
         self._world.world_tick()
 
     def render(self, display):
@@ -553,3 +564,115 @@ class NetworkEvaluator:
     @property
     def ego_transform(self):
         return self._ego_transform
+    def save_sensor_data(self, parking_goal):
+
+        # create dirs
+        self._save_path = "/home/jas0n/Desktop/e2e-parking-carla/e2e_parking/eval/"+datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
+        cur_save_path.mkdir(parents=True, exist_ok=False)
+        (cur_save_path / 'measurements').mkdir()
+        (cur_save_path / 'lidar').mkdir()
+        (cur_save_path / 'parking_goal').mkdir()
+        (cur_save_path / 'topdown').mkdir()
+        for sensor in self._batch_data_frames[0].keys():
+            if sensor.startswith('rgb') or sensor.startswith('depth') or sensor.startswith('camera'):
+                (cur_save_path / sensor).mkdir()
+
+        total_frames = len(self._batch_data_frames)
+        thread_num = 16
+        frames_for_thread = total_frames // thread_num
+        thread_list = []
+        for t_idx in range(thread_num):
+            start = t_idx * frames_for_thread
+            if t_idx == thread_num - 1:
+                end = total_frames
+            else:
+                end = (t_idx + 1) * frames_for_thread
+            t = Thread(target=self.save_unit_data, args=(start, end, cur_save_path))
+            t.start()
+            thread_list.append(t)
+
+        for thread in thread_list:
+            thread.join()
+
+        # save Parking Goal
+        measurements_file = cur_save_path / 'parking_goal' / '0001.json'
+        with open(measurements_file, 'w') as f:
+            data = {'x': parking_goal[0],
+                    'y': parking_goal[1],
+                    }
+            json.dump(data, f, indent=4)
+
+        # save vehicle video
+        self._world.save_video(cur_save_path)
+
+        logging.info('saved sensor data for task %d in %s', self._task_index, str(cur_save_path))
+
+    def save_unit_data(self, start, end, cur_save_path):
+        for index in range(start, end):
+            data_frame = self._batch_data_frames[index]
+
+            # save camera / lidar
+            for sensor in data_frame.keys():
+                # if sensor.startswith('rgb'):
+                #     # _, image = self.image_process(self.target_parking_goal, cam_id=sensor, image=data_frame[sensor])
+                #     # image = Image.fromarray(image)
+                #     # image.save(str(cur_save_path / sensor / ('%04d.png' % index)))
+                #     data_frame[sensor].save_to_disk(
+                #         str(cur_save_path / sensor / ('%04d.png' % index)))
+                # if sensor.startswith('depth'):
+                #     data_frame[sensor].save_to_disk(
+                #         str(cur_save_path / sensor / ('%04d.png' % index)))
+                if sensor.startswith('camera'):
+                    data_frame[sensor].save_to_disk(
+                        str(cur_save_path / sensor / ('%04d.png' % index)))
+                elif sensor.startswith('lidar'):
+                    data_frame[sensor].save_to_disk(
+                        str(cur_save_path / sensor  / ('%04d.ply' % index)))
+
+            # save measurements
+            imu_data = data_frame['imu']
+            gnss_data = data_frame['gnss']
+            vehicle_transform = data_frame['veh_transfrom']
+            vehicle_velocity = data_frame['veh_velocity']
+            vehicle_control = data_frame['veh_control']
+
+            data = {
+                'x': vehicle_transform.location.x,
+                'y': vehicle_transform.location.y,
+                'z': vehicle_transform.location.z,
+                'pitch': vehicle_transform.rotation.pitch,
+                'yaw': vehicle_transform.rotation.yaw,
+                'roll': vehicle_transform.rotation.roll,
+                'speed': (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)),
+                'Throttle': vehicle_control.throttle,
+                'Steer': vehicle_control.steer,
+                'Brake': vehicle_control.brake,
+                'Reverse': vehicle_control.reverse,
+                'Hand brake': vehicle_control.hand_brake,
+                'Manual': vehicle_control.manual_gear_shift,
+                'Gear': {-1: 'R', 0: 'N'}.get(vehicle_control.gear, vehicle_control.gear),
+                'acc_x': imu_data.accelerometer.x,
+                'acc_y': imu_data.accelerometer.y,
+                'acc_z': imu_data.accelerometer.z,
+                'gyr_x': imu_data.gyroscope.x,
+                'gyr_y': imu_data.gyroscope.y,
+                'gyr_z': imu_data.gyroscope.z,
+                'compass': imu_data.compass,
+                'lat': gnss_data.latitude,
+                'lon': gnss_data.longitude
+            }
+
+            measurements_file = cur_save_path / 'measurements' / ('%04d.json' % index)
+            with open(measurements_file, 'w') as f:
+                json.dump(data, f, indent=4)
+
+            def save_img(image, keyword=""):
+                img_save = np.moveaxis(image, 0, 2)
+                save_path = str(cur_save_path / 'topdown' / ('encoded_%04d' % index + keyword + '.png'))
+                cv2.imwrite(save_path, img_save)
+
+            keyword = ""
+            bev_view1 = self._world.render_BEV_from_state(data_frame['bev_state'])
+            img1 = encode_npy_to_pil(np.asarray(bev_view1.squeeze().cpu()))
+            save_img(img1, keyword)

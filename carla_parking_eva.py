@@ -94,7 +94,7 @@ def main():
         help='Gamma correction of the camera (default: 0.0)')
     argparser.add_argument(
         '--model_path',
-        default='./ckpt/last.ckpt',
+        default='/home/jas0n/Desktop/e2e-parking-carla/last-0.75.ckpt',
         help='path to model.ckpt')
     argparser.add_argument(
         '--model_config_path',

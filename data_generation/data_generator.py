@@ -69,6 +69,9 @@ class DataGenerator:
 
         # spawn static vehicles in the parking lot
         self._world.init_static_npc(self._seed, self._parking_goal_index)
+        self._world.init_single_bicycle([280.0, -188.20,0.3])
+        self._world.init_single_bicycle([280.0, -235.73, 0.3])
+        self._world.init_single_pergola([280.0, -235.73, 0.3])
 
         # Spawn the player.
         self._ego_transform_generator.update_data_gen_goal_y(self._parking_goal.y)
