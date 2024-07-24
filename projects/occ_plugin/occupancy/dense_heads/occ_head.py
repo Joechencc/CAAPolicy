@@ -182,7 +182,7 @@ class OccHead(nn.Module):
                     h_mask = (torch.arange(H) >= 32) & (torch.arange(H) < 96)
                     w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
                     h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
-                    w_h_mask = w_mask | h_mask
+                    w_h_mask = w_mask & h_mask
                     w_h_mask = w_h_mask.expand(B, W, H, D)
                     w_h_mask = w_h_mask.bool().to(coarse_occ_mask.device)
                     out_mask = w_h_mask.clone()

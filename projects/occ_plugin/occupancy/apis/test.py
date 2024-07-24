@@ -187,9 +187,8 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False, sh
             coarse_occ_mask = coarse_occ_mask > 0.5
             coarse_occ_mask = coarse_occ_mask.squeeze(1)
             
-            import pdb; pdb.set_trace()
-            # pred_c = pred_c * ~coarse_occ_mask.cpu().numpy()
-            pred_f = pred_f * coarse_occ_mask.cpu().numpy()
+            pred_c = pred_c * ~coarse_occ_mask.cpu().numpy().squeeze(0)
+            pred_f = pred_f * coarse_occ_mask.cpu().numpy().squeeze(0)
             # Get those points index and labels
             nonzero_indices_c = np.nonzero(pred_c)
             nonzero_values_c = pred_c[nonzero_indices_c]

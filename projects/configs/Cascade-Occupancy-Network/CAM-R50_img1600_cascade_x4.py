@@ -55,9 +55,9 @@ data_config={
 }
 
 # baseline_mode = "Basic"
-baseline_mode = "NearRefine"
+# baseline_mode = "NearRefine"
 # baseline_mode = "Trajectory"
-# baseline_mode = "Zonotope"
+baseline_mode = "Zonotope"
 
 # downsample ratio in [x, y, z] when generating 3D volumes in LSS
 grid_config = {
