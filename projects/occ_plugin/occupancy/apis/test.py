@@ -171,10 +171,10 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False, sh
             z_coords = nonzero_indices[2] * grid_size + pc_range[2] + grid_size / 2
             points = np.column_stack((x_coords, y_coords, z_coords))
 
-            np.save("results/points_basic.npy",points)
-            np.save("results/nonzero_values_basic.npy",nonzero_values)
+            # np.save("results/points_basic.npy",points)
+            # np.save("results/nonzero_values_basic.npy",nonzero_values)
 
-            pointclouds_mesh(points, nonzero_values, grid_size, bound_min=(pc_range[0], pc_range[1], pc_range[2]), bound_max=(pc_range[3], pc_range[4], pc_range[5]))
+            # pointclouds_mesh(points, nonzero_values, grid_size, bound_min=(pc_range[0], pc_range[1], pc_range[2]), bound_max=(pc_range[3], pc_range[4], pc_range[5]))
         else:
             # Interpolation
             _, _, H, W, D = result['pred_f'].shape
@@ -206,11 +206,11 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False, sh
             z_coords_f = nonzero_indices_f[2] * grid_size + pc_range[2] + grid_size / 2
             points_f = np.column_stack((x_coords_f, y_coords_f, z_coords_f))
 
-            np.save("results/points_c_"+baseline_mode+".npy",points_c)
-            np.save("results/nonzero_values_c_"+baseline_mode+".npy",nonzero_values_c)
-            np.save("results/points_f_"+baseline_mode+".npy",points_f)
-            np.save("results/nonzero_values_f_"+baseline_mode+".npy",nonzero_values_f)
-            assert()
+            # np.save("results/points_c_"+baseline_mode+".npy",points_c)
+            # np.save("results/nonzero_values_c_"+baseline_mode+".npy",nonzero_values_c)
+            # np.save("results/points_f_"+baseline_mode+".npy",points_f)
+            # np.save("results/nonzero_values_f_"+baseline_mode+".npy",nonzero_values_f)
+            # assert()
             # pointclouds_mesh_nonuniform(points_c, nonzero_values_c, points_f, nonzero_values_f, grid_size, bound_min, bound_max, scales=2)
 
     # collect lists from multi-GPUs
