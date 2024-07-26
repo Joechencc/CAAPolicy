@@ -189,7 +189,7 @@ class World(object):
 
         logging.info('set %d parking goal', len(self._all_parking_goals))
 
-    def init_single_pergola(self, spawn_coordinate):
+    def init_single_pergola(self, spawn_coordinate, width=10.0, height=3.0):
         logging.info("Generating a pergola at the specified coordinate")
 
         # 选择Pergola蓝图
@@ -205,7 +205,8 @@ class World(object):
 
         if pergola is not None:
             # 调整Pergola的尺寸（如果蓝图支持）
-
+            # pergola.set_attribute('width', str(width))
+            # pergola.set_attribute('height', str(height))
             pergola.set_simulate_physics(False)
             self._actor_list.append(pergola)
             logging.info("Pergola spawned successfully at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y,
@@ -390,49 +391,49 @@ class World(object):
                 'type': 'sensor.camera.depth',
             },
             'camera_front': {
-                'x': 1.7, 'y': 0.0, 'z': 1.5,
+                'x': 0.8, 'y': 0.0, 'z': 1.6,
                 'fov': 70,
-                'roll': -90.0, 'pitch': 0.0, 'yaw': -90.0,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_front_left': {
-                'x': 1.55, 'y': 0.5, 'z': 1.5,
+                'x': 0.27, 'y': -0.55, 'z': 1.6,
                 'fov': 70,
-                'roll': -145, 'pitch': 0.0, 'yaw': -90,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_front_right': {
-                'x': 1.55, 'y': -0.5, 'z': 1.5,
+                'x': 0.27, 'y': 0.55, 'z': 1.6,
                 'fov': 70,
-                'roll': -35.0, 'pitch': 0.0, 'yaw':-90,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_back': {
-                'x': 0.05, 'y': 0.0, 'z': 1.55,
+                'x': -2.0, 'y': 0.0, 'z': 1.6,
                 'fov': 110,
-                'roll': 90.0, 'pitch': 0.0, 'yaw': -90.0,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 180.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_back_left': {
-                'x': 1.05, 'y': 0.5, 'z': 1.55,
+                'x': -0.32, 'y': -0.55, 'z': 1.6,
                 'fov': 70,
-                'roll': 160, 'pitch': 0.0, 'yaw': -90,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -110.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_back_right': {
-                'x': 1.05, 'y': -0.5, 'z': 1.55,
+                'x': -0.32, 'y': 0.55, 'z': 1.6,
                 'fov': 70,
-                'roll': 20, 'pitch': 0.0, 'yaw': -90,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 110.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
@@ -446,7 +447,7 @@ class World(object):
             'lidar_front': {
                 'x': 0.0, 'y': 0.0, 'z': 1.6,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'channels': 32, 'range': 100, 'points_per_second': 1000000,
+                'channels': 32, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
                 'atmosphere_attenuation_rate': 0.1,
                 'horizontal_fov': 360,

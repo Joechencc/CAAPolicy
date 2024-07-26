@@ -150,6 +150,8 @@ class NetworkEvaluator:
         # detect collision
         is_collision = self._world.tick(clock, self._parking_goal_index)
         if is_collision:
+            self.save_sensor_data([0,0])
+            print("saved")
             self._collision_nums += 1
             logging.info("parking collision for task %s-%d, collision_num: %d",
                          parking_position.slot_id[self._eva_task_idx],
@@ -196,7 +198,7 @@ class NetworkEvaluator:
 
         self._seed = self._init_seed
 
-        self._parking_goal_index = 16
+        self._parking_goal_index = 17
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator.update_eva_goal_y(self._parking_goal.y,
                                                         self._eva_parking_nums,
@@ -205,7 +207,9 @@ class NetworkEvaluator:
                                                                                   self._eva_parking_idx)
         self._world.player.set_transform(self._ego_transform)
         self._world.init_static_npc(self._seed, self._parking_goal_index)
-        #self._world.init_single_pergola([290.9, -235.73, 0.3])
+        #self._world.init_single_pergola([290.9, -232.73, 0.3])
+
+
         self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 180]
 
         self._eva_task_idx = 0
@@ -353,6 +357,8 @@ class NetworkEvaluator:
 
         # check fail parking
         if self.check_fail_slot(closest_goal, t):
+            self.save_sensor_data(closest_goal)
+            print("saved")
             self.start_next_parking()
             return
 
@@ -575,7 +581,7 @@ class NetworkEvaluator:
         (cur_save_path / 'parking_goal').mkdir()
         (cur_save_path / 'topdown').mkdir()
         for sensor in self._batch_data_frames[0].keys():
-            if sensor.startswith('rgb') or sensor.startswith('depth') or sensor.startswith('camera'):
+            if  sensor.startswith('camera'):
                 (cur_save_path / sensor).mkdir()
 
         total_frames = len(self._batch_data_frames)
@@ -600,6 +606,7 @@ class NetworkEvaluator:
         with open(measurements_file, 'w') as f:
             data = {'x': parking_goal[0],
                     'y': parking_goal[1],
+                    'z':0 
                     }
             json.dump(data, f, indent=4)
 
