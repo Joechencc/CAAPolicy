@@ -111,7 +111,7 @@ class World(object):
         # spawn static vehicles in the parking lot
         if self._shuffle_static_vhe:
             self.init_static_npc(seed, target_index)
-        self.init_single_bicycle(seed, (280.0, 235.73, 0.3))
+        #self.init_single_bicycle(seed, (280.0, 235.73, 0.3))
         # init the player position
         self._player.set_transform(ego_transform)
         self._player.apply_control(carla.VehicleControl())
@@ -390,49 +390,49 @@ class World(object):
                 'type': 'sensor.camera.depth',
             },
             'camera_front': {
-                'x': 1.7, 'y': 0.0, 'z': 1.5,
+                'x': 2.36, 'y': 0.0, 'z': 1.5,
                 'fov': 70,
-                'roll': -90.0, 'pitch': 0.0, 'yaw': -90.0,
+                'roll': 0, 'pitch':0, 'yaw': 0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_front_left': {
-                'x': 1.55, 'y': 0.5, 'z': 1.5,
+                'x': 2.36, 'y': -0.792, 'z': 1.5,
                 'fov': 70,
-                'roll': -145, 'pitch': 0.0, 'yaw': -90,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_front_right': {
-                'x': 1.55, 'y': -0.5, 'z': 1.5,
+                'x': 2.36, 'y': 0.792, 'z': 1.5,
                 'fov': 70,
-                'roll': -35.0, 'pitch': 0.0, 'yaw':-90,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_back': {
-                'x': 0.05, 'y': 0.0, 'z': 1.55,
+                'x': -2.36, 'y': 0.0, 'z': 1.55,
                 'fov': 110,
-                'roll': 90.0, 'pitch': 0.0, 'yaw': -90.0,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_back_left': {
-                'x': 1.05, 'y': 0.5, 'z': 1.55,
+                'x': -2.36, 'y': -0.792, 'z': 1.55,
                 'fov': 70,
-                'roll': 160, 'pitch': 0.0, 'yaw': -90,
+                'roll': 0, 'pitch': 0.0, 'yaw': -110,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,
             },
             'camera_back_right': {
-                'x': 1.05, 'y': -0.5, 'z': 1.55,
+                'x': -2.36, 'y': 0.792, 'z': 1.55,
                 'fov': 70,
-                'roll': 20, 'pitch': 0.0, 'yaw': -90,
+                'roll': 0, 'pitch': 0.0, 'yaw': 110,
                 'type': 'sensor.camera.rgb',
                 'width': 1600,
                 'height': 900,

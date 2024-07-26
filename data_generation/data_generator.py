@@ -104,6 +104,7 @@ class DataGenerator:
 
         is_collision = self._world.tick(clock, self._parking_goal_index)
         if is_collision:
+            self.save_sensor_data([0,0])
             self.soft_restart()
             return
 
@@ -195,7 +196,7 @@ class DataGenerator:
         (cur_save_path / 'parking_goal').mkdir()
         (cur_save_path / 'topdown').mkdir()
         for sensor in self._batch_data_frames[0].keys():
-            if sensor.startswith('rgb') or sensor.startswith('depth'):
+            if sensor.startswith('rgb') or sensor.startswith('depth') or sensor.startswith('camera'):
                 (cur_save_path / sensor).mkdir()
 
         total_frames = len(self._batch_data_frames)
@@ -246,6 +247,9 @@ class DataGenerator:
                 elif sensor.startswith('lidar'):
                     data_frame[sensor].save_to_disk(
                         str(cur_save_path / sensor  / ('%04d.ply' % index)))
+                elif sensor.startswith('camera'):
+                    data_frame[sensor].save_to_disk(
+                    str(cur_save_path / sensor / ('%04d.png' % index)))
 
             # save measurements
             imu_data = data_frame['imu']
