@@ -39,7 +39,7 @@ For inference, we prepare a [pre-trained model](https://drive.google.com/file/d/
 The first step is to launch a CARLA server:
 
 ```Shell
-./carla/CarlaUE4.sh -opengl
+./carla/CarlaUE4.sh -opengl -RenderOffScreen
 ```
 
 In a separate terminal, use the script below for trained model evaluation:
