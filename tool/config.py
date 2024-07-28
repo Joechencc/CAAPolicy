@@ -24,6 +24,8 @@ class Configuration:
     token_nums = None
     image_crop = None
 
+    feature_encoder = None
+
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
 
@@ -79,6 +81,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.hist_frame_nums = config['hist_frame_nums']
     cfg.token_nums = config['token_nums']
     cfg.image_crop = config['image_crop']
+    cfg.feature_encoder = config['feature_encoder']
 
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
     cfg.bev_encoder_out_channel = config['bev_encoder_out_channel']

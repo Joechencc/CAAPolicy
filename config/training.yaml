@@ -19,6 +19,7 @@ parking_model:
   image_crop: 256
 
   # bev encoder
+  feature_encoder: 'bev'
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2
 
