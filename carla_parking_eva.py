@@ -94,8 +94,12 @@ def main():
         help='Gamma correction of the camera (default: 0.0)')
     argparser.add_argument(
         '--model_path',
-        default='./ckpt/last-0.75.ckpt',
+        default='./ckpt/last.ckpt',
         help='path to model.ckpt')
+    argparser.add_argument(
+        '--model_path_conet',
+        default='./ckpt/camera-based-CONet.pth',
+        help='path to model_CONET.pth')
     argparser.add_argument(
         '--model_config_path',
         default='./config/training.yaml',
