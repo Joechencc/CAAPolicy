@@ -4,6 +4,8 @@ from torch import nn
 from tool.config import Configuration
 from model.bev_model import BevModel
 from model.bev_encoder import BevEncoder
+from model.conet_model import CONetModel
+from model.conet_encoder import CONetEncoder
 from model.feature_fusion import FeatureFusion
 from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
@@ -14,14 +16,12 @@ class ParkingModel(nn.Module):
         super().__init__()
 
         self.cfg = cfg
-        # if self.cfg.feature_encoder == "bev":
-        self.bev_model = BevModel(self.cfg)
-        self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
-        # elif self.cfg.feature_encoder == "CONET":
-        #     self.feat_model = BevModel(self.cfg)
-        #     self.feat_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
-            # self.feat_model = CONetModel(self.cfg)
-            # self.feat_encoder = CONetEncoder(self.cfg.bev_encoder_in_channel)
+        if self.cfg.feature_encoder == "bev":
+            self.bev_model = BevModel(self.cfg)
+            self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
+        elif self.cfg.feature_encoder == "conet":
+            self.conet_model = CONetModel(self.cfg)
+            self.conet_encoder = CONetEncoder(self.cfg.bev_encoder_in_channel)
 
         self.feature_fusion = FeatureFusion(self.cfg)
 
@@ -56,13 +56,18 @@ class ParkingModel(nn.Module):
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True) # [1, 3]
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
-        
-        bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
+        if self.cfg.feature_encoder == "bev":
+            bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
+        elif self.cfg.feature_encoder == "conet":
+            bev_feature, pred_depth = self.conet_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
 
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point) #bev_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
 
-        bev_down_sample = self.bev_encoder(bev_feature)
-
+        if self.cfg.feature_encoder == "bev":
+            bev_down_sample = self.bev_encoder(bev_feature)
+        elif self.cfg.feature_encoder == "conet":
+            bev_down_sample = self.conet_encoder(bev_feature)
+        import pdb; pdb.set_trace()
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
         pred_segmentation = self.segmentation_head(fuse_feature)
         return fuse_feature, pred_segmentation, pred_depth, bev_target

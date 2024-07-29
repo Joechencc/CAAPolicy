@@ -246,7 +246,6 @@ class ParkingAgent:
         plt.ion()
 
     def load_cfg(self, args):
-
         with open(args.model_config_path, 'r') as config_file:
             try:
                 cfg_yaml = (yaml.safe_load(config_file))
@@ -259,6 +258,8 @@ class ParkingAgent:
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+        # Change later
+        state_dict = OrderedDict([(k.replace('bev_model', 'conet_model').replace('bev_encoder', 'conet_encoder'), v) for k, v in state_dict.items()])
         self.model.load_state_dict(state_dict)
         self.model.to(self.device)
         self.model.eval()

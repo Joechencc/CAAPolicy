@@ -573,7 +573,7 @@ class NetworkEvaluator:
     def save_sensor_data(self, parking_goal):
 
         # create dirs
-        self._save_path = "/home/jas0n/Desktop/e2e-parking-carla/e2e_parking/eval/"+datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self._save_path = "./eval/"+datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
         cur_save_path.mkdir(parents=True, exist_ok=False)
         (cur_save_path / 'measurements').mkdir()
