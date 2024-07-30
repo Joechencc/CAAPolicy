@@ -20,8 +20,8 @@ class ParkingModel(nn.Module):
             self.bev_model = BevModel(self.cfg)
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
         elif self.cfg.feature_encoder == "conet":
-            self.conet_model = CONetModel(self.cfg)
-            self.conet_encoder = CONetEncoder(self.cfg.bev_encoder_in_channel)
+            self.conet_model = OccNet(self.cfg)
+            self.conet_encoder = OccHead(self.cfg.bev_encoder_in_channel)
 
         self.feature_fusion = FeatureFusion(self.cfg)
 
@@ -59,6 +59,8 @@ class ParkingModel(nn.Module):
         if self.cfg.feature_encoder == "bev":
             bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
         elif self.cfg.feature_encoder == "conet":
+            img = [images, rot, trans, intrinsics, post_rots, post_trans, images.shape[-2:], gt_depths, sensor2sensors]
+            voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
             bev_feature, pred_depth = self.conet_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
 
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point) #bev_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
