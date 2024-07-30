@@ -8,6 +8,7 @@ import torch.nn as nn
 import numpy as np
 import time
 import copy
+from .ConvModule import ConvModule
 
 class OccNet(nn.Module):
     def __init__(self, 

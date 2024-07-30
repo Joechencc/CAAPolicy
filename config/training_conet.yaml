@@ -21,6 +21,18 @@ parking_model:
   # bev encoder
   feature_encoder: 'conet'
   
+  occ_encoder_backbone_cfg: 
+    depth: 18
+    n_input_channels: 80
+    block_inplanes: [80, 160, 320, 640]
+    out_indices: (0, 1, 2, 3)
+
+  occ_encoder_neck_cfg:
+    with_cp: True
+    in_channels: [80, 160, 320, 640]
+    out_channels: 256
+    norm_cfg=dict(type='SyncBN', requires_grad=True),
+
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2
 
