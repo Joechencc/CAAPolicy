@@ -2,13 +2,14 @@ import torch
 import collections 
 import torch.nn.functional as F
 
-from .bevdepth import BEVDepth
+# from .bevdepth import BEVDepth
+import torch.nn as nn
 
 import numpy as np
 import time
 import copy
 
-class OccNet(BEVDepth):
+class OccNet(nn.Module):
     def __init__(self, 
             loss_cfg=None,
             disable_loss_depth=False,
@@ -504,7 +505,6 @@ class FPN3D(nn.Module):
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
-    @auto_fp16()
     def forward(self, inputs):
         """Forward function.
 

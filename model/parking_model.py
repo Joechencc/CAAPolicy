@@ -16,7 +16,6 @@ class ParkingModel(nn.Module):
         super().__init__()
 
         self.cfg = cfg
-        import pdb; pdb.set_trace()
         if self.cfg.feature_encoder == "bev":
             self.bev_model = BevModel(self.cfg)
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
@@ -76,7 +75,6 @@ class ParkingModel(nn.Module):
             bev_down_sample = self.bev_encoder(bev_feature)
         elif self.cfg.feature_encoder == "conet":
             bev_down_sample = self.conet_encoder(bev_feature)
-        import pdb; pdb.set_trace()
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
         pred_segmentation = self.segmentation_head(fuse_feature)
         return fuse_feature, pred_segmentation, pred_depth, bev_target

@@ -7,8 +7,6 @@ from mmdet3d.models import builder
 from torch.utils.checkpoint import checkpoint
 from mmdet3d.models.detectors import CenterPoint
 
-import pdb
-
 class BEVDet(CenterPoint):
     def __init__(self, img_view_transformer=None,
                  img_bev_encoder_backbone=None,

@@ -258,15 +258,18 @@ class ParkingAgent:
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         ckpt_conet = torch.load(conet_pth_path, map_location='cuda:0')
-        import pdb; pdb.set_trace()
-        state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-        state_dict = OrderedDict([(k, v) for k, v in state_dict.items() if not (k.startswith('bev_model') or k.startswith('bev_encoder'))])
-        # Change later
-        # state_dict = OrderedDict([(k.replace('bev_model', 'conet_model').replace('bev_encoder', 'conet_encoder'), v) for k, v in state_dict.items()])
-        parts_to_include = ['img_backbone', 'img_neck', 'img_view_transformer', 'occ_encoder', 'occ_encoder_neck']
-        state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if any(part in k for part in parts_to_include)})
-        # state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if k.startswith('img_backbone') or k.startswith('img_neck')})
-        
+
+        if self.cfg.feature_encoder == "conet":
+            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+            state_dict = OrderedDict([(k, v) for k, v in state_dict.items() if not (k.startswith('bev_model') or k.startswith('bev_encoder'))])
+            # Change later
+            # state_dict = OrderedDict([(k.replace('bev_model', 'conet_model').replace('bev_encoder', 'conet_encoder'), v) for k, v in state_dict.items()])
+            parts_to_include = ['img_backbone', 'img_neck', 'img_view_transformer', 'occ_encoder', 'occ_encoder_neck']
+            state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if any(part in k for part in parts_to_include)})
+            # state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if k.startswith('img_backbone') or k.startswith('img_neck')})
+        else:
+            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+
         self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
