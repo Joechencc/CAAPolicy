@@ -31,7 +31,6 @@ parking_model:
     with_cp: True
     in_channels: [80, 160, 320, 640]
     out_channels: 256
-    norm_cfg=dict(type='SyncBN', requires_grad=True),
 
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2

@@ -8,7 +8,7 @@ import torch.nn as nn
 import numpy as np
 import time
 import copy
-from .ConvModule import ConvModule
+from model.mmdirs.conv_module import ConvModule
 
 class OccNet(nn.Module):
     def __init__(self, 
@@ -467,7 +467,7 @@ class FPN3D(nn.Module):
     def __init__(self,
                  in_channels=[80, 160, 320, 640],
                  out_channels=256,
-                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+                 norm_cfg=dict(type='SyncBatchNorm', num_groups=32, requires_grad=True),
                  conv_cfg=dict(type='Conv3d'),
                  act_cfg=dict(type='ReLU'),
                  with_cp=False,
@@ -486,7 +486,7 @@ class FPN3D(nn.Module):
         self.fpn_convs = nn.ModuleList()
         
         for i in range(self.num_out):
-            # 拓展感受野
+            # Expand percetion field
             l_conv = nn.Sequential(
                 ConvModule(in_channels[i], out_channels, 
                     kernel_size=1, padding=0,
