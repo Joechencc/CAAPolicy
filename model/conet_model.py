@@ -3,12 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmdet.core import reduce_mean
-from mmdet.models import HEADS
-from mmcv.cnn import build_conv_layer, build_norm_layer
 from scipy.spatial.transform import Rotation as R
 
-@HEADS.register_module()
 class OccHead(nn.Module):
     def __init__(
         self,
@@ -95,20 +91,38 @@ class OccHead(nn.Module):
         for i in range(self.num_level):
             mid_channel = self.in_channels[i] // 2
             occ_conv = nn.Sequential(
-                build_conv_layer(conv_cfg, in_channels=self.in_channels[i], 
-                        out_channels=mid_channel, kernel_size=3, stride=1, padding=1),
-                build_norm_layer(norm_cfg, mid_channel)[1],
+                nn.Conv3d(in_channels=self.in_channels[i], 
+                      out_channels=mid_channel, 
+                      kernel_size=3, 
+                      stride=1, 
+                      padding=1,
+                      bias=False),
+                nn.GroupNorm(num_groups=32, num_channels=mid_channel),
                 nn.ReLU(inplace=True))
+            for layer in self.occ_conv_layers:
+                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
+                    param.requires_grad = requires_grad
             self.occ_convs.append(occ_conv)
 
 
         self.occ_pred_conv = nn.Sequential(
-                build_conv_layer(conv_cfg, in_channels=mid_channel, 
-                        out_channels=mid_channel//2, kernel_size=1, stride=1, padding=0),
-                build_norm_layer(norm_cfg, mid_channel//2)[1],
+                nn.Conv3d(in_channels=mid_channel, 
+                      out_channels=mid_channel//2, 
+                      kernel_size=1, 
+                      stride=1, 
+                      padding=0,
+                      bias=False),
+                nn.GroupNorm(num_groups=32, num_channels=mid_channel//2),
                 nn.ReLU(inplace=True),
-                build_conv_layer(conv_cfg, in_channels=mid_channel//2, 
-                        out_channels=out_channel, kernel_size=1, stride=1, padding=0))
+                nn.Conv3d(in_channels=mid_channel//2, 
+                      out_channels=out_channel, 
+                      kernel_size=1, 
+                      stride=1, 
+                      padding=0,
+                      bias=False))
+        for layer in self.occ_pred_conv:
+                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
+                    param.requires_grad = requires_grad
 
         self.soft_weights = soft_weights
         self.num_img_level = num_img_level
@@ -116,13 +130,24 @@ class OccHead(nn.Module):
         if self.soft_weights:
             soft_in_channel = mid_channel
             self.voxel_soft_weights = nn.Sequential(
-                build_conv_layer(conv_cfg, in_channels=soft_in_channel, 
-                        out_channels=soft_in_channel//2, kernel_size=1, stride=1, padding=0),
-                build_norm_layer(norm_cfg, soft_in_channel//2)[1],
+                nn.Conv3d(in_channels=soft_in_channel, 
+                      out_channels=soft_in_channel//2, 
+                      kernel_size=1, 
+                      stride=1, 
+                      padding=0,
+                      bias=False),
+                nn.GroupNorm(num_groups=32, num_channels=soft_in_channel//2),
                 nn.ReLU(inplace=True),
-                build_conv_layer(conv_cfg, in_channels=soft_in_channel//2, 
-                        out_channels=self.num_point_sampling_feat, kernel_size=1, stride=1, padding=0))
-            
+                nn.Conv3d(in_channels=soft_in_channel, 
+                      out_channels=self.num_point_sampling_feat, 
+                      kernel_size=1, 
+                      stride=1, 
+                      padding=0,
+                      bias=False))
+            for layer in self.voxel_soft_weights:
+                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
+                    param.requires_grad = requires_grad
+
         # loss functions
         if balance_cls_weight:
             self.class_weights = torch.from_numpy(1 / np.log(nusc_class_frequencies + 0.001))

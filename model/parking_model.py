@@ -4,8 +4,8 @@ from torch import nn
 from tool.config import Configuration
 from model.bev_model import BevModel
 from model.bev_encoder import BevEncoder
-from model.conet_model import CONetModel
-from model.conet_encoder import CONetEncoder
+from model.conet_model import OccHead
+from model.conet_encoder import OccNet
 from model.feature_fusion import FeatureFusion
 from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
@@ -16,11 +16,18 @@ class ParkingModel(nn.Module):
         super().__init__()
 
         self.cfg = cfg
+        import pdb; pdb.set_trace()
         if self.cfg.feature_encoder == "bev":
             self.bev_model = BevModel(self.cfg)
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
         elif self.cfg.feature_encoder == "conet":
-            self.conet_model = OccNet(self.cfg)
+            occ_encoder_backbone_cfg = {
+                'depth': 18,
+                'n_input_channels': 80,
+                'block_inplanes': [80, 160, 320, 640],
+                'out_indices': (0, 1, 2, 3)
+            }
+            self.conet_model = OccNet(occ_encoder_backbone_cfg)
             self.conet_encoder = OccHead(self.cfg.bev_encoder_in_channel)
 
         self.feature_fusion = FeatureFusion(self.cfg)

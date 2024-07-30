@@ -20,6 +20,7 @@ parking_model:
 
   # bev encoder
   feature_encoder: 'conet'
+  
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2
 
