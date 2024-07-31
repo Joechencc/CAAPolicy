@@ -20,17 +20,70 @@ parking_model:
 
   # bev encoder
   feature_encoder: 'conet'
-  
-  occ_encoder_backbone_cfg: 
-    depth: 18
-    n_input_channels: 80
-    block_inplanes: [80, 160, 320, 640]
-    out_indices: (0, 1, 2, 3)
 
-  occ_encoder_neck_cfg:
-    with_cp: True
-    in_channels: [80, 160, 320, 640]
-    out_channels: 256
+  point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+  occ_size: [512, 512, 40]
+  lss_downsample: [4, 4, 4]  # [128 128 10]
+  voxel_x: (point_cloud_range[3] - point_cloud_range[0]) / occ_size[0]  # 0.4
+  voxel_y: (point_cloud_range[4] - point_cloud_range[1]) / occ_size[1]
+  voxel_z: (point_cloud_range[5] - point_cloud_range[2]) / occ_size[2]
+
+  grid_config:
+    xbound: [point_cloud_range[0], point_cloud_range[3], voxel_x*lss_downsample[0]],
+    ybound: [point_cloud_range[1], point_cloud_range[4], voxel_y*lss_downsample[1]],
+    zbound: [point_cloud_range[2], point_cloud_range[5], voxel_z*lss_downsample[2]],
+    dbound: [2.0, 58.0, 0.5]
+  
+  OccNet_cfg:
+    loss_norm: True
+    img_backbone:
+      pretrained: 'torchvision://resnet50'
+      type: 'ResNet'
+      depth: 50
+      num_stages: 4
+      out_indices: (0, 1, 2, 3)
+      frozen_stages: 0
+      with_cp: True
+      norm_eval: False
+      style: 'pytorch'
+    img_neck:
+      type: 'SECONDFPN'
+      in_channels: [256, 512, 1024, 2048]
+      upsample_strides: [0.25, 0.5, 1, 2]
+      out_channels: [128, 128, 128, 128])
+
+    img_view_transformer:
+      type: 'ViewTransformerLiftSplatShootVoxel'
+      loss_depth_weight: 3.
+      loss_depth_type: 'kld'
+      grid_config: grid_config
+      data_config: 
+        cams: ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
+                'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT']
+        Ncams: 6
+        input_size: (896, 1600)
+        src_size: (900, 1600)
+        # image-view augmentation
+        resize: (-0.06, 0.11)
+        rot: (-5.4, 5.4)
+        flip: True
+        crop_h: (0.0, 0.0)
+        resize_test: 0.00
+      numC_Trans: 80
+      vp_megvii: False
+
+    occ_encoder_backbone_cfg: 
+      type: 'CustomResNet3D'
+      depth: 18
+      n_input_channels: 80
+      block_inplanes: [80, 160, 320, 640]
+      out_indices: (0, 1, 2, 3)
+
+    occ_encoder_neck_cfg:
+      type: 'FPN3D'
+      with_cp: True
+      in_channels: [80, 160, 320, 640]
+      out_channels: 256
 
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2

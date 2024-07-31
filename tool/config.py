@@ -26,6 +26,7 @@ class Configuration:
 
     feature_encoder = None
     occ_encoder_backbone_cfg = None
+    occ_encoder_neck_cfg = None
 
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
@@ -84,6 +85,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.image_crop = config['image_crop']
     cfg.feature_encoder = config['feature_encoder']
     cfg.occ_encoder_backbone_cfg = config['occ_encoder_backbone_cfg']
+    cfg.occ_encoder_neck_cfg = config['occ_encoder_neck_cfg']
 
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
     cfg.bev_encoder_out_channel = config['bev_encoder_out_channel']
