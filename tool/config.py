@@ -25,8 +25,6 @@ class Configuration:
     image_crop = None
 
     feature_encoder = None
-    occ_encoder_backbone_cfg = None
-    occ_encoder_neck_cfg = None
 
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
@@ -84,7 +82,9 @@ def get_cfg(cfg_yaml: dict):
     cfg.token_nums = config['token_nums']
     cfg.image_crop = config['image_crop']
     cfg.feature_encoder = config['feature_encoder']
+    cfg.voxel_out_indices = config['voxel_out_indices']
 
+    ####### CONET Config ##########
     cfg.OccNet_cfg = config['OccNet_cfg']
     occ_size, point_cloud_range, lss_downsample = config['occ_size'], config['point_cloud_range'], config['lss_downsample']
     voxel_x = (point_cloud_range[3] - point_cloud_range[0]) / occ_size[0]
@@ -97,6 +97,18 @@ def get_cfg(cfg_yaml: dict):
     'dbound': [2.0, 58.0, 0.5],
     }
     cfg.OccNet_cfg['img_view_transformer']['grid_config'] = grid_config
+    voxel_out_indices = eval(cfg.voxel_out_indices)
+    voxel_out_channel = 256
+    cfg.OccNet_cfg['pts_bbox_head']['num_level'] = len(voxel_out_indices)
+    cfg.OccNet_cfg['pts_bbox_head']['in_channels'] = [voxel_out_channel] * len(voxel_out_indices)
+    cfg.OccNet_cfg['pts_bbox_head']['loss_weight_cfg'] = dict(
+            loss_voxel_ce_weight=1.0,
+            loss_voxel_sem_scal_weight=1.0,
+            loss_voxel_geo_scal_weight=1.0,
+            loss_voxel_lovasz_weight=1.0,
+        ),
+    ###############################
+
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
     cfg.bev_encoder_out_channel = config['bev_encoder_out_channel']
 

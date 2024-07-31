@@ -21,6 +21,7 @@ parking_model:
   ################################
   # bev encoder
   feature_encoder: 'conet'
+  voxel_out_indices: (0, 1, 2, 3)
 
   point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
   occ_size: [512, 512, 40]
@@ -76,6 +77,22 @@ parking_model:
       with_cp: True
       in_channels: [80, 160, 320, 640]
       out_channels: 256
+    pts_bbox_head:
+      type: 'OccHead'
+      soft_weights: True
+      cascade_ratio: 4
+      sample_from_voxel: True
+      sample_from_img: True
+      final_occ_size: [512, 512, 40]
+      fine_topk: 15000
+      empty_idx: 0
+      num_level: null
+      in_channels: null
+      out_channel: 17
+      point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+      loss_weight_cfg: null
+      baseline_mode: "Zonotope"
+    empty_idx: 0
 
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2

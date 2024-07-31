@@ -14,8 +14,8 @@ class OccHead(nn.Module):
         num_img_level=1,
         soft_weights=False,
         loss_weight_cfg=None,
-        conv_cfg=dict(type='Conv3d', bias=False),
-        norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+        # conv_cfg=dict(type='Conv3d', bias=False),
+        # norm_cfg=dict(type='SyncBN', num_groups=32, requires_grad=True),
         fine_topk=20000,
         point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
         baseline_mode=None,
@@ -26,8 +26,8 @@ class OccHead(nn.Module):
         cascade_ratio=1,
         sample_from_voxel=False,
         sample_from_img=False,
-        train_cfg=None,
-        test_cfg=None,
+        # train_cfg=None,
+        # test_cfg=None,
     ):
         super(OccHead, self).__init__()
         

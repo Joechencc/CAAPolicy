@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 # from .bevdepth import BEVDepth
 import torch.nn as nn
+from .conet_model import OccHead
 
 import numpy as np
 import time
@@ -21,7 +22,6 @@ class OccNet(nn.Module):
             loss_norm=False,
             **kwargs):
         super().__init__(**kwargs)
-                
         self.loss_cfg = loss_cfg
         self.disable_loss_depth = disable_loss_depth
         self.loss_norm = loss_norm
@@ -231,7 +231,7 @@ class OccNet(nn.Module):
         
         return losses
         
-    def forward_test(self,
+    def forward(self,
             points=None,
             img_metas=None,
             img_inputs=None,
