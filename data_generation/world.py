@@ -350,43 +350,63 @@ class World(object):
         # }
         self._cam_specs = {
             'rgb_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
+                'x': 2.36, 'y': 0.0, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+            'rgb_front_left': {
+                'x': 2.36, 'y': -0.792, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+            'rgb_front_right': {
+                'x': 2.36, 'y': 0.792, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+            'rgb_back': {
+                'x': -2.36, 'y': 0.0, 'z': 1.55,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+                'type': 'sensor.camera.rgb',
+            },
+            'rgb_back_left': {
+                'x': -2.36, 'y': -0.792, 'z': 1.55,
+                'roll': 0, 'pitch': 0.0, 'yaw': -110,
+                'type': 'sensor.camera.rgb',
+            },
+            'rgb_back_right': {
+                'x': -2.36, 'y': 0.792, 'z': 1.55,
+                'roll': 0, 'pitch': 0.0, 'yaw': 110,
                 'type': 'sensor.camera.rgb',
             },
             'depth_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
+                'x': 2.36, 'y': 0.0, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.depth',
             },
-            'depth_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+            'depth_front_left': {
+                'x': 2.36, 'y': -0.792, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.depth',
             },
-            'depth_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+            'depth_front_right': {
+                'x': 2.36, 'y': 0.792, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.depth',
             },
-            'depth_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+            'depth_back': {
+                'x': -2.36, 'y': 0.0, 'z': 1.55,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_back_left': {
+                'x': -2.36, 'y': -0.792, 'z': 1.55,
+                'roll': 0, 'pitch': 0.0, 'yaw': -110,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_back_right': {
+                'x': -2.36, 'y': 0.792, 'z': 1.55,
+                'roll': 0, 'pitch': 0.0, 'yaw': 110,
                 'type': 'sensor.camera.depth',
             },
             'camera_front': {

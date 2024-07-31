@@ -192,9 +192,11 @@ class ParkingAgent:
         self.atten_avg = None
         self.grid_image = None
 
-        self.rgb_rear = None
-        self.rgb_right = None
-        self.rgb_left = None
+        self.rgb_back = None
+        self.rgb_back_left = None
+        self.rgb_back_right = None
+        self.rgb_front_right = None
+        self.rgb_front_left = None
         self.rgb_front = None
         self.seg_bev = None
         self.target_bev = None
@@ -328,14 +330,16 @@ class ParkingAgent:
             scale_width=1,
             scale_height=1
         )
-        self.intrinsic_crop = self.intrinsic_crop.unsqueeze(0).expand(4, 3, 3)
+        self.intrinsic_crop = self.intrinsic_crop.unsqueeze(0).expand(6, 3, 3)
 
         veh2cam_dict = self.world.veh2cam_dict
         front_to_ego = torch.from_numpy(veh2cam_dict['rgb_front']).float().unsqueeze(0)
-        left_to_ego = torch.from_numpy(veh2cam_dict['rgb_left']).float().unsqueeze(0)
-        right_to_ego = torch.from_numpy(veh2cam_dict['rgb_right']).float().unsqueeze(0)
-        rear_to_ego = torch.from_numpy(veh2cam_dict['rgb_rear']).float().unsqueeze(0)
-        self.extrinsic = torch.cat([front_to_ego, left_to_ego, right_to_ego, rear_to_ego], dim=0)
+        front_left_to_ego = torch.from_numpy(veh2cam_dict['rgb_front_left']).float().unsqueeze(0)
+        front_right_to_ego = torch.from_numpy(veh2cam_dict['rgb_front_right']).float().unsqueeze(0)
+        back_to_ego = torch.from_numpy(veh2cam_dict['rgb_back']).float().unsqueeze(0)
+        back_left_to_ego = torch.from_numpy(veh2cam_dict['rgb_back_left']).float().unsqueeze(0)
+        back_right_to_ego = torch.from_numpy(veh2cam_dict['rgb_back_right']).float().unsqueeze(0)
+        self.extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego, back_to_ego,back_left_to_ego,back_right_to_ego], dim=0)
 
         self.image_process = ProcessImage(self.cfg.image_crop)
 
@@ -456,11 +460,13 @@ class ParkingAgent:
         target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
 
         front_final, self.rgb_front = self.image_process(data_frame['rgb_front'])
-        left_final, self.rgb_left = self.image_process(data_frame['rgb_left'])
-        right_final, self.rgb_right = self.image_process(data_frame['rgb_right'])
-        rear_final, self.rgb_rear = self.image_process(data_frame['rgb_rear'])
+        front_left_final, self.rgb_front_left = self.image_process(data_frame['rgb_front_left'])
+        front_right_final, self.rgb_front_right = self.image_process(data_frame['rgb_front_right'])
+        back_right_final, self.rgb_back_right = self.image_process(data_frame['rgb_back_right'])
+        back_left_final, self.rgb_bleft_right = self.image_process(data_frame['rgb_back_left'])
+        back_final, self.rgb_back = self.image_process(data_frame['rgb_back'])
 
-        images = [front_final, left_final, right_final, rear_final]
+        images = [front_final, front_left_final,front_right_final,back_final,back_left_final,back_right_final]
         images = torch.cat(images, dim=0)
         data['image'] = images.unsqueeze(0)
 
