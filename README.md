@@ -67,7 +67,7 @@ Since it is an imitation learning task, we have provided the tools for manual pa
 The first step is to launch a CARLA server:
 
 ```Shell
-./carla/CarlaUE4.sh -opengl -
+./carla/CarlaUE4.sh -opengl 
 ```
 
 In a separate terminal, use the script below for generating training data:
