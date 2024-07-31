@@ -99,6 +99,9 @@ def get_cfg(cfg_yaml: dict):
     cfg.OccNet_cfg['img_view_transformer']['grid_config'] = grid_config
     voxel_out_indices = eval(cfg.voxel_out_indices)
     voxel_out_channel = 256
+    cfg.OccNet_cfg['occ_encoder_backbone_cfg']['norm_cfg'] = dict(type='SyncBN', requires_grad=True)
+    cfg.OccNet_cfg['occ_encoder_neck_cfg']['norm_cfg'] = dict(type='SyncBN', requires_grad=True)
+    cfg.OccNet_cfg['pts_bbox_head']['norm_cfg'] = dict(type='SyncBN', requires_grad=True)
     cfg.OccNet_cfg['pts_bbox_head']['num_level'] = len(voxel_out_indices)
     cfg.OccNet_cfg['pts_bbox_head']['in_channels'] = [voxel_out_channel] * len(voxel_out_indices)
     cfg.OccNet_cfg['pts_bbox_head']['loss_weight_cfg'] = dict(

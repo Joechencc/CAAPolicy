@@ -2,6 +2,9 @@ import torch
 import collections 
 import torch.nn.functional as F
 
+from mmcv.models import DETECTORS
+from mmcv.utils import auto_fp16, force_fp32
+from mmcv.models.backbones.base_module import BaseModule
 # from .bevdepth import BEVDepth
 import torch.nn as nn
 from .conet_model import OccHead
@@ -9,8 +12,12 @@ from .conet_model import OccHead
 import numpy as np
 import time
 import copy
-from model.mmdirs.conv_module import ConvModule
+from mmcv.models.bricks import ConvModule, build_norm_layer
+# from mmdet.models import NECKS
+from mmcv.models.builder import BACKBONES, NECKS
 
+# class OccNet(BEVDepth): #### uncomment it later when merging
+@DETECTORS.register_module()
 class OccNet(nn.Module):
     def __init__(self, 
             loss_cfg=None,
@@ -21,7 +28,7 @@ class OccNet(nn.Module):
             occ_encoder_neck_cfg=None,
             loss_norm=False,
             **kwargs):
-        super().__init__(**kwargs)
+        # super().__init__(**kwargs) #### uncomment it later when merging
         self.loss_cfg = loss_cfg
         self.disable_loss_depth = disable_loss_depth
         self.loss_norm = loss_norm
@@ -29,9 +36,9 @@ class OccNet(nn.Module):
         self.record_time = False
         self.time_stats = collections.defaultdict(list)
         self.empty_idx = empty_idx
+        import pdb; pdb.set_trace()
         self.occ_encoder_backbone = CustomResNet3D(
             **occ_encoder_backbone_cfg)
-
         self.occ_encoder_neck = FPN3D(**occ_encoder_neck_cfg)
         self.occ_fuser = None
             
@@ -51,6 +58,7 @@ class OccNet(nn.Module):
         return {'x': x,
                 'img_feats': [x.clone()]}
     
+    @force_fp32()
     def occ_encoder(self, x):
         x = self.occ_encoder_backbone(x)
         x = self.occ_encoder_neck(x)
@@ -130,6 +138,7 @@ class OccNet(nn.Module):
 
         return (voxel_feats_enc, img_feats, pts_feats, depth)
     
+    @force_fp32(apply_to=('voxel_feats'))
     def forward_pts_train(
             self,
             voxel_feats,
@@ -344,6 +353,7 @@ def fast_hist(pred, label, max_label=18):
     bin_count = np.bincount(max_label * label.astype(int) + pred, minlength=max_label ** 2)
     return bin_count[:max_label ** 2].reshape(max_label, max_label)
 
+@BACKBONES.register_module()
 class CustomResNet3D(nn.Module):
     def __init__(self,
                  depth,
@@ -368,7 +378,7 @@ class CustomResNet3D(nn.Module):
         else:
             assert depth in [50, 101]
             block = Bottleneck
-        
+        import pdb; pdb.set_trace()
         layers = layer_metas[depth]
         block_inplanes = [int(x * widen_factor) for x in block_inplanes]
         self.in_planes = block_inplanes[0]
@@ -451,7 +461,41 @@ class CustomResNet3D(nn.Module):
             
         return res
 
-class FPN3D(nn.Module):
+class BasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, in_planes, planes, stride=1, downsample=None, norm_cfg=None):
+        super().__init__()
+
+        self.conv1 = conv3x3x3(in_planes, planes, stride)
+        self.bn1 = build_norm_layer(norm_cfg, planes)[1]
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3x3(planes, planes)
+        self.bn2 = build_norm_layer(norm_cfg, planes)[1]
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+
+@NECKS.register_module()
+class FPN3D(BaseModule):
     """FPN used in SECOND/PointPillars/PartA2/MVXNet.
 
     Args:
@@ -467,7 +511,7 @@ class FPN3D(nn.Module):
     def __init__(self,
                  in_channels=[80, 160, 320, 640],
                  out_channels=256,
-                 norm_cfg=dict(type='SyncBatchNorm', num_groups=32, requires_grad=True),
+                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
                  conv_cfg=dict(type='Conv3d'),
                  act_cfg=dict(type='ReLU'),
                  with_cp=False,
@@ -506,6 +550,7 @@ class FPN3D(nn.Module):
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
+    @auto_fp16()
     def forward(self, inputs):
         """Forward function.
 

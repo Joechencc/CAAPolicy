@@ -3,8 +3,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from mmcv.core.utils import reduce_mean
+from mmcv.models.builder import HEADS
+from mmcv.models.bricks import build_conv_layer, build_norm_layer
+from .lovasz_softmax import lovasz_softmax
+from model.utils import coarse_to_fine_coordinates, project_points_on_img
+from model.utils.nusc_param import nusc_class_frequencies, nusc_class_names
+from model.utils.semkitti import geo_scal_loss, sem_scal_loss, CE_ssc_loss
 from scipy.spatial.transform import Rotation as R
 
+@HEADS.register_module()
 class OccHead(nn.Module):
     def __init__(
         self,
@@ -14,8 +22,8 @@ class OccHead(nn.Module):
         num_img_level=1,
         soft_weights=False,
         loss_weight_cfg=None,
-        # conv_cfg=dict(type='Conv3d', bias=False),
-        # norm_cfg=dict(type='SyncBN', num_groups=32, requires_grad=True),
+        conv_cfg=dict(type='Conv3d', bias=False),
+        norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
         fine_topk=20000,
         point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
         baseline_mode=None,
@@ -26,8 +34,8 @@ class OccHead(nn.Module):
         cascade_ratio=1,
         sample_from_voxel=False,
         sample_from_img=False,
-        # train_cfg=None,
-        # test_cfg=None,
+        train_cfg=None,
+        test_cfg=None,
     ):
         super(OccHead, self).__init__()
         
@@ -91,38 +99,20 @@ class OccHead(nn.Module):
         for i in range(self.num_level):
             mid_channel = self.in_channels[i] // 2
             occ_conv = nn.Sequential(
-                nn.Conv3d(in_channels=self.in_channels[i], 
-                      out_channels=mid_channel, 
-                      kernel_size=3, 
-                      stride=1, 
-                      padding=1,
-                      bias=False),
-                nn.GroupNorm(num_groups=32, num_channels=mid_channel),
+                build_conv_layer(conv_cfg, in_channels=self.in_channels[i], 
+                        out_channels=mid_channel, kernel_size=3, stride=1, padding=1),
+                build_norm_layer(norm_cfg, mid_channel)[1],
                 nn.ReLU(inplace=True))
-            for layer in self.occ_conv_layers:
-                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
-                    param.requires_grad = requires_grad
             self.occ_convs.append(occ_conv)
 
 
         self.occ_pred_conv = nn.Sequential(
-                nn.Conv3d(in_channels=mid_channel, 
-                      out_channels=mid_channel//2, 
-                      kernel_size=1, 
-                      stride=1, 
-                      padding=0,
-                      bias=False),
-                nn.GroupNorm(num_groups=32, num_channels=mid_channel//2),
+                build_conv_layer(conv_cfg, in_channels=mid_channel, 
+                        out_channels=mid_channel//2, kernel_size=1, stride=1, padding=0),
+                build_norm_layer(norm_cfg, mid_channel//2)[1],
                 nn.ReLU(inplace=True),
-                nn.Conv3d(in_channels=mid_channel//2, 
-                      out_channels=out_channel, 
-                      kernel_size=1, 
-                      stride=1, 
-                      padding=0,
-                      bias=False))
-        for layer in self.occ_pred_conv:
-                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
-                    param.requires_grad = requires_grad
+                build_conv_layer(conv_cfg, in_channels=mid_channel//2, 
+                        out_channels=out_channel, kernel_size=1, stride=1, padding=0))
 
         self.soft_weights = soft_weights
         self.num_img_level = num_img_level
@@ -130,24 +120,13 @@ class OccHead(nn.Module):
         if self.soft_weights:
             soft_in_channel = mid_channel
             self.voxel_soft_weights = nn.Sequential(
-                nn.Conv3d(in_channels=soft_in_channel, 
-                      out_channels=soft_in_channel//2, 
-                      kernel_size=1, 
-                      stride=1, 
-                      padding=0,
-                      bias=False),
-                nn.GroupNorm(num_groups=32, num_channels=soft_in_channel//2),
+                build_conv_layer(conv_cfg, in_channels=soft_in_channel, 
+                        out_channels=soft_in_channel//2, kernel_size=1, stride=1, padding=0),
+                build_norm_layer(norm_cfg, soft_in_channel//2)[1],
                 nn.ReLU(inplace=True),
-                nn.Conv3d(in_channels=soft_in_channel, 
-                      out_channels=self.num_point_sampling_feat, 
-                      kernel_size=1, 
-                      stride=1, 
-                      padding=0,
-                      bias=False))
-            for layer in self.voxel_soft_weights:
-                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
-                    param.requires_grad = requires_grad
-
+                build_conv_layer(conv_cfg, in_channels=soft_in_channel//2, 
+                        out_channels=self.num_point_sampling_feat, kernel_size=1, stride=1, padding=0))
+            
         # loss functions
         if balance_cls_weight:
             self.class_weights = torch.from_numpy(1 / np.log(nusc_class_frequencies + 0.001))
@@ -434,183 +413,3 @@ class OccHead(nn.Module):
         return loss_dict
     
         
-def coarse_to_fine_coordinates(coarse_cor, ratio, topk=30000):
-    """
-    Args:
-        coarse_cor (torch.Tensor): [3, N]"""
-
-    fine_cor = coarse_cor * ratio
-    fine_cor = fine_cor[None].repeat(ratio**3, 1, 1)  # [8, 3, N]
-
-    device = fine_cor.device
-    value = torch.meshgrid([torch.arange(ratio).to(device), torch.arange(ratio).to(device), torch.arange(ratio).to(device)])
-    value = torch.stack(value, dim=3).reshape(-1, 3)
-
-    fine_cor = fine_cor + value[:,:,None]
-
-    if fine_cor.shape[-1] < topk:
-        return fine_cor.permute(1,0,2).reshape(3,-1)
-    else:
-        fine_cor = fine_cor[:,:,torch.randperm(fine_cor.shape[-1])[:topk]]
-        return fine_cor.permute(1,0,2).reshape(3,-1)
-
-
-def project_points_on_img(points, rots, trans, intrins, post_rots, post_trans, bda_mat, pts_range,
-                        W_img, H_img, W_occ, H_occ, D_occ):
-    with torch.no_grad():
-        voxel_size = ((pts_range[3:] - pts_range[:3]) / torch.tensor([W_occ-1, H_occ-1, D_occ-1])).to(points.device)
-        points = points * voxel_size[None, None] + pts_range[:3][None, None].to(points.device)
-
-        # project 3D point cloud (after bev-aug) onto multi-view images for corresponding 2D coordinates
-        inv_bda = bda_mat.inverse()
-        points = (inv_bda @ points.unsqueeze(-1)).squeeze(-1)
-        
-        # from lidar to camera
-        points = points.view(-1, 1, 3)
-        points = points - trans.view(1, -1, 3)
-        inv_rots = rots.inverse().unsqueeze(0)
-        points = (inv_rots @ points.unsqueeze(-1))
-        
-        # from camera to raw pixel
-        points = (intrins.unsqueeze(0) @ points).squeeze(-1)
-        points_d = points[..., 2:3]
-        points_uv = points[..., :2] / (points_d + 1e-5)
-        
-        # from raw pixel to transformed pixel
-        points_uv = post_rots[..., :2, :2].unsqueeze(0) @ points_uv.unsqueeze(-1)
-        points_uv = points_uv.squeeze(-1) + post_trans[..., :2].unsqueeze(0)
-
-        points_uv[..., 0] = (points_uv[..., 0] / (W_img-1) - 0.5) * 2
-        points_uv[..., 1] = (points_uv[..., 1] / (H_img-1) - 0.5) * 2
-
-        mask = (points_d[..., 0] > 1e-5) \
-            & (points_uv[..., 0] > -1) & (points_uv[..., 0] < 1) \
-            & (points_uv[..., 1] > -1) & (points_uv[..., 1] < 1)
-    
-    return points_uv.permute(2,1,0,3), mask
-
-nusc_class_frequencies = np.array([2242961742295, 25985376, 1561108, 28862014, 196106643, 15920504,
-                2158753, 26539491, 4004729, 34838681, 75173306, 2255027978, 50959399, 646022466, 869055679,
-                1446141335, 1724391378])
-
-nusc_class_names = [
-    "empty",
-    "barrier",
-    "bicycle",
-    "bus",
-    "car",
-    "construction",
-    "motorcycle",
-    "pedestrian",
-    "trafficcone",
-    "trailer",
-    "truck",
-    "driveable_surface",
-    "other",
-    "sidewalk",
-    "terrain",
-    "mannade",
-    "vegetation",
-]
-
-def geo_scal_loss(pred, ssc_target):
-
-    # Get softmax probabilities
-    pred = F.softmax(pred, dim=1)
-
-    # Compute empty and nonempty probabilities
-    empty_probs = pred[:, 0, :, :, :]
-    nonempty_probs = 1 - empty_probs
-
-    # Remove unknown voxels
-    mask = ssc_target != 255
-    nonempty_target = ssc_target != 0
-    nonempty_target = nonempty_target[mask].float()
-    nonempty_probs = nonempty_probs[mask]
-    empty_probs = empty_probs[mask]
-
-    intersection = (nonempty_target * nonempty_probs).sum()
-    precision = intersection / nonempty_probs.sum()
-    recall = intersection / nonempty_target.sum()
-    spec = ((1 - nonempty_target) * (empty_probs)).sum() / (1 - nonempty_target).sum()
-    return (
-        F.binary_cross_entropy(precision, torch.ones_like(precision))
-        + F.binary_cross_entropy(recall, torch.ones_like(recall))
-        + F.binary_cross_entropy(spec, torch.ones_like(spec))
-    )
-
-
-def sem_scal_loss(pred, ssc_target):
-    # Get softmax probabilities
-    pred = F.softmax(pred, dim=1)
-    loss = 0
-    count = 0
-    mask = ssc_target != 255
-    n_classes = pred.shape[1]
-    for i in range(0, n_classes):
-
-        # Get probability of class i
-        p = pred[:, i, :, :, :]
-
-        # Remove unknown voxels
-        target_ori = ssc_target
-        p = p[mask]
-        target = ssc_target[mask]
-
-        completion_target = torch.ones_like(target)
-        completion_target[target != i] = 0
-        completion_target_ori = torch.ones_like(target_ori).float()
-        completion_target_ori[target_ori != i] = 0
-        if torch.sum(completion_target) > 0:
-            count += 1.0
-            nominator = torch.sum(p * completion_target)
-            loss_class = 0
-            if torch.sum(p) > 0:
-                precision = nominator / (torch.sum(p))
-                loss_precision = F.binary_cross_entropy(
-                    precision, torch.ones_like(precision)
-                )
-                loss_class += loss_precision
-            if torch.sum(completion_target) > 0:
-                recall = nominator / (torch.sum(completion_target))
-                loss_recall = F.binary_cross_entropy(recall, torch.ones_like(recall))
-                loss_class += loss_recall
-            if torch.sum(1 - completion_target) > 0:
-                specificity = torch.sum((1 - p) * (1 - completion_target)) / (
-                    torch.sum(1 - completion_target)
-                )
-                loss_specificity = F.binary_cross_entropy(
-                    specificity, torch.ones_like(specificity)
-                )
-                loss_class += loss_specificity
-            loss += loss_class
-    return loss / count
-
-
-def CE_ssc_loss(pred, target, class_weights):
-    """
-    :param: prediction: the predicted tensor, must be [BS, C, H, W, D]
-    """
-    criterion = nn.CrossEntropyLoss(
-        weight=class_weights, ignore_index=255, reduction="mean"
-    )
-    loss = criterion(pred, target.long())
-
-    return loss
-
-def lovasz_softmax(probas, labels, classes='present', per_image=False, ignore=None):
-    """
-    Multi-class Lovasz-Softmax loss
-      probas: [B, C, H, W] Variable, class probabilities at each prediction (between 0 and 1).
-              Interpreted as binary (sigmoid) output with outputs of size [B, H, W].
-      labels: [B, H, W] Tensor, ground truth labels (between 0 and C - 1)
-      classes: 'all' for all, 'present' for classes present in labels, or a list of classes to average.
-      per_image: compute the loss per image instead of per batch
-      ignore: void class labels
-    """
-    if per_image:
-        loss = mean(lovasz_softmax_flat(*flatten_probas(prob.unsqueeze(0), lab.unsqueeze(0), ignore), classes=classes)
-                          for prob, lab in zip(probas, labels))
-    else:
-        loss = lovasz_softmax_flat(*flatten_probas(probas, labels, ignore), classes=classes)
-    return loss
