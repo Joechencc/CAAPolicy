@@ -20,8 +20,7 @@ class ParkingModel(nn.Module):
             self.bev_model = BevModel(self.cfg)
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
         elif self.cfg.feature_encoder == "conet":
-            import pdb; pdb.set_trace()
-            self.conet_model = OccNet(occ_encoder_backbone_cfg=self.cfg.occ_encoder_backbone_cfg, occ_encoder_neck_cfg=self.cfg.occ_encoder_neck_cfg)
+            self.conet_model = OccNet(**self.cfg.OccNet_cfg)
             self.conet_encoder = OccHead(self.cfg.bev_encoder_in_channel)
 
         self.feature_fusion = FeatureFusion(self.cfg)

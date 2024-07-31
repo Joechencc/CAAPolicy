@@ -84,9 +84,19 @@ def get_cfg(cfg_yaml: dict):
     cfg.token_nums = config['token_nums']
     cfg.image_crop = config['image_crop']
     cfg.feature_encoder = config['feature_encoder']
-    cfg.occ_encoder_backbone_cfg = config['occ_encoder_backbone_cfg']
-    cfg.occ_encoder_neck_cfg = config['occ_encoder_neck_cfg']
 
+    cfg.OccNet_cfg = config['OccNet_cfg']
+    occ_size, point_cloud_range, lss_downsample = config['occ_size'], config['point_cloud_range'], config['lss_downsample']
+    voxel_x = (point_cloud_range[3] - point_cloud_range[0]) / occ_size[0]
+    voxel_y = (point_cloud_range[4] - point_cloud_range[1]) / occ_size[1]
+    voxel_z = (point_cloud_range[5] - point_cloud_range[2]) / occ_size[2]
+    grid_config = {
+    'xbound': [point_cloud_range[0], point_cloud_range[3], voxel_x*lss_downsample[0]],
+    'ybound': [point_cloud_range[1], point_cloud_range[4], voxel_y*lss_downsample[1]],
+    'zbound': [point_cloud_range[2], point_cloud_range[5], voxel_z*lss_downsample[2]],
+    'dbound': [2.0, 58.0, 0.5],
+    }
+    cfg.OccNet_cfg['img_view_transformer']['grid_config'] = grid_config
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
     cfg.bev_encoder_out_channel = config['bev_encoder_out_channel']
 
