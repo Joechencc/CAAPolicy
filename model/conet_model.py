@@ -13,7 +13,7 @@ from model.utils.semkitti import geo_scal_loss, sem_scal_loss, CE_ssc_loss
 from scipy.spatial.transform import Rotation as R
 
 @HEADS.register_module()
-class OccHead(nn.Module):
+class CONetHead(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -37,7 +37,7 @@ class OccHead(nn.Module):
         train_cfg=None,
         test_cfg=None,
     ):
-        super(OccHead, self).__init__()
+        super(CONetHead, self).__init__()
         
         if type(in_channels) is not list:
             in_channels = [in_channels]

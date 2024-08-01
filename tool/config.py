@@ -96,9 +96,17 @@ def get_cfg(cfg_yaml: dict):
     'zbound': [point_cloud_range[2], point_cloud_range[5], voxel_z*lss_downsample[2]],
     'dbound': [2.0, 58.0, 0.5],
     }
+    cfg.OccNet_cfg['img_backbone']['out_indices'] = eval(cfg.OccNet_cfg['img_backbone']['out_indices'])
+    cfg.OccNet_cfg['img_view_transformer']['data_config']['input_size'] = eval(cfg.OccNet_cfg['img_view_transformer']['data_config']['input_size'])
+    cfg.OccNet_cfg['img_view_transformer']['data_config']['src_size'] = eval(cfg.OccNet_cfg['img_view_transformer']['data_config']['src_size'])
+    cfg.OccNet_cfg['img_view_transformer']['data_config']['resize'] = eval(cfg.OccNet_cfg['img_view_transformer']['data_config']['resize'])
+    cfg.OccNet_cfg['img_view_transformer']['data_config']['rot'] = eval(cfg.OccNet_cfg['img_view_transformer']['data_config']['rot'])
+    cfg.OccNet_cfg['img_view_transformer']['data_config']['crop_h'] = eval(cfg.OccNet_cfg['img_view_transformer']['data_config']['crop_h'])
+    
     cfg.OccNet_cfg['img_view_transformer']['grid_config'] = grid_config
     voxel_out_indices = eval(cfg.voxel_out_indices)
     voxel_out_channel = 256
+    cfg.OccNet_cfg['occ_encoder_backbone_cfg']['out_indices'] = eval(cfg.OccNet_cfg['occ_encoder_backbone_cfg']['out_indices'])
     cfg.OccNet_cfg['occ_encoder_backbone_cfg']['norm_cfg'] = dict(type='SyncBN', requires_grad=True)
     cfg.OccNet_cfg['occ_encoder_neck_cfg']['norm_cfg'] = dict(type='SyncBN', requires_grad=True)
     cfg.OccNet_cfg['pts_bbox_head']['norm_cfg'] = dict(type='SyncBN', requires_grad=True)
@@ -109,7 +117,7 @@ def get_cfg(cfg_yaml: dict):
             loss_voxel_sem_scal_weight=1.0,
             loss_voxel_geo_scal_weight=1.0,
             loss_voxel_lovasz_weight=1.0,
-        ),
+        )
     ###############################
 
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']

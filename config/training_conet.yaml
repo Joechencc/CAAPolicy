@@ -39,6 +39,7 @@ parking_model:
       with_cp: True
       norm_eval: False
       style: 'pytorch'
+      
     img_neck:
       type: 'SECONDFPN'
       in_channels: [256, 512, 1024, 2048]
@@ -81,7 +82,7 @@ parking_model:
       norm_cfg: null
 
     pts_bbox_head:
-      # type: 'OccHead'
+      type: 'CONetHead'
       norm_cfg: null
       soft_weights: True
       cascade_ratio: 4
@@ -96,6 +97,7 @@ parking_model:
       point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
       loss_weight_cfg: null
       baseline_mode: "Zonotope"
+
     empty_idx: 0
 
   bev_encoder_in_channel: 64
