@@ -8,7 +8,7 @@ from mmcv.utils import auto_fp16, force_fp32
 from mmcv.models.backbones.base_module import BaseModule
 from .bevdepth import BEVDepth
 from .conet_model import CONetHead
-from mmdirs.ViewTransformerLiftSplatShootVoxel import ViewTransformerLiftSplatShootVoxel
+from model.mmdirs.ViewTransformerLSSVoxel import ViewTransformerLiftSplatShootVoxel
 
 import numpy as np
 import time
