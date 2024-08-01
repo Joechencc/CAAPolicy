@@ -3,7 +3,7 @@ import collections
 import torch.nn.functional as F
 import torch.nn as nn
 
-from mmcv.models import DETECTORS
+from mmcv.models import DETECTORS, build_backbone, build_neck
 from mmcv.utils import auto_fp16, force_fp32
 from mmcv.models.backbones.base_module import BaseModule
 from .bevdepth import BEVDepth
@@ -35,10 +35,8 @@ class OccNet(BEVDepth):
         self.record_time = False
         self.time_stats = collections.defaultdict(list)
         self.empty_idx = empty_idx
-        import pdb; pdb.set_trace()
-        self.occ_encoder_backbone = CustomResNet3D(
-            **occ_encoder_backbone_cfg)
-        self.occ_encoder_neck = FPN3D(**occ_encoder_neck_cfg)
+        self.occ_encoder_backbone = build_backbone(occ_encoder_backbone_cfg)
+        self.occ_encoder_neck = build_neck(occ_encoder_neck_cfg)
         self.occ_fuser = None
             
     def image_encoder(self, img):
@@ -353,7 +351,7 @@ def fast_hist(pred, label, max_label=18):
     return bin_count[:max_label ** 2].reshape(max_label, max_label)
 
 @BACKBONES.register_module()
-class CustomResNet3D(nn.Module):
+class CustomResNet3D(BaseModule):
     def __init__(self,
                  depth,
                  block_inplanes=[64, 128, 256, 512],
@@ -361,6 +359,7 @@ class CustomResNet3D(nn.Module):
                  out_indices=(0, 1, 2, 3),
                  n_input_channels=3,
                  shortcut_type='B',
+                 norm_cfg=dict(type='BN3d', requires_grad=True),
                  widen_factor=1.0):
         super().__init__()
         
@@ -377,7 +376,7 @@ class CustomResNet3D(nn.Module):
         else:
             assert depth in [50, 101]
             block = Bottleneck
-        import pdb; pdb.set_trace()
+        
         layers = layer_metas[depth]
         block_inplanes = [int(x * widen_factor) for x in block_inplanes]
         self.in_planes = block_inplanes[0]
@@ -387,15 +386,12 @@ class CustomResNet3D(nn.Module):
         self.input_proj = nn.Sequential(
             nn.Conv3d(n_input_channels, self.in_planes, kernel_size=(1, 1, 1),
                       stride=(1, 1, 1), bias=False),
-            nn.SyncBatchNorm(num_features=self.in_planes),
+            build_norm_layer(norm_cfg, self.in_planes)[1],
             nn.ReLU(inplace=True),
         )
         
-        for layer in self.input_proj:
-                for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
-                    param.requires_grad = True
-
         self.layers = nn.ModuleList()
+
         for i in range(len(block_inplanes)):
             self.layers.append(self._make_layer(block, block_inplanes[i], layers[i], 
                                 shortcut_type, block_strides[i], norm_cfg=norm_cfg))
@@ -431,10 +427,7 @@ class CustomResNet3D(nn.Module):
             else:
                 downsample = nn.Sequential(
                     conv1x1x1(self.in_planes, planes * block.expansion, stride),
-                    nn.SyncBatchNorm(num_features=planes * block.expansion))
-                for layer in downsample:
-                    for param in layer[1].parameters():  # layer[1] 是 GroupNorm 层
-                        param.requires_grad = True
+                    build_norm_layer(norm_cfg, planes * block.expansion)[1])
 
         layers = []
         layers.append(
@@ -492,6 +485,20 @@ class BasicBlock(nn.Module):
 
         return out
 
+def conv3x3x3(in_planes, out_planes, stride=1):
+    return nn.Conv3d(in_planes,
+                     out_planes,
+                     kernel_size=3,
+                     stride=stride,
+                     padding=1,
+                     bias=False)
+
+def conv1x1x1(in_planes, out_planes, stride=1):
+    return nn.Conv3d(in_planes,
+                     out_planes,
+                     kernel_size=1,
+                     stride=stride,
+                     bias=False)
 
 @NECKS.register_module()
 class FPN3D(BaseModule):

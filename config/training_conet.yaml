@@ -67,7 +67,7 @@ parking_model:
       vp_megvii: False
 
     occ_encoder_backbone_cfg: 
-      # type: 'CustomResNet3D'
+      type: 'CustomResNet3D'
       depth: 18
       n_input_channels: 80
       block_inplanes: [80, 160, 320, 640]
@@ -75,7 +75,7 @@ parking_model:
       norm_cfg: null
 
     occ_encoder_neck_cfg:
-      # type: 'FPN3D'
+      type: 'FPN3D'
       with_cp: True
       in_channels: [80, 160, 320, 640]
       out_channels: 256

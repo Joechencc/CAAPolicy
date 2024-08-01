@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 from mmcv.models.backbones import BaseModule
 from mmcv.models import NECKS
-####Her
 from model.mmdirs import occ_pool
 from mmcv.models.bricks import build_conv_layer
 from mmcv.utils import force_fp32
