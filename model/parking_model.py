@@ -57,7 +57,7 @@ class ParkingModel(nn.Module):
         if self.cfg.feature_encoder == "bev":
             bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
         elif self.cfg.feature_encoder == "conet":
-            img = [images, rot, trans, intrinsics, post_rots, post_trans, images.shape[-2:], gt_depths, sensor2sensors]
+            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, images.shape[-2:], gt_depths, sensor2sensors]
             voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
             bev_feature, pred_depth = self.conet_model(img) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
 

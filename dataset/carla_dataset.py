@@ -178,14 +178,18 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         # data
         self.front = []
-        self.left = []
-        self.right = []
-        self.rear = []
+        self.front_left = []
+        self.front_right = []
+        self.back = []
+        self.back_left = []
+        self.back_right = []
 
         self.front_depth = []
-        self.left_depth = []
-        self.right_depth = []
-        self.rear_depth = []
+        self.front_left_depth = []
+        self.front_right_depth = []
+        self.back_depth = []
+        self.back_left_depth = []
+        self.back_right_depth = []
 
         self.control = []
 
@@ -204,27 +208,37 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.get_data()
 
     def init_camera_config(self):
-        cam_config = {'width': 400, 'height': 300, 'fov': 100}
+        cam_config = {'width': 1600, 'height': 900, 'fov': 70}
 
         cam_specs = {
             'rgb_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
+                'x': 2.36, 'y': 0.0, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+            'rgb_front_left': {
+                'x': 2.36, 'y': -0.792, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+            'rgb_front_right': {
+                'x': 2.36, 'y': 0.792, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+            'rgb_back': {
+                'x': -2.36, 'y': 0.0, 'z': 1.55,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+                'type': 'sensor.camera.rgb',
+            },
+            'rgb_back_left': {
+                'x': -2.36, 'y': -0.792, 'z': 1.55,
+                'roll': 0, 'pitch': 0.0, 'yaw': -110,
+                'type': 'sensor.camera.rgb',
+            },
+            'rgb_back_right': {
+                'x': -2.36, 'y': 0.792, 'z': 1.55,
+                'roll': 0, 'pitch': 0.0, 'yaw': 110,
                 'type': 'sensor.camera.rgb',
             },
         }
@@ -248,7 +262,7 @@ class CarlaDataset(torch.utils.data.Dataset):
             scale_width=1,
             scale_height=1
         )
-        self.intrinsic = self.intrinsic.unsqueeze(0).expand(4, 3, 3)
+        self.intrinsic = self.intrinsic.unsqueeze(0).expand(6, 3, 3)
 
         # extrinsic
         cam2pixel = np.array([
@@ -264,11 +278,13 @@ class CarlaDataset(torch.utils.data.Dataset):
             veh2cam = cam2pixel @ np.array(cam2veh.get_inverse_matrix())
             self.veh2cam_dict[cam_id] = veh2cam
         front_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front']).float().unsqueeze(0)
-        left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_left']).float().unsqueeze(0)
-        right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_right']).float().unsqueeze(0)
-        rear_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_rear']).float().unsqueeze(0)
-        self.extrinsic = torch.cat([front_to_ego, left_to_ego, right_to_ego, rear_to_ego], dim=0)
-
+        front_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_left']).float().unsqueeze(0)
+        front_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_right']).float().unsqueeze(0)
+        back_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back']).float().unsqueeze(0)
+        back_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_left']).float().unsqueeze(0)
+        back_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_right']).float().unsqueeze(0)
+        self.extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego, back_to_ego,
+                                    back_left_to_ego, back_right_to_ego], dim=0)
     def get_data(self):
         val_towns = self.cfg.validation_map
         train_towns = self.cfg.training_map
@@ -293,15 +309,19 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
                 self.front.append(task_path + "/rgb_front/" + filename)
-                self.left.append(task_path + "/rgb_left/" + filename)
-                self.right.append(task_path + "/rgb_right/" + filename)
-                self.rear.append(task_path + "/rgb_rear/" + filename)
+                self.front_left.append(task_path + "/rgb_front_left/" + filename)
+                self.front_right.append(task_path + "/rgb_front_right/" + filename)
+                self.back.append(task_path + "/rgb_back/" + filename)
+                self.back_left.append(task_path + "/rgb_back_left/" + filename)
+                self.back_right.append(task_path + "/rgb_back_right/" + filename)
 
                 # depth
                 self.front_depth.append(task_path + "/depth_front/" + filename)
-                self.left_depth.append(task_path + "/depth_left/" + filename)
-                self.right_depth.append(task_path + "/depth_right/" + filename)
-                self.rear_depth.append(task_path + "/depth_rear/" + filename)
+                self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
+                self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
+                self.back_depth.append(task_path + "/depth_back/" + filename)
+                self.back_left_depth.append(task_path + "/depth_back/" + filename)
+                self.back_right_depth.append(task_path + "/depth_back/" + filename)
 
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
@@ -348,14 +368,18 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.target_point.append(parking_goal)
 
         self.front = np.array(self.front).astype(np.string_)
-        self.left = np.array(self.left).astype(np.string_)
-        self.right = np.array(self.right).astype(np.string_)
-        self.rear = np.array(self.rear).astype(np.string_)
+        self.front_left = np.array(self.front_left).astype(np.string_)
+        self.front_right = np.array(self.front_right).astype(np.string_)
+        self.back = np.array(self.back).astype(np.string_)
+        self.back_left = np.array(self.back_left).astype(np.string_)
+        self.back_right = np.array(self.back_right).astype(np.string_)
 
         self.front_depth = np.array(self.front_depth).astype(np.string_)
-        self.left_depth = np.array(self.left_depth).astype(np.string_)
-        self.right_depth = np.array(self.right_depth).astype(np.string_)
-        self.rear_depth = np.array(self.rear_depth).astype(np.string_)
+        self.front_left_depth = np.array(self.front_left_depth).astype(np.string_)
+        self.front_right_depth = np.array(self.front_right_depth).astype(np.string_)
+        self.back_depth = np.array(self.back_depth).astype(np.string_)
+        self.back_left_depth = np.array(self.back_left_depth).astype(np.string_)
+        self.back_right_depth = np.array(self.back_right_depth).astype(np.string_)
 
         self.topdown = np.array(self.topdown).astype(np.string_)
 
@@ -384,8 +408,9 @@ class CarlaDataset(torch.utils.data.Dataset):
             data[key] = []
 
         # image & extrinsics & intrinsics
-        images = [self.image_process(self.front[index])[0], self.image_process(self.left[index])[0],
-                  self.image_process(self.right[index])[0], self.image_process(self.rear[index])[0]]
+        images = [self.image_process(self.front[index])[0], self.image_process(self.front_left[index])[0],
+                  self.image_process(self.front_right[index])[0], self.image_process(self.back[index])[0],
+                  self.image_process(self.back_left[index])[0],self.image_process(self.back_right[index])[0]]
         images = torch.cat(images, dim=0)
         data['image'] = images
 
@@ -394,9 +419,11 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         # depth
         depths = [get_depth(self.front_depth[index], self.image_crop),
-                  get_depth(self.left_depth[index], self.image_crop),
-                  get_depth(self.right_depth[index], self.image_crop),
-                  get_depth(self.rear_depth[index], self.image_crop)]
+                  get_depth(self.front_left_depth[index], self.image_crop),
+                  get_depth(self.front_right_depth[index], self.image_crop),
+                  get_depth(self.back_depth[index], self.image_crop),
+                  get_depth(self.back_left_depth[index], self.image_crop),
+                  get_depth(self.back_right_depth[index], self.image_crop),]
         depths = torch.cat(depths, dim=0)
         data['depth'] = depths
 
