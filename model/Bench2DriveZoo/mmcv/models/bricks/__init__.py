@@ -1,6 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from .activation import build_activation_layer
 from .conv import build_conv_layer
+from .upsample import build_upsample_layer
 from .plugin import build_plugin_layer
 from .conv_module import ConvModule
 from .drop import Dropout, DropPath
