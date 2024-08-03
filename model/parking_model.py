@@ -8,6 +8,10 @@ from model.conet_encoder import OccNet
 from model.feature_fusion import FeatureFusion
 from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
+from data_generation.world import World
+from data_generation.world import cam_specs_, cam2pixel_
+import numpy as np
+import carla
 
 
 class ParkingModel(nn.Module):
@@ -19,7 +23,7 @@ class ParkingModel(nn.Module):
             self.bev_model = BevModel(self.cfg)
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
         elif self.cfg.feature_encoder == "conet":
-            self.conet_model = OccNet(**self.cfg.OccNet_cfg)
+            self.OccNet = OccNet(**self.cfg.OccNet_cfg)
 
         self.feature_fusion = FeatureFusion(self.cfg)
 
@@ -49,7 +53,8 @@ class ParkingModel(nn.Module):
         return bev_feature, bev_target
 
     def encoder(self, data):
-        images = data['image'].to(self.cfg.device, non_blocking=True) #[1, 4, 3, 256, 256]
+        images = data['image'].to(self.cfg.device, non_blocking=True) #[1, 6, 3, 900, 1600]
+        B, I = images.shape[:2]
         intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True) # [1, 3]
@@ -57,9 +62,12 @@ class ParkingModel(nn.Module):
         if self.cfg.feature_encoder == "bev":
             bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
         elif self.cfg.feature_encoder == "conet":
-            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, images.shape[-2:], gt_depths, sensor2sensors]
-            voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
-            bev_feature, pred_depth = self.conet_model(img) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
+            import pdb; pdb.set_trace()
+            rot, trans, cam2ego, post_rots, post_trans, bda_rot, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.device)
+            img_metas = self.construct_metas()
+            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, images.shape[-2:], gt_depths, cam2ego]
+            # voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
+            bev_feature, pred_depth = self.OccNet(img_metas=img_metas,img_inputs=img) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
 
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point) #bev_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
 
@@ -70,6 +78,36 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
         pred_segmentation = self.segmentation_head(fuse_feature)
         return fuse_feature, pred_segmentation, pred_depth, bev_target
+
+    def construct_metas(self):
+        metas = {}
+        metas['pc_range'] = np.array(self.cfg.point_cloud_range)
+        metas['occ_size'] = np.array(self.cfg.occ_size)
+        metas['scene_token'] = ''
+        metas['lidar_token'] = ''
+        metas['prev_idx'] = ''
+        metas['next_idx'] = ''
+
+        return metas
+
+    def transform_spec(self, cam_specs, cam2pixel, B, I, device):
+        keys = ['rgb_front', 'rgb_front_left', 'rgb_front_right', 'rgb_back', 'rgb_back_left', 'rgb_back_right']
+        sensor2egos = []
+        for key in keys:
+            cam_spec = cam_specs[key]
+            ego2sensor = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
+                                        carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
+                                                        roll=cam_spec['roll']))
+            sensor2ego = cam2pixel @ np.array(ego2sensor.get_inverse_matrix())
+            sensor2egos.append(torch.from_numpy(sensor2ego).float().unsqueeze(0))
+        sensor2egos = torch.cat(sensor2egos).unsqueeze(0).repeat(B,1,1,1).to(device)
+        rot, trans = sensor2egos[:,:,:3,:3], sensor2egos[:,:,:3,3]
+        post_rots = torch.eye(3).unsqueeze(0).unsqueeze(0).repeat(B, I, 1, 1).to(device)
+        post_trans = torch.tensor([0.,-4.,0.]).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
+        bda_rot = torch.eye(3).unsqueeze(0).repeat(B, 1, 1).to(device)
+        gt_depths = torch.zeros(1).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
+
+        return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, gt_depths
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)

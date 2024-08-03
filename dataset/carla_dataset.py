@@ -7,7 +7,7 @@ import torchvision.transforms
 
 from PIL import Image
 from loguru import logger
-
+from data_generation.world import cam_specs_
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -209,39 +209,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
     def init_camera_config(self):
         cam_config = {'width': 1600, 'height': 900, 'fov': 70}
-
-        cam_specs = {
-            'rgb_front': {
-                'x': 2.36, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_front_left': {
-                'x': 2.36, 'y': -0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_front_right': {
-                'x': 2.36, 'y': 0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_back': {
-                'x': -2.36, 'y': 0.0, 'z': 1.55,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_back_left': {
-                'x': -2.36, 'y': -0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': -110,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_back_right': {
-                'x': -2.36, 'y': 0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': 110,
-                'type': 'sensor.camera.rgb',
-            },
-        }
+        cam_specs = cam_specs_
 
         # intrinsic
         w = cam_config['width']

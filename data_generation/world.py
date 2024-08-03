@@ -16,7 +16,120 @@ parking_vehicle_rotation = [
     carla.Rotation(yaw=180),
     carla.Rotation(yaw=0)
 ]
-
+cam2pixel_ = np.array([[0, 1, 0, 0],
+                    [0, 0, -1, 0],
+                    [1, 0, 0, 0],
+                    [0, 0, 0, 1]], dtype=float)
+cam_specs_ = {
+    'rgb_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.rgb',
+    },
+    'depth_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.depth',
+    },
+    'camera_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'fov': 70,
+        'roll': 0, 'pitch':0, 'yaw': 0,
+        'type': 'sensor.camera.rgb',
+        'width': 1600,
+        'height': 900,
+    },
+    'camera_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'fov': 70,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.rgb',
+        'width': 1600,
+        'height': 900,
+    },
+    'camera_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'fov': 70,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.rgb',
+        'width': 1600,
+        'height': 900,
+    },
+    'camera_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'fov': 110,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.rgb',
+        'width': 1600,
+        'height': 900,
+    },
+    'camera_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'fov': 70,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.rgb',
+        'width': 1600,
+        'height': 900,
+    },
+    'camera_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'fov': 70,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.rgb',
+        'width': 1600,
+        'height': 900,
+    },
+    }
 
 def find_weather_presets():
     presets = [x for x in dir(carla.WeatherParameters) if re.match('[A-Z].+', x)]
@@ -348,117 +461,8 @@ class World(object):
         #     },
         #
         # }
-        self._cam_specs = {
-            'rgb_front': {
-                'x': 2.36, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_left': {
-                'rgb_front_left': {
-                'x': 2.36, 'y': -0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_front_right': {
-                'x': 2.36, 'y': 0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_back': {
-                'x': -2.36, 'y': 0.0, 'z': 1.55,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_back_left': {
-                'x': -2.36, 'y': -0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': -110,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_back_right': {
-                'x': -2.36, 'y': 0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': 110,
-                'type': 'sensor.camera.rgb',
-            },
-            'depth_front': {
-                'x': 2.36, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_front_left': {
-                'x': 2.36, 'y': -0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_front_right': {
-                'x': 2.36, 'y': 0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_back': {
-                'x': -2.36, 'y': 0.0, 'z': 1.55,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_back_left': {
-                'x': -2.36, 'y': -0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': -110,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_back_right': {
-                'x': -2.36, 'y': 0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': 110,
-                'type': 'sensor.camera.depth',
-            },
-            'camera_front': {
-                'x': 2.36, 'y': 0.0, 'z': 1.5,
-                'fov': 70,
-                'roll': 0, 'pitch':0, 'yaw': 0,
-                'type': 'sensor.camera.rgb',
-                'width': 1600,
-                'height': 900,
-            },
-            'camera_front_left': {
-                'x': 2.36, 'y': -0.792, 'z': 1.5,
-                'fov': 70,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
-                'type': 'sensor.camera.rgb',
-                'width': 1600,
-                'height': 900,
-            },
-            'camera_front_right': {
-                'x': 2.36, 'y': 0.792, 'z': 1.5,
-                'fov': 70,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
-                'type': 'sensor.camera.rgb',
-                'width': 1600,
-                'height': 900,
-            },
-            'camera_back': {
-                'x': -2.36, 'y': 0.0, 'z': 1.55,
-                'fov': 110,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
-                'type': 'sensor.camera.rgb',
-                'width': 1600,
-                'height': 900,
-            },
-            'camera_back_left': {
-                'x': -2.36, 'y': -0.792, 'z': 1.55,
-                'fov': 70,
-                'roll': 0, 'pitch': 0.0, 'yaw': -110,
-                'type': 'sensor.camera.rgb',
-                'width': 1600,
-                'height': 900,
-            },
-            'camera_back_right': {
-                'x': -2.36, 'y': 0.792, 'z': 1.55,
-                'fov': 70,
-                'roll': 0, 'pitch': 0.0, 'yaw': 110,
-                'type': 'sensor.camera.rgb',
-                'width': 1600,
-                'height': 900,
-            },
-        }
+        self._cam_specs = cam_specs_ 
+
         for key, value in self._cam_specs.items():
             self.spawn_rgb_camera(key, value)
 
@@ -493,10 +497,7 @@ class World(object):
             [0, 0, 1]
         ], dtype=np.float)
 
-        self._cam2pixel = np.array([[0, 1, 0, 0],
-                                    [0, 0, -1, 0],
-                                    [1, 0, 0, 0],
-                                    [0, 0, 0, 1]], dtype=float)
+        self._cam2pixel = cam2pixel_
 
         for cam_id, cam_spec in self._cam_specs.items():
             if cam_id.startswith('rgb'):

@@ -25,6 +25,9 @@ class Configuration:
     image_crop = None
 
     feature_encoder = None
+    voxel_out_indices = None
+    point_cloud_range = None
+    occ_size = None
 
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
@@ -83,6 +86,8 @@ def get_cfg(cfg_yaml: dict):
     cfg.image_crop = config['image_crop']
     cfg.feature_encoder = config['feature_encoder']
     cfg.voxel_out_indices = config['voxel_out_indices']
+    cfg.point_cloud_range = config['point_cloud_range']
+    cfg.occ_size = config['occ_size']
 
     ####### CONET Config ##########
     cfg.OccNet_cfg = config['OccNet_cfg']
