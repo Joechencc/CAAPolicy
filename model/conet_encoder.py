@@ -121,7 +121,7 @@ class OccNet(BEVDepth):
             torch.cuda.synchronize()
             t0 = time.time()
 
-        assert (img_voxel_feats is None)
+        assert (img_voxel_feats is not None)
         voxel_feats = img_voxel_feats
 
         voxel_feats_enc = self.occ_encoder(voxel_feats)
@@ -261,7 +261,7 @@ class OccNet(BEVDepth):
             transform=transform,
             **kwargs,
         )
-
+        import pdb; pdb.set_trace()
         pred_c = output['output_voxels'][0]
         SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
         SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)

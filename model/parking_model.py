@@ -62,10 +62,9 @@ class ParkingModel(nn.Module):
         if self.cfg.feature_encoder == "bev":
             bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
         elif self.cfg.feature_encoder == "conet":
-            import pdb; pdb.set_trace()
-            rot, trans, cam2ego, post_rots, post_trans, bda_rot, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.device)
+            rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
             img_metas = self.construct_metas()
-            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, images.shape[-2:], gt_depths, cam2ego]
+            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
             # voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
             bev_feature, pred_depth = self.OccNet(img_metas=img_metas,img_inputs=img) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
 
@@ -90,7 +89,7 @@ class ParkingModel(nn.Module):
 
         return metas
 
-    def transform_spec(self, cam_specs, cam2pixel, B, I, device):
+    def transform_spec(self, cam_specs, cam2pixel, B, I, img_shape, device):
         keys = ['rgb_front', 'rgb_front_left', 'rgb_front_right', 'rgb_back', 'rgb_back_left', 'rgb_back_right']
         sensor2egos = []
         for key in keys:
@@ -106,8 +105,8 @@ class ParkingModel(nn.Module):
         post_trans = torch.tensor([0.,-4.,0.]).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
         bda_rot = torch.eye(3).unsqueeze(0).repeat(B, 1, 1).to(device)
         gt_depths = torch.zeros(1).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
-
-        return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, gt_depths
+        img_shape = torch.tensor(img_shape[-2:]).to(device).unsqueeze(1).repeat(1,B)
+        return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
