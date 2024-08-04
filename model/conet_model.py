@@ -1,419 +1,713 @@
-import copy
-import numpy as np
 import torch
-import torch.nn as nn
+import collections 
 import torch.nn.functional as F
-from mmcv.core.utils import reduce_mean
-from mmcv.models.builder import HEADS
-from mmcv.models.bricks import build_conv_layer, build_norm_layer
-from .lovasz_softmax import lovasz_softmax
-from model.utils import coarse_to_fine_coordinates, project_points_on_img
-from model.utils.nusc_param import nusc_class_frequencies, nusc_class_names
-from model.utils.semkitti import geo_scal_loss, sem_scal_loss, CE_ssc_loss
-from scipy.spatial.transform import Rotation as R
+import torch.nn as nn
 
-@HEADS.register_module()
-class CONetHead(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channel,
-        num_level=1,
-        num_img_level=1,
-        soft_weights=False,
-        loss_weight_cfg=None,
-        conv_cfg=dict(type='Conv3d', bias=False),
-        norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
-        fine_topk=20000,
-        point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        baseline_mode=None,
-        final_occ_size=[256, 256, 20],
-        empty_idx=0,
-        visible_loss=False,
-        balance_cls_weight=True,
-        cascade_ratio=1,
-        sample_from_voxel=False,
-        sample_from_img=False,
-        train_cfg=None,
-        test_cfg=None,
-    ):
-        super(CONetHead, self).__init__()
+from mmcv.models import DETECTORS, build_backbone, build_neck
+from mmcv.utils import auto_fp16, force_fp32
+from mmcv.models.backbones.base_module import BaseModule
+from .bevdepth import BEVDepth
+from .conet_head import CONetHead
+from model.mmdirs.ViewTransformerLSSVoxel import ViewTransformerLiftSplatShootVoxel
+
+import numpy as np
+import time
+import copy
+from mmcv.models.bricks import ConvModule, build_conv_layer, build_norm_layer, build_upsample_layer
+from mmcv.models.builder import BACKBONES, NECKS
+
+@DETECTORS.register_module()
+class OccNet(BEVDepth):
+    def __init__(self, 
+            loss_cfg=None,
+            disable_loss_depth=False,
+            empty_idx=0,
+            occ_fuser=None,
+            occ_encoder_backbone_cfg=None,
+            occ_encoder_neck_cfg=None,
+            loss_norm=False,
+            **kwargs):
+        super().__init__(**kwargs) #### uncomment it later when merging
+        self.loss_cfg = loss_cfg
+        self.disable_loss_depth = disable_loss_depth
+        self.loss_norm = loss_norm
         
-        if type(in_channels) is not list:
-            in_channels = [in_channels]
+        self.record_time = False
+        self.time_stats = collections.defaultdict(list)
+        self.empty_idx = empty_idx
+        self.occ_encoder_backbone = build_backbone(occ_encoder_backbone_cfg)
+        self.occ_encoder_neck = build_neck(occ_encoder_neck_cfg)
+        self.occ_fuser = None
+            
+    def image_encoder(self, img):
+        imgs = img
+        B, N, C, imH, imW = imgs.shape
+        imgs = imgs.view(B * N, C, imH, imW)
         
-        self.in_channels = in_channels
-        self.out_channel = out_channel
-        self.num_level = num_level
-        self.fine_topk = fine_topk
+        backbone_feats = self.img_backbone(imgs)
+        if self.with_img_neck:
+            x = self.img_neck(backbone_feats)
+            if type(x) in [list, tuple]:
+                x = x[0]
+        _, output_dim, ouput_H, output_W = x.shape
+        x = x.view(B, N, output_dim, ouput_H, output_W)
         
-        self.point_cloud_range = torch.tensor(np.array(point_cloud_range)).float()
-        self.baseline_mode = baseline_mode
-        self.final_occ_size = final_occ_size
-        self.visible_loss = visible_loss
-        self.cascade_ratio = cascade_ratio
-        self.sample_from_voxel = sample_from_voxel
-        self.sample_from_img = sample_from_img
+        return {'x': x,
+                'img_feats': [x.clone()]}
+    
+    @force_fp32()
+    def occ_encoder(self, x):
+        x = self.occ_encoder_backbone(x)
+        x = self.occ_encoder_neck(x)
+        return x
+    
+    def extract_img_feat(self, img, img_metas):
+        """Extract features of images."""
+        
+        if self.record_time:
+            torch.cuda.synchronize()
+            t0 = time.time()
+                
+        img_enc_feats = self.image_encoder(img[0])
+        x = img_enc_feats['x']
+        img_feats = img_enc_feats['img_feats']
+        
+        if self.record_time:
+            torch.cuda.synchronize()
+            t1 = time.time()
+            self.time_stats['img_encoder'].append(t1 - t0)
 
-        if self.cascade_ratio != 1: 
-            if self.sample_from_voxel or self.sample_from_img:
-                fine_mlp_input_dim = 0 if not self.sample_from_voxel else 128
-                if sample_from_img:
-                    self.img_mlp_0 = nn.Sequential(
-                        nn.Conv2d(512, 128, 1, 1, 0),
-                        nn.GroupNorm(16, 128),
-                        nn.ReLU(inplace=True)
-                    )
-                    self.img_mlp = nn.Sequential(
-                        nn.Linear(128, 64),
-                        nn.GroupNorm(16, 64),
-                        nn.ReLU(inplace=True),
-                    )
-                    fine_mlp_input_dim += 64
+        rots, trans, intrins, post_rots, post_trans, bda = img[1:7]
+        
+        mlp_input = self.img_view_transformer.get_mlp_input(rots, trans, intrins, post_rots, post_trans, bda)
+        geo_inputs = [rots, trans, intrins, post_rots, post_trans, bda, mlp_input]
+        
+        x, depth = self.img_view_transformer([x] + geo_inputs)
 
-                self.fine_mlp = nn.Sequential(
-                    nn.Linear(fine_mlp_input_dim, 64),
-                    nn.GroupNorm(16, 64),
-                    nn.ReLU(inplace=True),
-                    nn.Linear(64, out_channel)
-            )
+        if self.record_time:
+            torch.cuda.synchronize()
+            t2 = time.time()
+            self.time_stats['view_transformer'].append(t2 - t1)
+        
+        return x, depth, img_feats
 
-        if loss_weight_cfg is None:
-            self.loss_weight_cfg = {
-                "loss_voxel_ce_weight": 1.0,
-                "loss_voxel_sem_scal_weight": 1.0,
-                "loss_voxel_geo_scal_weight": 1.0,
-                "loss_voxel_lovasz_weight": 1.0,
+    def extract_pts_feat(self, pts):
+        if self.record_time:
+            torch.cuda.synchronize()
+            t0 = time.time()
+        voxels, num_points, coors = self.voxelize(pts)
+        voxel_features = self.pts_voxel_encoder(voxels, num_points, coors)
+        batch_size = coors[-1, 0] + 1
+        pts_enc_feats = self.pts_middle_encoder(voxel_features, coors, batch_size)
+        if self.record_time:
+            torch.cuda.synchronize()
+            t1 = time.time()
+            self.time_stats['pts_encoder'].append(t1 - t0)
+        
+        pts_feats = pts_enc_feats['pts_feats']
+        return pts_enc_feats['x'], pts_feats
+
+    def extract_feat(self, points, img, img_metas):
+        """Extract features from images and points."""
+        img_voxel_feats = None
+        pts_voxel_feats, pts_feats = None, None
+        depth, img_feats = None, None
+        if img is not None:
+            img_voxel_feats, depth, img_feats = self.extract_img_feat(img, img_metas)
+        if points is not None:
+            pts_voxel_feats, pts_feats = self.extract_pts_feat(points)
+
+        if self.record_time:
+            torch.cuda.synchronize()
+            t0 = time.time()
+
+        assert (img_voxel_feats is not None)
+        voxel_feats = img_voxel_feats
+
+        voxel_feats_enc = self.occ_encoder(voxel_feats)
+        if type(voxel_feats_enc) is not list:
+            voxel_feats_enc = [voxel_feats_enc]
+
+        if self.record_time:
+            torch.cuda.synchronize()
+            t1 = time.time()
+            self.time_stats['occ_encoder'].append(t1 - t0)
+
+        return (voxel_feats_enc, img_feats, pts_feats, depth)
+    
+    @force_fp32(apply_to=('voxel_feats'))
+    def forward_pts_train(
+            self,
+            voxel_feats,
+            gt_occ=None,
+            points_occ=None,
+            img_metas=None,
+            transform=None,
+            img_feats=None,
+            pts_feats=None,
+            visible_mask=None,
+        ):
+        
+        if self.record_time:
+            torch.cuda.synchronize()
+            t0 = time.time()
+        
+        outs = self.pts_bbox_head(
+            voxel_feats=voxel_feats,
+            points=points_occ,
+            img_metas=img_metas,
+            img_feats=img_feats,
+            pts_feats=pts_feats,
+            transform=transform,
+        )
+        
+        if self.record_time:
+            torch.cuda.synchronize()
+            t1 = time.time()
+            self.time_stats['occ_head'].append(t1 - t0)
+        
+        losses = self.pts_bbox_head.loss(
+            output_voxels=outs['output_voxels'],
+            output_voxels_fine=outs['output_voxels_fine'],
+            output_coords_fine=outs['output_coords_fine'],
+            target_voxels=gt_occ,
+            target_points=points_occ,
+            img_metas=img_metas,
+            visible_mask=visible_mask,
+        )
+        
+        if self.record_time:
+            torch.cuda.synchronize()
+            t2 = time.time()
+            self.time_stats['loss_occ'].append(t2 - t1)
+        
+        return losses
+    
+    def forward_train(self,
+            points=None,
+            img_metas=None,
+            img_inputs=None,
+            gt_occ=None,
+            points_occ=None,
+            visible_mask=None,
+            **kwargs,
+        ):
+
+        # extract bird-eye-view features from perspective images
+        voxel_feats, img_feats, pts_feats, depth = self.extract_feat(
+            points, img=img_inputs, img_metas=img_metas)
+        
+        # training losses
+        losses = dict()
+        
+        if self.record_time:        
+            torch.cuda.synchronize()
+            t0 = time.time()
+        
+        if not self.disable_loss_depth and depth is not None:
+            losses['loss_depth'] = self.img_view_transformer.get_depth_loss(img_inputs[-2], depth)
+        
+        if self.record_time:
+            torch.cuda.synchronize()
+            t1 = time.time()
+            self.time_stats['loss_depth'].append(t1 - t0)
+        
+        transform = img_inputs[1:8] if img_inputs is not None else None
+        losses_occupancy = self.forward_pts_train(voxel_feats, gt_occ,
+                        points_occ, img_metas, img_feats=img_feats, pts_feats=pts_feats, transform=transform, 
+                        visible_mask=visible_mask)
+        losses.update(losses_occupancy)
+        if self.loss_norm:
+            for loss_key in losses.keys():
+                if loss_key.startswith('loss'):
+                    losses[loss_key] = losses[loss_key] / (losses[loss_key].detach() + 1e-9)
+
+        def logging_latencies():
+            # logging latencies
+            avg_time = {key: sum(val) / len(val) for key, val in self.time_stats.items()}
+            sum_time = sum(list(avg_time.values()))
+            out_res = ''
+            for key, val in avg_time.items():
+                out_res += '{}: {:.4f}, {:.1f}, '.format(key, val, val / sum_time)
+            
+            print(out_res)
+        
+        if self.record_time:
+            logging_latencies()
+        
+        return losses
+        
+    def forward(self,
+            points=None,
+            img_metas=None,
+            img_inputs=None,
+            gt_occ=None,
+            visible_mask=None,
+            **kwargs,
+        ):
+        return self.simple_test(img_metas, img_inputs, points, gt_occ=gt_occ, visible_mask=visible_mask, **kwargs)
+    
+    def simple_test(self, img_metas, img=None, points=None, rescale=False, points_occ=None, 
+            gt_occ=None, visible_mask=None, **kwargs):
+        
+        voxel_feats, img_feats, pts_feats, depth = self.extract_feat(points, img=img, img_metas=img_metas)
+        transform = img[1:8] if img is not None else None
+        output = self.pts_bbox_head(
+            voxel_feats=voxel_feats,
+            points=points_occ,
+            img_metas=img_metas,
+            img_feats=img_feats,
+            pts_feats=pts_feats,
+            transform=transform,
+            **kwargs,
+        )
+        fine_feature = None
+
+        B, C, H, W, D = output['output_feature'].shape
+        device = output['output_feature'].device
+        
+        if output['output_voxels_fine'] is not None:
+            if output['output_coords_fine'] is not None and output['output_feature_fine'] is not None:
+                fine_pred_feature = output['output_feature_fine'][0]  # N feats
+                fine_coord = output['output_coords_fine'][0]  # 3 N
+                if gt_occ is not None:
+                    fine_feature = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred_feature.shape[1], 1, 1, 1).float()
+                else:
+                    fine_feature = self.empty_idx * torch.ones((B, H*4, W*4, D*4), device=device)[:, None].repeat(1, fine_pred_feature.shape[1], 1, 1, 1).float()
+                fine_feature[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred_feature.permute(1, 0)[None]
+            else:
+                fine_feature = output['output_voxelsoutput_feature_fine_fine'][0]
+
+        pred_c = output['output_voxels'][0]
+        if gt_occ is not None:
+            SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
+            SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+
+        pred_f = None
+        SSC_metric_fine = None
+        if output['output_voxels_fine'] is not None:
+            if output['output_coords_fine'] is not None:
+                fine_pred = output['output_voxels_fine'][0]  # N ncls
+                fine_coord = output['output_coords_fine'][0]  # 3 N
+                if gt_occ is not None:
+                    pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                else:
+                    pred_f = self.empty_idx * torch.ones((B, H*4, W*4, D*4), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
+            else:
+                pred_f = output['output_voxels_fine'][0]
+
+            if gt_occ is not None:
+                SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
+                SSC_metric_fine, SSC_occ_metric_fine = self.evaluation_semantic(pred_f, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+
+        coarse_occ_mask = output['coarse_occ_mask']
+        if gt_occ is not None:
+            test_output = {
+                'SC_metric': SC_metric,
+                'SSC_metric': SSC_metric,
+                'pred_c': pred_c,
+                'pred_f': pred_f,
+                'fine_feature': fine_feature,
+                'depth': depth,
+                'coarse_occ_mask': output['coarse_occ_mask'],
             }
         else:
-            self.loss_weight_cfg = loss_weight_cfg
+            test_output = {
+                'pred_c': pred_c,
+                'pred_f': pred_f,
+                'fine_feature': fine_feature,
+                'depth': depth,
+                'coarse_occ_mask': output['coarse_occ_mask'],
+            }
+
+        if SSC_metric_fine is not None:
+            test_output['SSC_metric_fine'] = SSC_metric_fine
+
+        return test_output
+
+
+    def evaluation_semantic(self, pred, gt, eval_type, visible_mask=None):
+        _, H, W, D = gt.shape
+        pred = F.interpolate(pred, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        pred = torch.argmax(pred[0], dim=0).cpu().numpy()
+        gt = gt[0].cpu().numpy()
+        gt = gt.astype(np.int)
+
+        # ignore noise
+        noise_mask = gt != 255
+
+        if eval_type == 'SC':
+            # 0 1 split
+            gt[gt != self.empty_idx] = 1
+            pred[pred != self.empty_idx] = 1
+            return fast_hist(pred[noise_mask], gt[noise_mask], max_label=2), None
+
+
+        if eval_type == 'SSC':
+            hist_occ = None
+            if visible_mask is not None:
+                visible_mask = visible_mask[0].cpu().numpy()
+                mask = noise_mask & (visible_mask!=0)
+                hist_occ = fast_hist(pred[mask], gt[mask], max_label=17)
+
+            hist = fast_hist(pred[noise_mask], gt[noise_mask], max_label=17)
+            return hist, hist_occ
+    
+    def forward_dummy(self,
+            points=None,
+            img_metas=None,
+            img_inputs=None,
+            points_occ=None,
+            **kwargs,
+        ):
+
+        voxel_feats, img_feats, pts_feats, depth = self.extract_feat(points, img=img_inputs, img_metas=img_metas)
+
+        transform = img_inputs[1:8] if img_inputs is not None else None
+        output = self.pts_bbox_head(
+            voxel_feats=voxel_feats,
+            points=points_occ,
+            img_metas=img_metas,
+            img_feats=img_feats,
+            pts_feats=pts_feats,
+            transform=transform,
+        )
         
-        # voxel losses
-        self.loss_voxel_ce_weight = self.loss_weight_cfg.get('loss_voxel_ce_weight', 1.0)
-        self.loss_voxel_sem_scal_weight = self.loss_weight_cfg.get('loss_voxel_sem_scal_weight', 1.0)
-        self.loss_voxel_geo_scal_weight = self.loss_weight_cfg.get('loss_voxel_geo_scal_weight', 1.0)
-        self.loss_voxel_lovasz_weight = self.loss_weight_cfg.get('loss_voxel_lovasz_weight', 1.0)
-        
-        # voxel-level prediction
-        self.occ_convs = nn.ModuleList()
-        for i in range(self.num_level):
-            mid_channel = self.in_channels[i] // 2
-            occ_conv = nn.Sequential(
-                build_conv_layer(conv_cfg, in_channels=self.in_channels[i], 
-                        out_channels=mid_channel, kernel_size=3, stride=1, padding=1),
-                build_norm_layer(norm_cfg, mid_channel)[1],
-                nn.ReLU(inplace=True))
-            self.occ_convs.append(occ_conv)
-
-
-        self.occ_pred_conv = nn.Sequential(
-                build_conv_layer(conv_cfg, in_channels=mid_channel, 
-                        out_channels=mid_channel//2, kernel_size=1, stride=1, padding=0),
-                build_norm_layer(norm_cfg, mid_channel//2)[1],
-                nn.ReLU(inplace=True),
-                build_conv_layer(conv_cfg, in_channels=mid_channel//2, 
-                        out_channels=out_channel, kernel_size=1, stride=1, padding=0))
-
-        self.soft_weights = soft_weights
-        self.num_img_level = num_img_level
-        self.num_point_sampling_feat = self.num_level
-        if self.soft_weights:
-            soft_in_channel = mid_channel
-            self.voxel_soft_weights = nn.Sequential(
-                build_conv_layer(conv_cfg, in_channels=soft_in_channel, 
-                        out_channels=soft_in_channel//2, kernel_size=1, stride=1, padding=0),
-                build_norm_layer(norm_cfg, soft_in_channel//2)[1],
-                nn.ReLU(inplace=True),
-                build_conv_layer(conv_cfg, in_channels=soft_in_channel//2, 
-                        out_channels=self.num_point_sampling_feat, kernel_size=1, stride=1, padding=0))
-            
-        # loss functions
-        if balance_cls_weight:
-            self.class_weights = torch.from_numpy(1 / np.log(nusc_class_frequencies + 0.001))
-        else:
-            self.class_weights = torch.ones(17)/17  # FIXME hardcode 17
-
-        self.class_names = nusc_class_names    
-        self.empty_idx = empty_idx
-        
-    def forward_coarse_voxel(self, voxel_feats):
-        output_occs = []
-        output = {}
-        for feats, occ_conv in zip(voxel_feats, self.occ_convs):
-            output_occs.append(occ_conv(feats))
-
-        if self.soft_weights:
-            voxel_soft_weights = self.voxel_soft_weights(output_occs[0])
-            voxel_soft_weights = torch.softmax(voxel_soft_weights, dim=1)
-        else:
-            voxel_soft_weights = torch.ones([output_occs[0].shape[0], self.num_point_sampling_feat, 1, 1, 1],).to(output_occs[0].device) / self.num_point_sampling_feat
-
-        out_voxel_feats = 0
-        _, _, H, W, D= output_occs[0].shape
-        for feats, weights in zip(output_occs, torch.unbind(voxel_soft_weights, dim=1)):
-            feats = F.interpolate(feats, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-            out_voxel_feats += feats * weights.unsqueeze(1)
-        output['out_voxel_feats'] = [out_voxel_feats]
-
-        out_voxel = self.occ_pred_conv(out_voxel_feats)
-        output['occ'] = [out_voxel]
-
         return output
-     
-    def forward(self, voxel_feats, img_feats=None, pts_feats=None, transform=None, **kwargs):
-        assert type(voxel_feats) is list and len(voxel_feats) == self.num_level
+    
+    
+def fast_hist(pred, label, max_label=18):
+    pred = copy.deepcopy(pred.flatten())
+    label = copy.deepcopy(label.flatten())
+    bin_count = np.bincount(max_label * label.astype(int) + pred, minlength=max_label ** 2)
+    return bin_count[:max_label ** 2].reshape(max_label, max_label)
+
+@BACKBONES.register_module()
+class CustomResNet3D(BaseModule):
+    def __init__(self,
+                 depth,
+                 block_inplanes=[64, 128, 256, 512],
+                 block_strides=[1, 2, 2, 2],
+                 out_indices=(0, 1, 2, 3),
+                 n_input_channels=3,
+                 shortcut_type='B',
+                 norm_cfg=dict(type='BN3d', requires_grad=True),
+                 widen_factor=1.0):
+        super().__init__()
         
-        # forward voxel 
-        output = self.forward_coarse_voxel(voxel_feats)
-
-        out_voxel_feats = output['out_voxel_feats'][0]
-        coarse_occ = output['occ'][0]
-
-        if self.cascade_ratio != 1:
-            if self.sample_from_img or self.sample_from_voxel:
-                coarse_occ_mask = coarse_occ.argmax(1) != self.empty_idx
-                
-                assert coarse_occ_mask.sum() > 0, 'no foreground in coarse voxel'
-                B, W, H, D = coarse_occ_mask.shape
-                coarse_coord_x, coarse_coord_y, coarse_coord_z = torch.meshgrid(torch.arange(W).to(coarse_occ.device),
-                            torch.arange(H).to(coarse_occ.device), torch.arange(D).to(coarse_occ.device), indexing='ij')
-                if self.baseline_mode == "NearRefine": # Provide near_range_mask
-                    w_mask = (torch.arange(W) >= 32) & (torch.arange(W) < 96)
-                    h_mask = (torch.arange(H) >= 32) & (torch.arange(H) < 96)
-                    w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
-                    h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
-                    w_h_mask = w_mask & h_mask
-                    w_h_mask = w_h_mask.expand(B, W, H, D)
-                    w_h_mask = w_h_mask.bool().to(coarse_occ_mask.device)
-                    out_mask = w_h_mask.clone()
-                    coarse_occ_mask = coarse_occ_mask & w_h_mask
-                elif self.baseline_mode == "Trajectory": # Optimize along the trajectory
-                    #calculate delta translation and delta rotation
-                    delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
-                    q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
-                    q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
-                    delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
-                    
-                    r1 = R.from_quat(q1.cpu())
-                    r2 = R.from_quat(q2.cpu())
-                    delta_rotation = r2 * r1.inv() 
-                    delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
-                    # Calculate 5 waypoints
-                    trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
-                    traj_mask = self.create_waypoint_mask(trajectory_waypoints, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
-                    out_mask = traj_mask.clone()
-                    coarse_occ_mask = coarse_occ_mask & traj_mask
-                elif self.baseline_mode == "Zonotope": # Optimize along the trajectory
-                    #calculate delta translation and delta rotation
-                    delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
-                    q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
-                    q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
-                    delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
-                    
-                    r1 = R.from_quat(q1.cpu())
-                    r2 = R.from_quat(q2.cpu())
-                    delta_rotation = r2 * r1.inv() 
-                    delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
-                    # Calculate 5 waypoints
-                    trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
-                    zonotopes = self.generate_zonotopes(trajectory_waypoints, coarse_occ_mask.device)
-                    zono_mask = self.create_waypoint_mask(zonotopes, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
-                    out_mask = zono_mask.clone()
-                    coarse_occ_mask = coarse_occ_mask & zono_mask
-
-                output['fine_output'] = []
-                output['fine_feature'] = []
-                output['fine_coord'] = []
-
-                if self.sample_from_img and img_feats is not None:
-                    img_feats_ = img_feats[0]
-                    B_i,N_i,C_i, W_i, H_i = img_feats_.shape
-                    img_feats_ = img_feats_.reshape(-1, C_i, W_i, H_i)
-                    img_feats = [self.img_mlp_0(img_feats_).reshape(B_i, N_i, -1, W_i, H_i)]
-
-                for b in range(B):
-                    append_feats = []
-                    this_coarse_coord = torch.stack([coarse_coord_x[coarse_occ_mask[b]],
-                                                    coarse_coord_y[coarse_occ_mask[b]],
-                                                    coarse_coord_z[coarse_occ_mask[b]]], dim=0)  # 3, N
-                    
-                    if self.training:
-                        this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio, topk=self.fine_topk)  # 3, 8N/64N
-                    else:
-                        this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio)  # 3, 8N/64N
-
-                    output['fine_coord'].append(this_fine_coord)
-                    new_coord = this_fine_coord[None].permute(0,2,1).float().contiguous()  # x y z
-
-                    if self.sample_from_voxel:
-                        this_fine_coord = this_fine_coord.float()
-                        this_fine_coord[0, :] = (this_fine_coord[0, :]/(self.final_occ_size[0]-1) - 0.5) * 2
-                        this_fine_coord[1, :] = (this_fine_coord[1, :]/(self.final_occ_size[1]-1) - 0.5) * 2
-                        this_fine_coord[2, :] = (this_fine_coord[2, :]/(self.final_occ_size[2]-1) - 0.5) * 2
-                        this_fine_coord = this_fine_coord[None,None,None].permute(0,4,1,2,3).float()
-                        # 5D grid_sample input: [B, C, H, W, D]; cor: [B, N, 1, 1, 3]; output: [B, C, N, 1, 1]
-                        new_feat = F.grid_sample(out_voxel_feats[b:b+1].permute(0,1,4,3,2), this_fine_coord, mode='bilinear', padding_mode='zeros', align_corners=False)
-                        append_feats.append(new_feat[0,:,:,0,0].permute(1,0))
-                        assert torch.isnan(new_feat).sum().item() == 0
-                    # image branch
-                    if img_feats is not None and self.sample_from_img:
-                        W_new, H_new, D_new = W * self.cascade_ratio, H * self.cascade_ratio, D * self.cascade_ratio
-                        img_uv, img_mask = project_points_on_img(new_coord, rots=transform[0][b:b+1], trans=transform[1][b:b+1],
-                                    intrins=transform[2][b:b+1], post_rots=transform[3][b:b+1],
-                                    post_trans=transform[4][b:b+1], bda_mat=transform[5][b:b+1],
-                                    W_img=transform[6][b:b+1][0][1], H_img=transform[6][b:b+1][0][0],
-                                    pts_range=self.point_cloud_range, W_occ=W_new, H_occ=H_new, D_occ=D_new)  # 1 N n_cam 2
-                        for img_feat in img_feats:
-                            sampled_img_feat = F.grid_sample(img_feat[b].contiguous(), img_uv.contiguous(), align_corners=True, mode='bilinear', padding_mode='zeros')
-                            sampled_img_feat = sampled_img_feat * img_mask.permute(2,1,0)[:,None]
-                            sampled_img_feat = self.img_mlp(sampled_img_feat.sum(0)[:,:,0].permute(1,0))
-                            append_feats.append(sampled_img_feat)  # N C
-                            assert torch.isnan(sampled_img_feat).sum().item() == 0
-                    output['fine_output'].append(self.fine_mlp(torch.concat(append_feats, dim=1)))
-                    output['fine_feature'].append(torch.concat(append_feats, dim=1))
-
-        res = {
-            'output_feature': out_voxel_feats,
-            'output_feature_fine': output['fine_feature'],
-            'output_voxels': output['occ'],
-            'output_voxels_fine': output.get('fine_output', None),
-            'output_coords_fine': output.get('fine_coord', None),
-            'coarse_occ_mask': out_mask,
+        layer_metas = {
+            10: [1, 1, 1, 1],
+            18: [2, 2, 2, 2],
+            34: [3, 4, 6, 3],
+            50: [3, 4, 6, 3],
+            101: [3, 4, 23, 3],
         }
         
-        return res
-    
-    def create_transformation_matrix(self, trans, rot, device):
-        transformation_matrix = torch.eye(4).to(device).unsqueeze(0).repeat(trans.shape[0], 1, 1)
-        transformation_matrix[:, :3, :3] = rot
-        transformation_matrix[:, :3, 3] = trans
-        return transformation_matrix
-    
-    def create_trajectory(self, r1, delta_translation, delta_rotation, device, n_step=5):
-        transformation = self.create_transformation_matrix(delta_translation, delta_rotation, device)
-        trajectory_waypoints = []
-        for i in range(n_step):
-            if i == 0:
-                waypoint = self.create_transformation_matrix(torch.tensor([0,0,0]).to(device).unsqueeze(0).repeat(r1.as_matrix().shape[0], 1), torch.tensor(r1.as_matrix()).to(device), device)
-            else:
-                waypoint = torch.matmul(transformation, waypoint)
-            trajectory_waypoints.append(waypoint[:,:3,3])
-        return trajectory_waypoints
-
-    def create_waypoint_mask(self, trajectory_waypoints, pc_range, occ_size, device):
-        waypoint_mask = torch.zeros(occ_size).to(device).bool()
-        grid_size = (pc_range[3]-pc_range[0]) / occ_size[1] 
-        B, W, H, D = occ_size
-        for waypoint in trajectory_waypoints:
-            x_idx, y_idx, z_idx = self.point_to_grid_index(waypoint, pc_range, grid_size)
-            x_idx -= int(W/2)
-            y_idx -= int(H/2)
-            w_mask = (torch.arange(W).unsqueeze(0).repeat(x_idx.shape[0],1) >= (60+torch.tensor(x_idx)).unsqueeze(1)) & (torch.arange(W).unsqueeze(0).repeat(x_idx.shape[0],1) < (68+torch.tensor(x_idx)).unsqueeze(1))
-            h_mask = (torch.arange(H).unsqueeze(0).repeat(x_idx.shape[0],1) >= (60+torch.tensor(y_idx)).unsqueeze(1)) & (torch.arange(H).unsqueeze(0).repeat(x_idx.shape[0],1) < (68+torch.tensor(y_idx)).unsqueeze(1))
-            w_mask = w_mask.view(B, W, 1, 1)  # Shape (B, W, 1, 1)
-            h_mask = h_mask.view(B, 1, H, 1)  # Shape (B, 1, H, 1)
-            w_h_mask = w_mask & h_mask
-            w_h_mask = w_h_mask.expand(B, W, H, D)
-            w_h_mask = w_h_mask.bool().to(device)
-            waypoint_mask = waypoint_mask | w_h_mask
-        return waypoint_mask
-    
-    def generate_zonotopes(self, trajectory_waypoints, device):
-        zonotopes = []
-        for waypoint in trajectory_waypoints:
-            center = waypoint.cpu().numpy()
-            # Example: Use identity matrix as generators for simplicity
-            generators = np.eye(3)
-            zonotope_vertices = self.calculate_zonotope(center, generators)
-            zonotopes.append(torch.tensor(zonotope_vertices).to(device))
-        zonotopes = torch.concat(zonotopes)
-        return zonotopes
-    
-    def calculate_zonotope(self, center, generators):
-        num_generators = generators.shape[1]
-        vertices = []
+        if depth in [10, 18, 34]:
+            block = BasicBlock
+        else:
+            assert depth in [50, 101]
+            block = Bottleneck
         
-        # Iterate over all combinations of generators
-        for i in range(1 << num_generators):
-            combination = np.array([1 if (i & (1 << j)) else -1 for j in range(num_generators)])
-            vertex = center + np.dot(generators, combination)
-            vertices.append(vertex)
-        return np.array(vertices)
-    
-    def point_to_grid_index(self, point, pc_range, grid_size=0.8):
-        """
-        points to voxel grid
-        """
-        x_idx = (point[:,0].cpu().numpy() - pc_range[0]) / grid_size
-        y_idx = (point[:,1].cpu().numpy() - pc_range[1]) / grid_size
-        z_idx = (point[:,2].cpu().numpy() - pc_range[2]) / grid_size
-        return x_idx.astype(int), y_idx.astype(int), z_idx.astype(int)
+        layers = layer_metas[depth]
+        block_inplanes = [int(x * widen_factor) for x in block_inplanes]
+        self.in_planes = block_inplanes[0]
+        self.out_indices = out_indices
+        
+        # replace the first several downsampling layers with the channel-squeeze layers
+        self.input_proj = nn.Sequential(
+            nn.Conv3d(n_input_channels, self.in_planes, kernel_size=(1, 1, 1),
+                      stride=(1, 1, 1), bias=False),
+            build_norm_layer(norm_cfg, self.in_planes)[1],
+            nn.ReLU(inplace=True),
+        )
+        
+        self.layers = nn.ModuleList()
 
-    def loss_voxel(self, output_voxels, target_voxels, tag):
+        for i in range(len(block_inplanes)):
+            self.layers.append(self._make_layer(block, block_inplanes[i], layers[i], 
+                                shortcut_type, block_strides[i], norm_cfg=norm_cfg))
 
-        # resize gt                       
-        B, C, H, W, D = output_voxels.shape
-        ratio = target_voxels.shape[2] // H
-        if ratio != 1:
-            target_voxels = target_voxels.reshape(B, H, ratio, W, ratio, D, ratio).permute(0,1,3,5,2,4,6).reshape(B, H, W, D, ratio**3)
-            empty_mask = target_voxels.sum(-1) == self.empty_idx
-            target_voxels = target_voxels.to(torch.int64)
-            occ_space = target_voxels[~empty_mask]
-            occ_space[occ_space==0] = -torch.arange(len(occ_space[occ_space==0])).to(occ_space.device) - 1
-            target_voxels[~empty_mask] = occ_space
-            target_voxels = torch.mode(target_voxels, dim=-1)[0]
-            target_voxels[target_voxels<0] = 255
-            target_voxels = target_voxels.long()
-
-        assert torch.isnan(output_voxels).sum().item() == 0
-        assert torch.isnan(target_voxels).sum().item() == 0
-
-        loss_dict = {}
-
-        # igore 255 = ignore noise. we keep the loss bascward for the label=0 (free voxels)
-        loss_dict['loss_voxel_ce_{}'.format(tag)] = self.loss_voxel_ce_weight * CE_ssc_loss(output_voxels, target_voxels, self.class_weights.type_as(output_voxels), ignore_index=255)
-        loss_dict['loss_voxel_sem_scal_{}'.format(tag)] = self.loss_voxel_sem_scal_weight * sem_scal_loss(output_voxels, target_voxels, ignore_index=255)
-        loss_dict['loss_voxel_geo_scal_{}'.format(tag)] = self.loss_voxel_geo_scal_weight * geo_scal_loss(output_voxels, target_voxels, ignore_index=255, non_empty_idx=self.empty_idx)
-        loss_dict['loss_voxel_lovasz_{}'.format(tag)] = self.loss_voxel_lovasz_weight * lovasz_softmax(torch.softmax(output_voxels, dim=1), target_voxels, ignore=255)
-
-        return loss_dict
-
-    def loss_point(self, fine_coord, fine_output, target_voxels, tag):
-
-        selected_gt = target_voxels[:, fine_coord[0,:], fine_coord[1,:], fine_coord[2,:]].long()[0]
-        assert torch.isnan(selected_gt).sum().item() == 0, torch.isnan(selected_gt).sum().item()
-        assert torch.isnan(fine_output).sum().item() == 0, torch.isnan(fine_output).sum().item()
-
-        loss_dict = {}
-
-        # igore 255 = ignore noise. we keep the loss bascward for the label=0 (free voxels)
-        loss_dict['loss_voxel_ce_{}'.format(tag)] = self.loss_voxel_ce_weight * CE_ssc_loss(fine_output, selected_gt, ignore_index=255)
-        loss_dict['loss_voxel_sem_scal_{}'.format(tag)] = self.loss_voxel_sem_scal_weight * sem_scal_loss(fine_output, selected_gt, ignore_index=255)
-        loss_dict['loss_voxel_geo_scal_{}'.format(tag)] = self.loss_voxel_geo_scal_weight * geo_scal_loss(fine_output, selected_gt, ignore_index=255, non_empty_idx=self.empty_idx)
-        loss_dict['loss_voxel_lovasz_{}'.format(tag)] = self.loss_voxel_lovasz_weight * lovasz_softmax(torch.softmax(fine_output, dim=1), selected_gt, ignore=255)
-
-
-        return loss_dict
-
-    def loss(self, output_voxels=None,
-                output_coords_fine=None, output_voxels_fine=None, 
-                target_voxels=None, visible_mask=None, **kwargs):
-        loss_dict = {}
-        for index, output_voxel in enumerate(output_voxels):
-            loss_dict.update(self.loss_voxel(output_voxel, target_voxels,  tag='c_{}'.format(index)))
-        if self.cascade_ratio != 1:
-            loss_batch_dict = {}
-            if self.sample_from_voxel or self.sample_from_img:
-                for index, (fine_coord, fine_output) in enumerate(zip(output_coords_fine, output_voxels_fine)):
-                    this_batch_loss = self.loss_point(fine_coord, fine_output, target_voxels, tag='fine')
-                    for k, v in this_batch_loss.items():
-                        if k not in loss_batch_dict:
-                            loss_batch_dict[k] = v
-                        else:
-                            loss_batch_dict[k] = loss_batch_dict[k] + v
-                for k, v in loss_batch_dict.items():
-                    loss_dict[k] = v / len(output_coords_fine)
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                nn.init.kaiming_normal_(m.weight,
+                                        mode='fan_out',
+                                        nonlinearity='relu')
             
-        return loss_dict
-    
+            elif isinstance(m, nn.BatchNorm3d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def _downsample_basic_block(self, x, planes, stride):
+        out = F.avg_pool3d(x, kernel_size=1, stride=stride)
+        zero_pads = torch.zeros(out.size(0), planes - out.size(1), out.size(2),
+                                out.size(3), out.size(4))
+        if isinstance(out.data, torch.cuda.FloatTensor):
+            zero_pads = zero_pads.cuda()
+
+        out = torch.cat([out.data, zero_pads], dim=1)
+
+        return out
+
+    def _make_layer(self, block, planes, blocks, shortcut_type, stride=1, norm_cfg=None):
+        downsample = None
+        if stride != 1 or self.in_planes != planes * block.expansion:
+            if shortcut_type == 'A':
+                downsample = partial(self._downsample_basic_block,
+                                     planes=planes * block.expansion,
+                                     stride=stride)
+            else:
+                downsample = nn.Sequential(
+                    conv1x1x1(self.in_planes, planes * block.expansion, stride),
+                    build_norm_layer(norm_cfg, planes * block.expansion)[1])
+
+        layers = []
+        layers.append(
+            block(in_planes=self.in_planes,
+                  planes=planes,
+                  stride=stride,
+                  downsample=downsample,
+                  norm_cfg=norm_cfg))
+        self.in_planes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.in_planes, planes, norm_cfg=norm_cfg))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.input_proj(x)
+        res = []
+        for index, layer in enumerate(self.layers):
+            x = layer(x)
+            
+            if index in self.out_indices:
+                res.append(x)
+            
+        return res
+
+class BasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, in_planes, planes, stride=1, downsample=None, norm_cfg=None):
+        super().__init__()
+
+        self.conv1 = conv3x3x3(in_planes, planes, stride)
+        self.bn1 = build_norm_layer(norm_cfg, planes)[1]
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3x3(planes, planes)
+        self.bn2 = build_norm_layer(norm_cfg, planes)[1]
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+def conv3x3x3(in_planes, out_planes, stride=1):
+    return nn.Conv3d(in_planes,
+                     out_planes,
+                     kernel_size=3,
+                     stride=stride,
+                     padding=1,
+                     bias=False)
+
+def conv1x1x1(in_planes, out_planes, stride=1):
+    return nn.Conv3d(in_planes,
+                     out_planes,
+                     kernel_size=1,
+                     stride=stride,
+                     bias=False)
+
+@NECKS.register_module()
+class FPN3D(BaseModule):
+    """FPN used in SECOND/PointPillars/PartA2/MVXNet.
+
+    Args:
+        in_channels (list[int]): Input channels of multi-scale feature maps.
+        out_channels (list[int]): Output channels of feature maps.
+        upsample_strides (list[int]): Strides used to upsample the
+            feature maps.
+        norm_cfg (dict): Config dict of normalization layers.
+        upsample_cfg (dict): Config dict of upsample layers.
+        conv_cfg (dict): Config dict of conv layers.
+        use_conv_for_no_stride (bool): Whether to use conv when stride is 1.
+    """
+    def __init__(self,
+                 in_channels=[80, 160, 320, 640],
+                 out_channels=256,
+                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+                 conv_cfg=dict(type='Conv3d'),
+                 act_cfg=dict(type='ReLU'),
+                 with_cp=False,
+                 upsample_cfg=dict(mode='trilinear'),
+                 init_cfg=None):
+        super(FPN3D, self).__init__(init_cfg=init_cfg)
         
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.fp16_enabled = False
+        self.upsample_cfg = upsample_cfg
+        self.with_cp = with_cp
+        
+        self.num_out = len(self.in_channels)
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_convs = nn.ModuleList()
+        
+        for i in range(self.num_out):
+            # Expand percetion field
+            l_conv = nn.Sequential(
+                ConvModule(in_channels[i], out_channels, 
+                    kernel_size=1, padding=0,
+                    conv_cfg=conv_cfg, norm_cfg=norm_cfg, 
+                    act_cfg=act_cfg, bias=False, 
+                    inplace=True),
+            )
+            
+            fpn_conv = nn.Sequential(
+                ConvModule(out_channels, out_channels, 
+                    kernel_size=3, padding=1,
+                    conv_cfg=conv_cfg, norm_cfg=norm_cfg, 
+                    act_cfg=act_cfg, bias=False, 
+                    inplace=True),
+            )
+
+            self.lateral_convs.append(l_conv)
+            self.fpn_convs.append(fpn_conv)
+
+    @auto_fp16()
+    def forward(self, inputs):
+        """Forward function.
+
+        Args:
+            x (torch.Tensor): 4D Tensor in (N, C, H, W) shape.
+
+        Returns:
+            list[torch.Tensor]: Multi-level feature maps.
+        """
+        assert len(inputs) == len(self.in_channels)
+
+        # build laterals
+        laterals = []
+        for i, lateral_conv in enumerate(self.lateral_convs):
+            if self.with_cp:
+                lateral_i = torch.utils.checkpoint.checkpoint(lateral_conv, inputs[i])
+            else:
+                lateral_i = lateral_conv(inputs[i])
+            laterals.append(lateral_i)
+
+        # build down-top path
+        for i in range(self.num_out - 1, 0, -1):
+            prev_shape = laterals[i - 1].shape[2:]
+            laterals[i - 1] = laterals[i - 1] + F.interpolate(laterals[i], 
+                    size=prev_shape, align_corners=False, **self.upsample_cfg)
+        
+        # outs = [
+        #     self.fpn_convs[i](laterals[i]) for i in range(self.num_out)
+        # ]
+        
+        outs = []
+        for i, fpn_conv in enumerate(self.fpn_convs):
+            if self.with_cp:
+                out_i = torch.utils.checkpoint.checkpoint(fpn_conv, laterals[i])
+            else:
+                out_i = fpn_conv(laterals[i])
+            outs.append(out_i)
+        
+        return outs
+
+@NECKS.register_module()
+class SECONDFPN(BaseModule):
+    """FPN used in SECOND/PointPillars/PartA2/MVXNet.
+
+    Args:
+        in_channels (list[int]): Input channels of multi-scale feature maps.
+        out_channels (list[int]): Output channels of feature maps.
+        upsample_strides (list[int]): Strides used to upsample the
+            feature maps.
+        norm_cfg (dict): Config dict of normalization layers.
+        upsample_cfg (dict): Config dict of upsample layers.
+        conv_cfg (dict): Config dict of conv layers.
+        use_conv_for_no_stride (bool): Whether to use conv when stride is 1.
+    """
+
+    def __init__(self,
+                 in_channels=[128, 128, 256],
+                 out_channels=[256, 256, 256],
+                 upsample_strides=[1, 2, 4],
+                 norm_cfg=dict(type='BN', eps=1e-3, momentum=0.01),
+                 upsample_cfg=dict(type='deconv', bias=False),
+                 conv_cfg=dict(type='Conv2d', bias=False),
+                 use_conv_for_no_stride=False,
+                 init_cfg=None):
+        # if for GroupNorm,
+        # cfg is dict(type='GN', num_groups=num_groups, eps=1e-3, affine=True)
+        super(SECONDFPN, self).__init__(init_cfg=init_cfg)
+        assert len(out_channels) == len(upsample_strides) == len(in_channels)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.fp16_enabled = False
+
+        deblocks = []
+        for i, out_channel in enumerate(out_channels):
+            stride = upsample_strides[i]
+            if stride > 1 or (stride == 1 and not use_conv_for_no_stride):
+                upsample_layer = build_upsample_layer(
+                    upsample_cfg,
+                    in_channels=in_channels[i],
+                    out_channels=out_channel,
+                    kernel_size=upsample_strides[i],
+                    stride=upsample_strides[i])
+            else:
+                stride = np.round(1 / stride).astype(np.int64)
+                upsample_layer = build_conv_layer(
+                    conv_cfg,
+                    in_channels=in_channels[i],
+                    out_channels=out_channel,
+                    kernel_size=stride,
+                    stride=stride)
+
+            deblock = nn.Sequential(upsample_layer,
+                                    build_norm_layer(norm_cfg, out_channel)[1],
+                                    nn.ReLU(inplace=True))
+            deblocks.append(deblock)
+        self.deblocks = nn.ModuleList(deblocks)
+
+        if init_cfg is None:
+            self.init_cfg = [
+                dict(type='Kaiming', layer='ConvTranspose2d'),
+                dict(type='Constant', layer='NaiveSyncBatchNorm2d', val=1.0)
+            ]
+
+    @auto_fp16()
+    def forward(self, x):
+        """Forward function.
+
+        Args:
+            x (torch.Tensor): 4D Tensor in (N, C, H, W) shape.
+
+        Returns:
+            list[torch.Tensor]: Multi-level feature maps.
+        """
+        assert len(x) == len(self.in_channels)
+        ups = [deblock(x[i]) for i, deblock in enumerate(self.deblocks)]
+
+        if len(ups) > 1:
+            out = torch.cat(ups, dim=1)
+        else:
+            out = ups[0]
+        return [out]

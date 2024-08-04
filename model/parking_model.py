@@ -4,10 +4,13 @@ from torch import nn
 from tool.config import Configuration
 from model.bev_model import BevModel
 from model.bev_encoder import BevEncoder
-from model.conet_encoder import OccNet
+from model.conet_model import OccNet
+from model.conet_encoder import ConetEncoder
 from model.feature_fusion import FeatureFusion
+from model.conet_fusion import CONetFusion
 from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
+from model.seg3d_head import Seg3dHead
 from data_generation.world import World
 from data_generation.world import cam_specs_, cam2pixel_
 import numpy as np
@@ -22,14 +25,18 @@ class ParkingModel(nn.Module):
         if self.cfg.feature_encoder == "bev":
             self.bev_model = BevModel(self.cfg)
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
+            self.feature_fusion = FeatureFusion(self.cfg)
+            self.segmentation_head = SegmentationHead(self.cfg)
+
         elif self.cfg.feature_encoder == "conet":
             self.OccNet = OccNet(**self.cfg.OccNet_cfg)
-
-        self.feature_fusion = FeatureFusion(self.cfg)
+            self.conet_encoder = ConetEncoder(self.cfg.conet_encoder_in_channel)
+            self.conet_fusion = CONetFusion(self.cfg)
+            self.seg3D_head = Seg3dHead(self.cfg)
 
         self.control_predict = ControlPredict(self.cfg)
 
-        self.segmentation_head = SegmentationHead(self.cfg)
+        
 
     def add_target_bev(self, bev_feature, target_point):
         # Create a batch bev_feature
@@ -86,18 +93,21 @@ class ParkingModel(nn.Module):
             bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
             bev_feature, bev_target = self.add_target_bev(bev_feature, target_point) #bev_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
             bev_down_sample = self.bev_encoder(bev_feature)
+            fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
+            pred_segmentation = self.segmentation_head(fuse_feature)
+
         elif self.cfg.feature_encoder == "conet":
             rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
             img_metas = self.construct_metas()
             img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
-            # voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
             res = self.OccNet(img_metas=img_metas,img_inputs=img) #conet_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
             conet_feature, pred_depth = res['fine_feature'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
             conet_feature, conet_target = self.add_target_conet(conet_feature, target_point) #conet_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
             conet_down_sample = self.conet_encoder(conet_feature)
-            
-        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
-        pred_segmentation = self.segmentation_head(fuse_feature)
+            fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
+            pred_segmentation = self.seg3D_head(fuse_feature)
+
+        import pdb; pdb.set_trace()
         return fuse_feature, pred_segmentation, pred_depth, bev_target
 
     def construct_metas(self):

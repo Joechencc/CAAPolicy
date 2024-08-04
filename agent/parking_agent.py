@@ -275,10 +275,14 @@ class ParkingAgent:
         self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
-
-        patch_attention(self.model.feature_fusion.tf_encoder.layers[-1].self_attn)
-        self.hook_handle = self.model.feature_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
-            self.save_output)
+        if self.cfg.feature_encoder == "conet":
+            patch_attention(self.model.conet_fusion.tf_encoder.layers[-1].self_attn)
+            self.hook_handle = self.model.conet_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
+                self.save_output)
+        elif self.cfg.feature_encoder == "bev":
+            patch_attention(self.model.feature_fusion.tf_encoder.layers[-1].self_attn)
+            self.hook_handle = self.model.feature_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
+                self.save_output)
 
         logging.info('Load E2EParkingModel from %s', parking_pth_path)
 

@@ -23,8 +23,8 @@ parking_model:
   feature_encoder: 'conet'
   voxel_out_indices: (0, 1, 2, 3)
 
-  point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-  occ_size: [512, 512, 40]
+  point_cloud_range: [-16.0, -16.0, -2.0, 16.0, 16.0, 2.0]
+  occ_size: [160, 160, 20]
   lss_downsample: [4, 4, 4]  # [128 128 10]
   
   OccNet_cfg:
@@ -90,17 +90,21 @@ parking_model:
       cascade_ratio: 4
       sample_from_voxel: True
       sample_from_img: True
-      final_occ_size: [512, 512, 40]
+      final_occ_size: [160, 160, 20]
       fine_topk: 15000
       empty_idx: 0
       num_level: null
       in_channels: null
       out_channel: 17
-      point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+      point_cloud_range: [-16.0, -16.0, -2.0, 16.0, 16.0, 2.0]
       loss_weight_cfg: null
       baseline_mode: "NearRefine"
 
     empty_idx: 0
+
+  conet_encoder_in_channel: 192
+  conet_encoder_out_channel: 516  # 256 + 2
+  Segdim: [8, 8, 2]
 
   bev_encoder_in_channel: 64
   bev_encoder_out_channel: 258  # 256 + 2
@@ -121,10 +125,12 @@ parking_model:
 
   # transformer encoder
   tf_en_dim: 258
+  tf_en_conet_dim: 516
   tf_en_heads: 6
   tf_en_layers: 4
   tf_en_dropout: 0.05
   tf_en_bev_length: 256
+  tf_en_conet_length: 128
   tf_en_motion_length: 3
 
   # transformer decoder

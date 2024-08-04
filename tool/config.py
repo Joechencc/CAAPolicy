@@ -32,6 +32,9 @@ class Configuration:
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
 
+    conet_encoder_in_channel = None
+    conet_encoder_out_channel = None
+
     bev_x_bound = None
     bev_y_bound = None
     bev_z_bound = None
@@ -43,12 +46,15 @@ class Configuration:
 
     seg_classes = None
     seg_vehicle_weights = None
+    seg_dim = None
 
     tf_en_dim = None
+    tf_en_conet_dim = None
     tf_en_heads = None
     tf_en_layers = None
     tf_en_dropout = None
     tf_en_bev_length = None
+    tf_en_conet_length = None
     tf_en_motion_length = None
 
     tf_de_dim = None
@@ -123,6 +129,9 @@ def get_cfg(cfg_yaml: dict):
             loss_voxel_geo_scal_weight=1.0,
             loss_voxel_lovasz_weight=1.0,
         )
+
+    cfg.conet_encoder_in_channel = config['conet_encoder_in_channel']
+    cfg.conet_encoder_out_channel = config['conet_encoder_out_channel']
     ###############################
 
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
@@ -138,13 +147,16 @@ def get_cfg(cfg_yaml: dict):
     cfg.backbone = config["backbone"]
 
     cfg.seg_classes = config['seg_classes']
+    cfg.seg_dim = config['Segdim']
     cfg.seg_vehicle_weights = config['seg_vehicle_weights']
 
     cfg.tf_en_dim = config['tf_en_dim']
+    cfg.tf_en_conet_dim = config['tf_en_conet_dim']
     cfg.tf_en_heads = config['tf_en_heads']
     cfg.tf_en_layers = config['tf_en_layers']
     cfg.tf_en_dropout = config['tf_en_dropout']
     cfg.tf_en_bev_length = config['tf_en_bev_length']
+    cfg.tf_en_conet_length = config['tf_en_conet_length']
     cfg.tf_en_motion_length = config['tf_en_motion_length']
 
     cfg.tf_de_dim = config['tf_de_dim']
