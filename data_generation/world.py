@@ -468,10 +468,10 @@ class World(object):
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 32, 'range': 100, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
-                'atmosphere_attenuation_rate': 0.1,
+
                 'horizontal_fov': 360,
-                'upper_fov': 10,
-                'lower_fov': -30,
+                'upper_fov': 30,
+                'lower_fov': -90,
             },
             # Repeat for each lidar configuration
         }
