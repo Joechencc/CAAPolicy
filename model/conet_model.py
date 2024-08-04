@@ -261,7 +261,7 @@ class CONetHead(nn.Module):
                         img_uv, img_mask = project_points_on_img(new_coord, rots=transform[0][b:b+1], trans=transform[1][b:b+1],
                                     intrins=transform[2][b:b+1], post_rots=transform[3][b:b+1],
                                     post_trans=transform[4][b:b+1], bda_mat=transform[5][b:b+1],
-                                    W_img=transform[6][1][b:b+1], H_img=transform[6][0][b:b+1],
+                                    W_img=transform[6][b:b+1][0][1], H_img=transform[6][b:b+1][0][0],
                                     pts_range=self.point_cloud_range, W_occ=W_new, H_occ=H_new, D_occ=D_new)  # 1 N n_cam 2
                         for img_feat in img_feats:
                             sampled_img_feat = F.grid_sample(img_feat[b].contiguous(), img_uv.contiguous(), align_corners=True, mode='bilinear', padding_mode='zeros')

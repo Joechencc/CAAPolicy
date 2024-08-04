@@ -57,7 +57,6 @@ class ParkingModel(nn.Module):
         b, c, h, w, d = bev_feature.shape
         bev_target = torch.zeros((b, 1, h, w, d), dtype=torch.float).to(self.cfg.device, non_blocking=True)
         occ_size = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / h
-        import pdb; pdb.set_trace()
         x_pixel = (h / 2 + target_point[:, 0] / occ_size).unsqueeze(0).T.int()
         y_pixel = (w / 2 + target_point[:, 1] / occ_size).unsqueeze(0).T.int()
         z_pixel = (d / 2 + target_point[:, 2] / occ_size).unsqueeze(0).T.int()
@@ -95,7 +94,6 @@ class ParkingModel(nn.Module):
             res = self.OccNet(img_metas=img_metas,img_inputs=img) #conet_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
             conet_feature, pred_depth = res['fine_feature'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
             conet_feature, conet_target = self.add_target_conet(conet_feature, target_point) #conet_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
-            import pdb; pdb.set_trace()
             conet_down_sample = self.conet_encoder(conet_feature)
             
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
@@ -129,7 +127,7 @@ class ParkingModel(nn.Module):
         post_trans = torch.tensor([0.,-4.,0.]).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
         bda_rot = torch.eye(3).unsqueeze(0).repeat(B, 1, 1).to(device)
         gt_depths = torch.zeros(1).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
-        img_shape = torch.tensor(img_shape[-2:]).to(device).unsqueeze(1).repeat(1,B)
+        img_shape = torch.tensor(img_shape[-2:]).to(device).unsqueeze(0).repeat(B,1)
         return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
 
     def forward(self, data):
