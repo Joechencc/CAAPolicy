@@ -66,8 +66,9 @@ class ParkingModel(nn.Module):
             img_metas = self.construct_metas()
             img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
             # voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
-            bev_feature, pred_depth = self.OccNet(img_metas=img_metas,img_inputs=img) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
-
+            res = self.OccNet(img_metas=img_metas,img_inputs=img) #bev_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
+            bev_feature, pred_depth = res['fine_feature'], res['depth']
+        
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point) #bev_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
 
         if self.cfg.feature_encoder == "bev":

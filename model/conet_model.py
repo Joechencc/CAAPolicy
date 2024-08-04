@@ -222,6 +222,7 @@ class CONetHead(nn.Module):
                     coarse_occ_mask = coarse_occ_mask & zono_mask
 
                 output['fine_output'] = []
+                output['fine_feature'] = []
                 output['fine_coord'] = []
 
                 if self.sample_from_img and img_feats is not None:
@@ -235,6 +236,7 @@ class CONetHead(nn.Module):
                     this_coarse_coord = torch.stack([coarse_coord_x[coarse_occ_mask[b]],
                                                     coarse_coord_y[coarse_occ_mask[b]],
                                                     coarse_coord_z[coarse_occ_mask[b]]], dim=0)  # 3, N
+                    
                     if self.training:
                         this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio, topk=self.fine_topk)  # 3, 8N/64N
                     else:
@@ -253,7 +255,6 @@ class CONetHead(nn.Module):
                         new_feat = F.grid_sample(out_voxel_feats[b:b+1].permute(0,1,4,3,2), this_fine_coord, mode='bilinear', padding_mode='zeros', align_corners=False)
                         append_feats.append(new_feat[0,:,:,0,0].permute(1,0))
                         assert torch.isnan(new_feat).sum().item() == 0
-                        
                     # image branch
                     if img_feats is not None and self.sample_from_img:
                         W_new, H_new, D_new = W * self.cascade_ratio, H * self.cascade_ratio, D * self.cascade_ratio
@@ -269,8 +270,11 @@ class CONetHead(nn.Module):
                             append_feats.append(sampled_img_feat)  # N C
                             assert torch.isnan(sampled_img_feat).sum().item() == 0
                     output['fine_output'].append(self.fine_mlp(torch.concat(append_feats, dim=1)))
+                    output['fine_feature'].append(torch.concat(append_feats, dim=1))
 
         res = {
+            'output_feature': out_voxel_feats,
+            'output_feature_fine': output['fine_feature'],
             'output_voxels': output['occ'],
             'output_voxels_fine': output.get('fine_output', None),
             'output_coords_fine': output.get('fine_coord', None),
