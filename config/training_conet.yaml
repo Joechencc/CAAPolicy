@@ -100,6 +100,8 @@ parking_model:
       loss_weight_cfg: null
       baseline_mode: "NearRefine"
 
+    occ_size: [160, 160, 20]
+    
     empty_idx: 0
 
   conet_encoder_in_channel: 192

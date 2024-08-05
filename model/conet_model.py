@@ -12,9 +12,11 @@ from model.mmdirs.ViewTransformerLSSVoxel import ViewTransformerLiftSplatShootVo
 
 import numpy as np
 import time
-import copy
+import copy, os, cv2
 from mmcv.models.bricks import ConvModule, build_conv_layer, build_norm_layer, build_upsample_layer
 from mmcv.models.builder import BACKBONES, NECKS
+from PIL import Image
+import matplotlib.pyplot as plt
 
 @DETECTORS.register_module()
 class OccNet(BEVDepth):
@@ -26,6 +28,7 @@ class OccNet(BEVDepth):
             occ_encoder_backbone_cfg=None,
             occ_encoder_neck_cfg=None,
             loss_norm=False,
+            occ_size=None,
             **kwargs):
         super().__init__(**kwargs) #### uncomment it later when merging
         self.loss_cfg = loss_cfg
@@ -38,6 +41,7 @@ class OccNet(BEVDepth):
         self.occ_encoder_backbone = build_backbone(occ_encoder_backbone_cfg)
         self.occ_encoder_neck = build_neck(occ_encoder_neck_cfg)
         self.occ_fuser = None
+        self.occ_size = occ_size
             
     def image_encoder(self, img):
         imgs = img
@@ -192,7 +196,7 @@ class OccNet(BEVDepth):
             visible_mask=None,
             **kwargs,
         ):
-
+        
         # extract bird-eye-view features from perspective images
         voxel_feats, img_feats, pts_feats, depth = self.extract_feat(
             points, img=img_inputs, img_metas=img_metas)
@@ -249,7 +253,8 @@ class OccNet(BEVDepth):
     
     def simple_test(self, img_metas, img=None, points=None, rescale=False, points_occ=None, 
             gt_occ=None, visible_mask=None, **kwargs):
-        
+
+        self.visualize(img[0], folder_path="./visual")
         voxel_feats, img_feats, pts_feats, depth = self.extract_feat(points, img=img, img_metas=img_metas)
         transform = img[1:8] if img is not None else None
         output = self.pts_bbox_head(
@@ -282,6 +287,11 @@ class OccNet(BEVDepth):
         if gt_occ is not None:
             SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
             SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+        else:
+            H, W, D = self.occ_size
+            pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+            pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
+            self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
 
         pred_f = None
         SSC_metric_fine = None
@@ -300,7 +310,12 @@ class OccNet(BEVDepth):
             if gt_occ is not None:
                 SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
                 SSC_metric_fine, SSC_occ_metric_fine = self.evaluation_semantic(pred_f, gt_occ, eval_type='SSC', visible_mask=visible_mask)
-
+            else:
+                H, W, D = self.occ_size
+                pred_f = F.interpolate(pred_f, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                pred_f = torch.argmax(pred_f[0], dim=0).cpu().numpy()
+                self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
+        import pdb; pdb.set_trace()
         coarse_occ_mask = output['coarse_occ_mask']
         if gt_occ is not None:
             test_output = {
@@ -326,8 +341,27 @@ class OccNet(BEVDepth):
 
         return test_output
 
+    def visualize(self, img, folder_path="./visual"):
+        # front, front_left, front_right, back, back_left, back_right
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+            print(f"Folder '{folder_path}' created.")
+        else:
+            pass
 
-    def evaluation_semantic(self, pred, gt, eval_type, visible_mask=None):
+        image_name_l = ['front', 'front_left', 'front_right', 'back', 'back_left', 'back_right']
+        img = img[0]
+        for i in range(img.size(0)):
+            image = img[i].cpu().numpy().transpose(1, 2, 0)  # Convert from (C, H, W) to (H, W, C)
+            image = (image - (-3)) / (3 - (-3))  # Scale to [0, 1]
+            image = (image * 255).astype(np.uint8)  # Scale to [0, 255]
+
+            image_pil = Image.fromarray(image, 'RGB')
+            # Save image using PIL
+            img_name = os.path.join(folder_path, image_name_l[i]+'.png')
+            image_pil.save(img_name)
+
+    def evaluation_semantic(self, pred, gt, eval_type, visible_mask=None, coarse=True):
         _, H, W, D = gt.shape
         pred = F.interpolate(pred, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
         pred = torch.argmax(pred[0], dim=0).cpu().numpy()
@@ -339,6 +373,8 @@ class OccNet(BEVDepth):
 
         if eval_type == 'SC':
             # 0 1 split
+            if coarse:
+                self.plot_grid(pred, os.path.join("visual", "pred_side.png"), os.path.join("visual", "pred.png"))
             gt[gt != self.empty_idx] = 1
             pred[pred != self.empty_idx] = 1
             return fast_hist(pred[noise_mask], gt[noise_mask], max_label=2), None
@@ -353,6 +389,27 @@ class OccNet(BEVDepth):
 
             hist = fast_hist(pred[noise_mask], gt[noise_mask], max_label=17)
             return hist, hist_occ
+        
+    def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        H, W, D = threeD_grid.shape
+
+        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*0.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+        import pdb; pdb.set_trace()
     
     def forward_dummy(self,
             points=None,
