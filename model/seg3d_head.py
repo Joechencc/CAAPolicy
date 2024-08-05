@@ -14,7 +14,7 @@ class Seg3dHead(nn.Module):
 
         self.in_channel = self.cfg.conet_encoder_out_channel
         self.out_channel = self.cfg.conet_encoder_in_channel
-        self.seg_classes = self.cfg.seg_classes
+        self.seg_classes = self.cfg.seg_classes_conet
         self.seg_dim = self.cfg.seg_dim
         self.occ_size = self.cfg.occ_size
 

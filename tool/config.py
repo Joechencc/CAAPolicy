@@ -45,6 +45,7 @@ class Configuration:
     backbone = None
 
     seg_classes = None
+    seg_classes_conet = None
     seg_vehicle_weights = None
     seg_dim = None
 
@@ -148,6 +149,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.backbone = config["backbone"]
 
     cfg.seg_classes = config['seg_classes']
+    cfg.seg_classes_conet = config['seg_classes_conet']
     cfg.seg_dim = config['Segdim']
     cfg.seg_vehicle_weights = config['seg_vehicle_weights']
 

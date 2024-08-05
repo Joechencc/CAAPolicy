@@ -350,14 +350,21 @@ class ParkingAgent:
             new_target_x = int(np.average(target_slot_x))
             new_target_y = int(np.average(target_slot_y))
             new_target_z = int(np.average(target_slot_z))
-            self.pre_target_point = self.get_target_point_ego_coord(pred_seg_img, [new_target_x, new_target_y, new_target_z])
+            self.pre_target_point = self.get_target_point_ego_coord_conet(pred_seg_img, [new_target_x, new_target_y, new_target_z])
 
     def get_target_point_ego_coord(self, pred_seg_img, target_point_pixel_idx):
+        bev_shape_x, bev_shape_y = pred_seg_img.shape
+        x = -(target_point_pixel_idx[0] - bev_shape_x / 2)
+        y = target_point_pixel_idx[1] - bev_shape_y / 2
+        target_point_ego_coord = [x * self.cfg.bev_x_bound[2], y * self.cfg.bev_y_bound[2]]
+        return target_point_ego_coord
+    
+    def get_target_point_ego_coord_conet(self, pred_seg_img, target_point_pixel_idx):
         bev_shape_x, bev_shape_y, bev_shape_z = pred_seg_img.shape
         x = -(target_point_pixel_idx[0] - bev_shape_x / 2)
         y = target_point_pixel_idx[1] - bev_shape_y / 2
         z = target_point_pixel_idx[2] - bev_shape_z / 2
-        target_point_ego_coord = [x * self.cfg.bev_x_bound[2], y * self.cfg.bev_y_bound[2], y * self.cfg.bev_z_bound[2]]
+        target_point_ego_coord = [x * self.cfg.bev_x_bound[2], y * self.cfg.bev_y_bound[2], z * self.cfg.bev_z_bound[2]]
         return target_point_ego_coord
 
     def init_agent(self):
