@@ -398,7 +398,7 @@ class OccNet(BEVDepth):
         cmap = plt.cm.viridis # viridis color projection
 
         if vmax is None:
-            vmax=np.max(twoD_map)*0.2
+            vmax=np.max(twoD_map)*1.2
         plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
 
         color_legend = plt.colorbar()
@@ -409,7 +409,6 @@ class OccNet(BEVDepth):
         else:
             plt.show()
         plt.close()
-        import pdb; pdb.set_trace()
     
     def forward_dummy(self,
             points=None,
