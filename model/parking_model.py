@@ -9,6 +9,7 @@ from model.conet_encoder import ConetEncoder
 from model.feature_fusion import FeatureFusion
 from model.conet_fusion import CONetFusion
 from model.control_predict import ControlPredict
+from model.control_conet import ControlCONet
 from model.segmentation_head import SegmentationHead
 from model.seg3d_head import Seg3dHead
 from data_generation.world import World
@@ -27,17 +28,15 @@ class ParkingModel(nn.Module):
             self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
             self.feature_fusion = FeatureFusion(self.cfg)
             self.segmentation_head = SegmentationHead(self.cfg)
+            self.control_predict = ControlPredict(self.cfg)
 
         elif self.cfg.feature_encoder == "conet":
             self.OccNet = OccNet(**self.cfg.OccNet_cfg)
             self.conet_encoder = ConetEncoder(self.cfg.conet_encoder_in_channel)
             self.conet_fusion = CONetFusion(self.cfg)
             self.seg3D_head = Seg3dHead(self.cfg)
-
-        self.control_predict = ControlPredict(self.cfg)
-
+            self.control_conet = ControlCONet(self.cfg)
         
-
     def add_target_bev(self, bev_feature, target_point):
         # Create a batch bev_feature
         b, c, h, w = bev_feature.shape
@@ -95,6 +94,7 @@ class ParkingModel(nn.Module):
             bev_down_sample = self.bev_encoder(bev_feature)
             fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
             pred_segmentation = self.segmentation_head(fuse_feature)
+            return fuse_feature, pred_segmentation, pred_depth, bev_target
 
         elif self.cfg.feature_encoder == "conet":
             rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
@@ -106,9 +106,7 @@ class ParkingModel(nn.Module):
             conet_down_sample = self.conet_encoder(conet_feature)
             fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
             pred_segmentation = self.seg3D_head(fuse_feature)
-
-        import pdb; pdb.set_trace()
-        return fuse_feature, pred_segmentation, pred_depth, bev_target
+            return fuse_feature, pred_segmentation, pred_depth, conet_target        
 
     def construct_metas(self):
         metas = {}
@@ -142,13 +140,20 @@ class ParkingModel(nn.Module):
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
-        pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
+        if self.cfg.feature_encoder == 'bev':
+            pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
+        elif self.cfg.feature_encoder == 'conet':
+            pred_control = self.control_conet.predict(fuse_feature, data['gt_control'].cuda())
+        
         return pred_control, pred_segmentation, pred_depth
 
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
         pred_multi_controls = data['gt_control'].cuda()
         for i in range(3):
-            pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
+            if self.cfg.feature_encoder == 'bev':
+                pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
+            elif self.cfg.feature_encoder == 'conet':
+                pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
         return pred_multi_controls, pred_segmentation, pred_depth, bev_target

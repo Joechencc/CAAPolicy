@@ -326,12 +326,38 @@ class ParkingAgent:
             new_target_x = int(np.average(target_slot_x))
             new_target_y = int(np.average(target_slot_y))
             self.pre_target_point = self.get_target_point_ego_coord(pred_seg_img, [new_target_x, new_target_y])
+    
+    def save_prev_target_conet(self, pred_segmentation):
+        pred_segmentation = pred_segmentation[0]
+        pred_segmentation = torch.argmax(pred_segmentation, dim=0, keepdim=True)
+        pred_segmentation = pred_segmentation.detach().cpu().numpy()
+        pred_seg_img = pred_segmentation[0, :, :, :][::-1]
+
+        h, w, d = pred_seg_img.shape
+        target_slot_x = []
+        target_slot_y = []
+        target_slot_z = []
+        for row_idx in range(h):
+            for col_idx in range(w):
+                for dep_idx in range(d):
+                    if pred_seg_img[row_idx, col_idx, dep_idx] != 0:
+                        target_slot_x.append(row_idx)
+                        target_slot_y.append(col_idx)
+                        target_slot_z.append(dep_idx)
+
+        # target point in bev
+        if (len(target_slot_x) > 0):
+            new_target_x = int(np.average(target_slot_x))
+            new_target_y = int(np.average(target_slot_y))
+            new_target_z = int(np.average(target_slot_z))
+            self.pre_target_point = self.get_target_point_ego_coord(pred_seg_img, [new_target_x, new_target_y, new_target_z])
 
     def get_target_point_ego_coord(self, pred_seg_img, target_point_pixel_idx):
-        bev_shape = pred_seg_img.shape[0]
-        x = -(target_point_pixel_idx[0] - bev_shape / 2)
-        y = target_point_pixel_idx[1] - bev_shape / 2
-        target_point_ego_coord = [x * self.cfg.bev_x_bound[2], y * self.cfg.bev_y_bound[2]]
+        bev_shape_x, bev_shape_y, bev_shape_z = pred_seg_img.shape
+        x = -(target_point_pixel_idx[0] - bev_shape_x / 2)
+        y = target_point_pixel_idx[1] - bev_shape_y / 2
+        z = target_point_pixel_idx[2] - bev_shape_z / 2
+        target_point_ego_coord = [x * self.cfg.bev_x_bound[2], y * self.cfg.bev_y_bound[2], y * self.cfg.bev_z_bound[2]]
         return target_point_ego_coord
 
     def init_agent(self):
@@ -405,8 +431,11 @@ class ParkingAgent:
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
+                if self.cfg.feature_encoder == 'bev':
+                    self.save_prev_target(pred_segmentation)
+                elif self.cfg.feature_encoder == 'conet':
+                    self.save_prev_target_conet(pred_segmentation)
 
-                self.save_prev_target(pred_segmentation)
                 control_signal = detokenize(pred_controls[0].tolist()[1:], self.cfg.token_nums)
 
                 self.trans_control.throttle = control_signal[0]

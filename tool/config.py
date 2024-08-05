@@ -58,6 +58,7 @@ class Configuration:
     tf_en_motion_length = None
 
     tf_de_dim = None
+    tf_de_conet_dim = None
     tf_de_heads = None
     tf_de_layers = None
     tf_de_dropout = None
@@ -160,6 +161,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_en_motion_length = config['tf_en_motion_length']
 
     cfg.tf_de_dim = config['tf_de_dim']
+    cfg.tf_de_conet_dim = config['tf_de_conet_dim']
     cfg.tf_de_heads = config['tf_de_heads']
     cfg.tf_de_layers = config['tf_de_layers']
     cfg.tf_de_dropout = config['tf_de_dropout']
