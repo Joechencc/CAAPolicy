@@ -124,7 +124,8 @@ parking_model:
   backbone: "efficientnet-b4"
 
   # segmentation
-  seg_classes: 17
+  seg_classes: 3
+  seg_classes_conet: 17
   seg_vehicle_weights: [1.0, 2.0, 2.0]
 
   # transformer encoder
