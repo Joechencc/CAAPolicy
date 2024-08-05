@@ -14,7 +14,7 @@ from threading import Thread
 from data_generation import parking_position
 from data_generation.tools import encode_npy_to_pil
 from data_generation.world import World
-
+from utils.ply2voxel import voxelization_save
 
 class DataGenerator:
     def __init__(self, carla_world, args):
@@ -195,6 +195,7 @@ class DataGenerator:
         (cur_save_path / 'lidar').mkdir()
         (cur_save_path / 'parking_goal').mkdir()
         (cur_save_path / 'topdown').mkdir()
+        (cur_save_path / 'voxel').mkdir()
         for sensor in self._batch_data_frames[0].keys():
             if sensor.startswith('rgb') or sensor.startswith('depth') or sensor.startswith('camera'):
                 (cur_save_path / sensor).mkdir()
@@ -247,6 +248,8 @@ class DataGenerator:
                 elif sensor.startswith('lidar'):
                     data_frame[sensor].save_to_disk(
                         str(cur_save_path / sensor  / ('%04d.ply' % index)))
+                    voxelization_save(str(cur_save_path / sensor  / ('%04d.ply' % index)),
+                                      str(cur_save_path / "voxel"  / ('%04d' % index)),)
                 elif sensor.startswith('camera'):
                     data_frame[sensor].save_to_disk(
                     str(cur_save_path / sensor / ('%04d.png' % index)))

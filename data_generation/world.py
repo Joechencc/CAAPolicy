@@ -470,7 +470,7 @@ class World(object):
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
 
                 'horizontal_fov': 360,
-                'upper_fov': 30,
+                'upper_fov': 90,
                 'lower_fov': -90,
             },
             # Repeat for each lidar configuration

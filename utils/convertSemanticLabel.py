@@ -42,7 +42,7 @@ categories = {
     16: "vegetation"
 }
 # convert from carla to nuscenes
-def convert(category_index):
+def convert_semantic_label(category_index):
     mapping = {
         0: 1,   # Unlabeled -> barrier
         1: 15,  # Building -> manmade
