@@ -26,7 +26,7 @@ def most_common(lst):
 def voxel_center_from_index(index, resolution, min_bound):
     return [min_bound[i] + (index[i] + 0.5) * resolution for i in range(3)]
 
-def voxelization_save(file_path,save_path, min_bound = [-32, -32, -3],max_bound = [32, 32, 5], resolution = 0.8):
+def voxelization_save(file_path,save_path, min_bound = [-32, -32, -3],max_bound = [32, 32, 5], resolution = 0.2):
 # Load the data and point cloud
     path_to_ply = file_path
     data = read_ply_with_properties(path_to_ply)
