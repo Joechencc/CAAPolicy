@@ -168,6 +168,7 @@ class CONetHead(nn.Module):
 
         out_voxel_feats = output['out_voxel_feats'][0]
         coarse_occ = output['occ'][0]
+        out_mask = None
 
         if self.cascade_ratio != 1:
             if self.sample_from_img or self.sample_from_voxel:
@@ -178,8 +179,9 @@ class CONetHead(nn.Module):
                 coarse_coord_x, coarse_coord_y, coarse_coord_z = torch.meshgrid(torch.arange(W).to(coarse_occ.device),
                             torch.arange(H).to(coarse_occ.device), torch.arange(D).to(coarse_occ.device), indexing='ij')
                 if self.baseline_mode == "NearRefine": # Provide near_range_mask
-                    w_mask = (torch.arange(W) >= 32) & (torch.arange(W) < 96)
-                    h_mask = (torch.arange(H) >= 32) & (torch.arange(H) < 96)
+                    h,w,d = self.final_occ_size
+                    w_mask = (torch.arange(W) >= int(w/2)-40) & (torch.arange(W) < int(w/2)+40)
+                    h_mask = (torch.arange(H) >= int(h/2)-40) & (torch.arange(H) < int(h/2)+40)
                     w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
                     h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
                     w_h_mask = w_mask & h_mask

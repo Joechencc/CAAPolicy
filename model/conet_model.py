@@ -291,7 +291,7 @@ class OccNet(BEVDepth):
             H, W, D = self.occ_size
             pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
             pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
-            self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+            # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
 
         pred_f = None
         SSC_metric_fine = None
@@ -302,7 +302,7 @@ class OccNet(BEVDepth):
                 if gt_occ is not None:
                     pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
                 else:
-                    pred_f = self.empty_idx * torch.ones((B, H*4, W*4, D*4), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                    pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
                 pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
             else:
                 pred_f = output['output_voxels_fine'][0]
@@ -314,8 +314,8 @@ class OccNet(BEVDepth):
                 H, W, D = self.occ_size
                 pred_f = F.interpolate(pred_f, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
                 pred_f = torch.argmax(pred_f[0], dim=0).cpu().numpy()
-                self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
-        import pdb; pdb.set_trace()
+                # self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
+        # import pdb; pdb.set_trace()
         coarse_occ_mask = output['coarse_occ_mask']
         if gt_occ is not None:
             test_output = {

@@ -98,10 +98,10 @@ parking_model:
       out_channel: 17
       point_cloud_range: [-16.0, -16.0, -2.0, 16.0, 16.0, 2.0]
       loss_weight_cfg: null
-      baseline_mode: "NearRefine"
+      baseline_mode: "base"
 
     occ_size: [160, 160, 20]
-    
+
     empty_idx: 0
 
   conet_encoder_in_channel: 192

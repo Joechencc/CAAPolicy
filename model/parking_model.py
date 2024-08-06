@@ -127,7 +127,8 @@ class ParkingModel(nn.Module):
             ego2sensor = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
                                         carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
                                                         roll=cam_spec['roll']))
-            sensor2ego = cam2pixel @ np.array(ego2sensor.get_inverse_matrix())
+            # sensor2ego = cam2pixel @ np.array(ego2sensor.get_inverse_matrix())
+            sensor2ego = np.array(ego2sensor.get_inverse_matrix())
             sensor2egos.append(torch.from_numpy(sensor2ego).float().unsqueeze(0))
         sensor2egos = torch.cat(sensor2egos).unsqueeze(0).repeat(B,1,1,1).to(device)
         rot, trans = sensor2egos[:,:,:3,:3], sensor2egos[:,:,:3,3]
