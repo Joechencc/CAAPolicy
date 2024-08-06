@@ -18,9 +18,9 @@ def train():
     arg_parser = argparse.ArgumentParser(description='ParkingModel')
     arg_parser.add_argument(
         '--config',
-        default='./config/training.yaml',
+        default='./config/training_conet.yaml',
         type=str,
-        help='path to training.yaml (default: ./config/training.yaml)')
+        help='path to training_conet.yaml (default: ./config/training_conet.yaml)')
     args = arg_parser.parse_args()
 
     with open(args.config, 'r') as yaml_file:
