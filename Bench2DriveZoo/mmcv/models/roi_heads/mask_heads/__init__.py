@@ -1,1 +1,0 @@
-from .fused_semantic_head import FusedSemanticHead
