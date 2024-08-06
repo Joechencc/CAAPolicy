@@ -15,6 +15,8 @@ from data_generation.world import World
 import json
 from threading import Thread
 
+from utils.ply2voxel import voxelization_save
+
 
 class NetworkEvaluator:
     def __init__(self, carla_world, args):
@@ -150,12 +152,13 @@ class NetworkEvaluator:
         # detect collision
         is_collision = self._world.tick(clock, self._parking_goal_index)
         if is_collision:
-            self.save_sensor_data([0,0])
-            print("saved")
+            #self.save_sensor_data([0,0])
+            #print("saved")
             self._collision_nums += 1
             logging.info("parking collision for task %s-%d, collision_num: %d",
                          parking_position.slot_id[self._eva_task_idx],
                          self._eva_parking_idx + 1, self._collision_nums)
+            self._batch_data_frames.clear()
             self.start_next_parking()
             return
 
@@ -573,13 +576,14 @@ class NetworkEvaluator:
     def save_sensor_data(self, parking_goal):
 
         # create dirs
-        self._save_path = "/home/jas0n/Desktop/e2e-parking-carla/e2e_parking/eval/"+datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self._save_path = "./e2e_parking/eval/"+datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
         cur_save_path.mkdir(parents=True, exist_ok=False)
         (cur_save_path / 'measurements').mkdir()
         (cur_save_path / 'lidar').mkdir()
         (cur_save_path / 'parking_goal').mkdir()
         (cur_save_path / 'topdown').mkdir()
+        (cur_save_path / 'voxel').mkdir()
         for sensor in self._batch_data_frames[0].keys():
             if  sensor.startswith('camera'):
                 (cur_save_path / sensor).mkdir()
@@ -627,15 +631,17 @@ class NetworkEvaluator:
                 #     # image.save(str(cur_save_path / sensor / ('%04d.png' % index)))
                 #     data_frame[sensor].save_to_disk(
                 #         str(cur_save_path / sensor / ('%04d.png' % index)))
-                # if sensor.startswith('depth'):
-                #     data_frame[sensor].save_to_disk(
-                #         str(cur_save_path / sensor / ('%04d.png' % index)))
+                if sensor.startswith('depth') and not sensor.startswith("depth_e2e"):
+                    data_frame[sensor].save_to_disk(
+                        str(cur_save_path / sensor / ('%04d.png' % index)))
                 if sensor.startswith('camera'):
                     data_frame[sensor].save_to_disk(
                         str(cur_save_path / sensor / ('%04d.png' % index)))
                 elif sensor.startswith('lidar'):
                     data_frame[sensor].save_to_disk(
                         str(cur_save_path / sensor  / ('%04d.ply' % index)))
+                    voxelization_save(str(cur_save_path / sensor / ('%04d.ply' % index)),
+                                      str(cur_save_path / "voxel" / ('%04d' % index)), )
 
             # save measurements
             imu_data = data_frame['imu']

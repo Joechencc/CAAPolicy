@@ -296,88 +296,47 @@ class World(object):
             'fov': 100,
         }
         self._cam_center = np.array([self._cam_config['width'] / 2.0, self._cam_config['height'] / 2.0])
-        # self._cam_specs = {
-        #
-        #     'rgb_front': {
-        #         'x': 0.8, 'y': 0.0, 'z': 1.6,
-        #         'fov':70,
-        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-        #         'type': 'sensor.camera.rgb',
-        #         'width':1600,
-        #         'height':900,
-        #     },
-        #     'rgb_front_left': {
-        #         'x': 0.27, 'y': -0.55, 'z': 1.6,
-        #         'fov': 70,
-        #         'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
-        #         'type': 'sensor.camera.rgb',
-        #         'width': 1600,
-        #         'height': 900,
-        #     },
-        #     'rgb_front_right': {
-        #         'x': 0.27, 'y': 0.55, 'z': 1.6,
-        #         'fov': 70,
-        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
-        #         'type': 'sensor.camera.rgb',
-        #         'width': 1600,
-        #         'height': 900,
-        #     },
-        #     'rgb_back': {
-        #         'x': -2.0, 'y': 0.0, 'z': 1.6,
-        #         'fov': 110,
-        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 180.0,
-        #         'type': 'sensor.camera.rgb',
-        #         'width': 1600,
-        #         'height': 900,
-        #     },
-        #     'rgb_back_left': {
-        #         'x': -0.32, 'y': -0.55, 'z': 1.6,
-        #         'fov': 70,
-        #         'roll': 0.0, 'pitch': 0.0, 'yaw': -110.0,
-        #         'type': 'sensor.camera.rgb',
-        #         'width': 1600,
-        #         'height': 900,
-        #     },
-        #     'rgb_back_right': {
-        #         'x': -0.32, 'y': 0.55, 'z': 1.6,
-        #         'fov': 70,
-        #         'roll': 0.0, 'pitch': 0.0, 'yaw': 110.0,
-        #         'type': 'sensor.camera.rgb',
-        #         'width': 1600,
-        #         'height': 900,
-        #     },
-        #
-        # }
+
         self._cam_specs = {
             'rgb_front': {
-                'x': 2.36, 'y': 0.0, 'z': 1.5,
+                'x': 1.5, 'y': 0.0, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_front_left': {
-                'x': 2.36, 'y': -0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+            'rgb_left': {
+                'x': 0.0, 'y': -0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_front_right': {
-                'x': 2.36, 'y': 0.792, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+            'rgb_right': {
+                'x': 0.0, 'y': 0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_back': {
-                'x': -2.36, 'y': 0.0, 'z': 1.55,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+            'rgb_rear': {
+                'x': -2.2, 'y': 0.0, 'z': 1.5,
+                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_back_left': {
-                'x': -2.36, 'y': -0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': -110,
-                'type': 'sensor.camera.rgb',
+            'depth_e2e_front': {
+                'x': 1.5, 'y': 0.0, 'z': 1.5,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'type': 'sensor.camera.depth',
             },
-            'rgb_back_right': {
-                'x': -2.36, 'y': 0.792, 'z': 1.55,
-                'roll': 0, 'pitch': 0.0, 'yaw': 110,
-                'type': 'sensor.camera.rgb',
+            'depth_e2e_left': {
+                'x': 0.0, 'y': -0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_e2e_right': {
+                'x': 0.0, 'y': 0.8, 'z': 1.5,
+                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
+                'type': 'sensor.camera.depth',
+            },
+            'depth_e2e_rear': {
+                'x': -2.2, 'y': 0.0, 'z': 1.5,
+                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
+                'type': 'sensor.camera.depth',
             },
             'depth_front': {
                 'x': 2.36, 'y': 0.0, 'z': 1.5,
@@ -463,7 +422,7 @@ class World(object):
 
         #lidar
         self._lidar_config = {
-            'lidar_front': {
+            'lidar': {
                 'x': 0.0, 'y': 0.0, 'z': 1.6,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 32, 'range': 100, 'points_per_second': 1000000,
@@ -473,7 +432,7 @@ class World(object):
                 'upper_fov': 90,
                 'lower_fov': -90,
             },
-            # Repeat for each lidar configuration
+
         }
 
         for key, value in self._lidar_config.items():
