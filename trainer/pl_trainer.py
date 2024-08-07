@@ -8,6 +8,7 @@ from tool.config import Configuration
 from loss.control_loss import ControlLoss, ControlValLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
+from loss.seg_loss_3d import SegmentationLoss3D
 from model.parking_model import ParkingModel
 
 
@@ -44,11 +45,15 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.control_val_loss_func = ControlValLoss(self.cfg)
 
-        self.segmentation_loss_func = SegmentationLoss(
-            class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
-        )
-
-        self.depth_loss_func = DepthLoss(self.cfg)
+        if self.cfg.feature_encoder == "bev":
+            self.segmentation_loss_func = SegmentationLoss(
+                class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
+            )
+        elif self.cfg.feature_encoder == "conet":
+            self.segmentation_loss_func_3D = SegmentationLoss3D(
+                class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
+            )
+        self.depth_loss_func_3d = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
 
@@ -61,7 +66,11 @@ class ParkingTrainingModule(pl.LightningModule):
             "control_loss": control_loss
         })
 
-        segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        if self.cfg.feature_encoder == "bev":
+            segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        elif self.cfg.feature_encoder == "conet":
+            segmentation_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+
         loss_dict.update({
             "segmentation_loss": segmentation_loss
         })
@@ -92,7 +101,11 @@ class ParkingTrainingModule(pl.LightningModule):
             "reverse_val_loss": reverse_val_loss
         })
 
-        segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        if self.cfg.feature_encoder == "bev":
+            segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        elif self.cfg.feature_encoder == "conet":
+            segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+
         val_loss_dict.update({
             "segmentation_val_loss": segmentation_val_loss
         })

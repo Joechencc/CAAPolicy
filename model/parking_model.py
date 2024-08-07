@@ -144,7 +144,7 @@ class ParkingModel(nn.Module):
         if self.cfg.feature_encoder == 'bev':
             pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         elif self.cfg.feature_encoder == 'conet':
-            pred_control = self.control_conet.predict(fuse_feature, data['gt_control'].cuda())
+            pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
         
         return pred_control, pred_segmentation, pred_depth
 

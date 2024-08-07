@@ -172,8 +172,10 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.veh2cam_dict = {}
         self.extrinsic = None
         self.image_process = ProcessImage(self.image_crop)
-        self.semantic_process = ProcessSemantic(self.cfg)
-
+        if self.cfg.feature_encoder == "bev":
+            self.semantic_process = ProcessSemantic(self.cfg)
+        elif self.cfg.feature_encoder == "conet":
+            self.semantic_process3D = ProcessSemantic3D(self.cfg)
         self.init_camera_config()
 
         # data
@@ -204,6 +206,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.target_point = []
 
         self.topdown = []
+        self.voxel = []
 
         self.get_data()
 
@@ -293,7 +296,8 @@ class CarlaDataset(torch.utils.data.Dataset):
 
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
-
+                self.voxel.append(task_path + "/voxel/" + filename.split(".")[0]+"_info.npy")
+                import pdb; pdb.set_trace()
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
 
@@ -396,7 +400,12 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+        if self.cfg.feature_encoder == "bev":
+            segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+                                             target_slot=self.target_point[index])
+        elif self.cfg.feature_encoder == "conet":
+            import pdb; pdb.set_trace()
+            segmentation = self.semantic_process3D(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
@@ -419,6 +428,73 @@ class CarlaDataset(torch.utils.data.Dataset):
 
 
 class ProcessSemantic:
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def __call__(self, image, scale, crop, target_slot):
+        """
+        Process original BEV ground truth image; return cropped image with target slot
+        :param image: PIL Image or path to image
+        :param scale: scale factor
+        :param crop: image crop size
+        :param target_slot: center location of the target parking slot in meters; vehicle frame
+        :return: processed BEV semantic ground truth
+        """
+
+        # read image from disk
+        if not isinstance(image, Image.Image):
+            image = Image.open(image)
+        image = image.convert('L')
+
+        # crop image
+        cropped_image = scale_and_crop_image(image, scale, crop)
+
+        # draw target slot on BEV semantic
+        cropped_image = self.draw_target_slot(cropped_image, target_slot)
+
+        # create a new BEV semantic GT
+        h, w = cropped_image.shape
+        vehicle_index = cropped_image == 75
+        target_index = cropped_image == 255
+        semantics = np.zeros((h, w))
+        semantics[vehicle_index] = 1
+        semantics[target_index] = 2
+        # LSS method vehicle toward positive x-axis on image
+        semantics = semantics[::-1]
+
+        return semantics.copy()
+
+    def draw_target_slot(self, image, target_slot):
+
+        size = image.shape[0]
+
+        # convert target slot position into pixels
+        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
+        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
+
+        # draw the whole parking slot
+        slot_points = []
+        for x in range(-27, 28):
+            for y in range(-15, 16):
+                slot_points.append(np.array([x, y, 1, 1], dtype=int))
+
+        # rotate parking slots points
+
+        slot_trans = np.array(
+            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[2]))).get_matrix())
+        slot_points = np.vstack(slot_points).T
+        slot_points_ego = (slot_trans @ slot_points)[0:2].astype(int)
+
+        # get parking slot points on pixel frame
+        slot_points_ego[0] += target_point[0]
+        slot_points_ego[1] += target_point[1]
+
+        image[tuple(slot_points_ego)] = 255
+
+        return image
+
+class ProcessSemantic3D:
     def __init__(self, cfg):
         self.cfg = cfg
 
