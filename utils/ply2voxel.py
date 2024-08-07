@@ -31,16 +31,14 @@ def voxelization_save(file_path,save_path, min_bound = [-32, -32, -3],max_bound 
     path_to_ply = file_path
     data = read_ply_with_properties(path_to_ply)
     points = data[:, 0:3]
+    points = lidar2ego(points,np.array([0,0,1.6]))
     categories = data[:, 5].astype(int)
 
     # Load points into an Open3D point cloud
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
 
-    # Define the bounding box limits and resolution
-    # min_bound = [-32, -32, -3]
-    # max_bound = [32, 32, 5]
-    # resolution = 0.8
+
 
     # Create voxel grid within the defined bounds
     voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud_within_bounds(pcd, resolution, min_bound, max_bound)
@@ -48,11 +46,12 @@ def voxelization_save(file_path,save_path, min_bound = [-32, -32, -3],max_bound 
     # Map each point to its corresponding voxel and category
     point_to_voxel_map = {}
     for point, category in zip(np.asarray(pcd.points), categories):
-        voxel_index = tuple(voxel_grid.get_voxel(point))
-        if voxel_index in point_to_voxel_map:
-            point_to_voxel_map[voxel_index].append(category)
-        else:
-            point_to_voxel_map[voxel_index] = [category]
+        if point[0]<max_bound[0] and point[0]>min_bound[0] and point[1]<max_bound[1] and point[1]>min_bound[1] and point[2]<max_bound[2] and point[2]>min_bound[2]:
+            voxel_index = tuple(voxel_grid.get_voxel(point))
+            if voxel_index in point_to_voxel_map:
+                point_to_voxel_map[voxel_index].append(category)
+            else:
+                point_to_voxel_map[voxel_index] = [category]
 
     # Determine the majority category for each voxel
     voxel_categories = {voxel: most_common(categories) for voxel, categories in point_to_voxel_map.items()}
@@ -109,5 +108,12 @@ def voxelization_save(file_path,save_path, min_bound = [-32, -32, -3],max_bound 
         "max_bound": max_bound}
     np.save(save_path+"_info", dict)
     o3d.io.write_voxel_grid(save_path+"_voxel.ply", voxel_grid)
+def lidar2ego(points,translation,rotation=None):
+    # input should be (n,3)
+    if(rotation is not None):
+        print("lidar should be at same orientation with vehicle!!!!")
+    translated_points = points + translation
+    return translated_points
+
 if  "__main__" == __name__:
     voxelization_save("../e2e_parking/Town04_Opt/08_05_13_57_49/task0/lidar/0003.ply","../e2e_parking/Town04_Opt/08_05_13_57_49/task0/lidar/11000")
