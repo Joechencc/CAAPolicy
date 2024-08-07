@@ -425,7 +425,7 @@ class World(object):
             'lidar': {
                 'x': 0.0, 'y': 0.0, 'z': 1.6,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'channels': 32, 'range': 100, 'points_per_second': 1000000,
+                'channels': 320, 'range': 50, 'points_per_second': 10000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
 
                 'horizontal_fov': 360,
