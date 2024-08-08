@@ -8,6 +8,7 @@ import torchvision.transforms
 from PIL import Image
 from loguru import logger
 from data_generation.world import cam_specs_
+import open3d
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -29,6 +30,24 @@ def convert_slot_coord(ego_trans, target_point):
 
     return target_point
 
+def convert_slot_coord3D(ego_trans, target_point):
+    """
+    Convert target parking slot from world frame into self_veh frame
+    :param ego_trans: veh2world transform
+    :param target_point: target parking slot in world frame [x, y, yaw]
+    :return: target parking slot in veh frame [x, y, yaw]
+    """
+    target_point_self_veh = convert_veh_coord3D(target_point[0], target_point[1], target_point[2], ego_trans)
+
+    yaw_diff = target_point[3] - ego_trans.rotation.yaw
+    if yaw_diff > 180:
+        yaw_diff -= 360
+    elif yaw_diff < -180:
+        yaw_diff += 360
+    target_point = [target_point_self_veh[0], target_point_self_veh[1], target_point_self_veh[2], yaw_diff]
+
+    return target_point
+
 
 def convert_veh_coord(x, y, z, ego_trans):
     """
@@ -45,6 +64,20 @@ def convert_veh_coord(x, y, z, ego_trans):
     target_point_self_veh = world2veh @ target_array
     return target_point_self_veh
 
+def convert_veh_coord3D(x, y, z, ego_trans):
+    """
+    Convert coordinate (x,y,z) in world frame into self-veh frame
+    :param x:
+    :param y:
+    :param z:
+    :param ego_trans: veh2world transform
+    :return: coordinate in self-veh frame
+    """
+
+    world2veh = np.array(ego_trans.get_inverse_matrix())
+    target_array = np.array([x, y, z, 1.0], dtype=float)
+    target_point_self_veh = world2veh @ target_array
+    return target_point_self_veh
 
 def scale_and_crop_image(image, scale=1.0, crop=256):
     """
@@ -279,12 +312,12 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
-                self.front.append(task_path + "/rgb_front/" + filename)
-                self.front_left.append(task_path + "/rgb_front_left/" + filename)
-                self.front_right.append(task_path + "/rgb_front_right/" + filename)
-                self.back.append(task_path + "/rgb_back/" + filename)
-                self.back_left.append(task_path + "/rgb_back_left/" + filename)
-                self.back_right.append(task_path + "/rgb_back_right/" + filename)
+                self.front.append(task_path + "/camera_front/" + filename)
+                self.front_left.append(task_path + "/camera_front_left/" + filename)
+                self.front_right.append(task_path + "/camera_front_right/" + filename)
+                self.back.append(task_path + "/camera_back/" + filename)
+                self.back_left.append(task_path + "/camera_back_left/" + filename)
+                self.back_right.append(task_path + "/camera_back_right/" + filename)
 
                 # depth
                 self.front_depth.append(task_path + "/depth_front/" + filename)
@@ -297,7 +330,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
                 self.voxel.append(task_path + "/voxel/" + filename.split(".")[0]+"_info.npy")
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
 
@@ -335,8 +368,13 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # target point
                 with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
                     data = json.load(read_file)
-                parking_goal = [data['x'], data['y'], data['yaw']]
-                parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                # import pdb; pdb.set_trace()
+                if self.cfg.feature_encoder == "bev":
+                    parking_goal = [data['x'], data['y'], data['yaw']]
+                    parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                elif self.cfg.feature_encoder == "conet":
+                    parking_goal = [data['x'], data['y'], data['z'], data['yaw']]
+                    parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
 
         self.front = np.array(self.front).astype(np.string_)
@@ -354,6 +392,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.back_right_depth = np.array(self.back_right_depth).astype(np.string_)
 
         self.topdown = np.array(self.topdown).astype(np.string_)
+        self.voxel = np.array(self.voxel).astype(np.string_)
 
         self.velocity = np.array(self.velocity).astype(np.float32)
         self.acc_x = np.array(self.acc_x).astype(np.float32)
@@ -404,8 +443,7 @@ class CarlaDataset(torch.utils.data.Dataset):
             segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
         elif self.cfg.feature_encoder == "conet":
-            import pdb; pdb.set_trace()
-            segmentation = self.semantic_process3D(self.topdown[index], scale=0.5, crop=200,
+            segmentation = self.semantic_process3D(self.voxel[index],
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
@@ -498,26 +536,31 @@ class ProcessSemantic3D:
     def __init__(self, cfg):
         self.cfg = cfg
 
-    def __call__(self, image, scale, crop, target_slot):
+    def __call__(self, voxel, target_slot):
         """
         Process original BEV ground truth image; return cropped image with target slot
-        :param image: PIL Image or path to image
-        :param scale: scale factor
-        :param crop: image crop size
+        :param voxel:
         :param target_slot: center location of the target parking slot in meters; vehicle frame
         :return: processed BEV semantic ground truth
         """
 
         # read image from disk
-        if not isinstance(image, Image.Image):
-            image = Image.open(image)
-        image = image.convert('L')
+        data = np.load(voxel, allow_pickle=True).item()
+        gt_occ, resolution, min_bound, max_bound = data['gt_occ'], data['resolution'], data['min_bound'], data['max_bound']
+        grid_size = np.ceil((np.array(max_bound) - np.array(min_bound)) / resolution).astype(int)
+        voxels = np.zeros(grid_size, dtype=int)
+        for indices, value in gt_occ.items():
+            # GT invert x-axis
+            indice_0 = int(- np.array(indices)[0])
+            indices = (indice_0, indices[1], indices[2])
+            voxels[(indices)] = value
 
-        # crop image
-        cropped_image = scale_and_crop_image(image, scale, crop)
-
+        # self.visual_voxel(gt_occ, voxels, grid_size=0.2)
+        # import pdb; pdb.set_trace()
+        # # crop image
+        # cropped_image = scale_and_crop_image(image, scale, crop)
         # draw target slot on BEV semantic
-        cropped_image = self.draw_target_slot(cropped_image, target_slot)
+        voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound)
 
         # create a new BEV semantic GT
         h, w = cropped_image.shape
@@ -531,13 +574,13 @@ class ProcessSemantic3D:
 
         return semantics.copy()
 
-    def draw_target_slot(self, image, target_slot):
-
-        size = image.shape[0]
-
+    def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound):
+        size = voxel.shape[0]
+        import pdb; pdb.set_trace()
         # convert target slot position into pixels
         x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
         y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        z_pixel = target_slot[2] / self.cfg.bev_z_bound[2]
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
 
         # draw the whole parking slot
@@ -557,9 +600,75 @@ class ProcessSemantic3D:
         slot_points_ego[0] += target_point[0]
         slot_points_ego[1] += target_point[1]
 
-        image[tuple(slot_points_ego)] = 255
+        voxel[tuple(slot_points_ego)] = 255
 
-        return image
+        return voxel
+    
+    def visual_voxel(self, gt_occ, voxels, grid_size=0.2, save_path=os.path.join("visual","voxel.png")):
+        NUSC_COLOR_MAP = {  # RGB.
+            # 0: (0, 0, 0),  # Black. noise
+            1: (112, 128, 144),  # Slategrey barrier
+            2: (220, 20, 60),  # Crimson bicycle
+            3: (255, 127, 80),  # Orangered bus
+            4: (255, 158, 0),  # Orange car
+            5: (233, 150, 70),  # Darksalmon construction
+            6: (255, 61, 99),  # Red motorcycle
+            7: (0, 0, 230),  # Blue pedestrian
+            8: (47, 79, 79),  # Darkslategrey trafficcone
+            9: (255, 140, 0),  # Darkorange trailer
+            10: (255, 99, 71),  # Tomato truck
+            11: (0, 207, 191),  # nuTonomy green driveable_surface
+            12: (175, 0, 75),  # flat other
+            13: (75, 0, 75),  # sidewalk
+            14: (112, 180, 60),  # terrain
+            15: (222, 184, 135),  # Burlywood mannade
+            16: (0, 175, 0),  # Green vegetation
+        }
+
+        boxes = open3d.geometry.TriangleMesh()
+        for coord_inds, values in gt_occ.items():
+            box = open3d.geometry.TriangleMesh.create_box(grid_size, grid_size, grid_size)
+            p = list(coord_inds)
+            box.translate(p)
+            if values != 255:
+                box.paint_uniform_color(np.array(NUSC_COLOR_MAP[values]) / 255.0)
+            else:
+                # box.paint_uniform_color((0.0, 0.0, 0.0))
+                continue
+            boxes += box
+        self.render_img_high_view([boxes], fname=save_path)
+        import pdb; pdb.set_trace()
+
+    def render_img_high_view(self, geometries, **kwargs):
+        kwargs_default = {'fname': None, 'view_point': -100, 'zoom': 0.7, 'show_wireframe': True, 'point_size': 5}
+        kwargs = {**kwargs_default, **kwargs}
+        R = geometries[0].get_rotation_matrix_from_zyx((np.pi / 2, 0, 0))
+
+        img = self.render_img(geometries, **kwargs)
+        return img
+
+    def render_img(self, geometries, fname=None, view_point=-100, zoom=0.7, show_wireframe=True, point_size=5):
+        vis = open3d.visualization.Visualizer()
+        vis.create_window(width=1360, height=1080)
+        for g in geometries:
+            vis.add_geometry(g)
+        renderoption = vis.get_render_option()
+        # renderoption.load_from_json('/home/wru1syv/avp/data/renderoption.json')
+        renderoption.mesh_show_wireframe = show_wireframe
+        renderoption.point_size = point_size
+        ctr = vis.get_view_control()
+        ctr.rotate(0.0, view_point)
+        ctr.set_zoom(zoom)
+        vis.poll_events()
+        vis.update_renderer()
+        img = np.asarray(vis.capture_screen_float_buffer())
+        if fname:
+            # import pdb; pdb.set_trace()
+            cv2.imwrite(fname, (img[:, :, ::-1] * 255).astype(np.uint8))
+        vis.destroy_window()
+        return img
+
+    
 
 
 class ProcessImage:
