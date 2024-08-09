@@ -49,11 +49,12 @@ class ParkingTrainingModule(pl.LightningModule):
             self.segmentation_loss_func = SegmentationLoss(
                 class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
             )
+            self.depth_loss_func = DepthLoss(self.cfg)
         elif self.cfg.feature_encoder == "conet":
             self.segmentation_loss_func_3D = SegmentationLoss3D(
-                class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
+                class_weights=torch.Tensor(self.cfg.seg_conet_vehicle_weights)
             )
-        self.depth_loss_func_3d = DepthLoss(self.cfg)
+            self.depth_loss_func = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
 
@@ -74,7 +75,6 @@ class ParkingTrainingModule(pl.LightningModule):
         loss_dict.update({
             "segmentation_loss": segmentation_loss
         })
-
         depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
         loss_dict.update({
             "depth_loss": depth_loss
@@ -109,7 +109,7 @@ class ParkingTrainingModule(pl.LightningModule):
         val_loss_dict.update({
             "segmentation_val_loss": segmentation_val_loss
         })
-
+        
         depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
         val_loss_dict.update({
             "depth_val_loss": depth_val_loss

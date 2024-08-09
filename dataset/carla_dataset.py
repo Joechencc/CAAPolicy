@@ -560,8 +560,8 @@ class ProcessSemantic3D:
         # cropped_image = scale_and_crop_image(image, scale, crop)
         # draw target slot on BEV semantic
         voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
-        np.save("visual/voxels.npy",voxels)
-        import pdb; pdb.set_trace()
+        # np.save("visual/voxels.npy",voxels)
+        # import pdb; pdb.set_trace()
         
         # # create a new BEV semantic GT
         # h, w = cropped_image.shape
@@ -572,8 +572,11 @@ class ProcessSemantic3D:
         # semantics[target_index] = 2
         # # LSS method vehicle toward positive x-axis on image
         # semantics = semantics[::-1]
+        min_index = np.floor((np.array(self.cfg.point_cloud_range[:3]) - np.array(min_bound)) / resolution).astype(int)
+        max_index = np.ceil((np.array(self.cfg.point_cloud_range[3:]) - np.array(max_bound)) / resolution).astype(int)
+        cropped_voxels = voxels[min_index[0]:max_index[0], min_index[1]:max_index[1], min_index[2]:max_index[2]]
 
-        return voxels.copy()
+        return cropped_voxels.copy()
 
     def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
         size_h, size_w, size_d = voxel.shape
@@ -602,7 +605,7 @@ class ProcessSemantic3D:
         slot_points_ego[1] += target_point[1]
         slot_points_ego[2] += target_point[2]
 
-        voxel[tuple(slot_points_ego)] = 255
+        voxel[tuple(slot_points_ego)] = 17
 
         return voxel
     
@@ -625,6 +628,7 @@ class ProcessSemantic3D:
             14: (112, 180, 60),  # terrain
             15: (222, 184, 135),  # Burlywood mannade
             16: (0, 175, 0),  # Green vegetation
+            17: (128,128,128) # target point
         }
 
         boxes = open3d.geometry.TriangleMesh()
@@ -669,9 +673,6 @@ class ProcessSemantic3D:
             cv2.imwrite(fname, (img[:, :, ::-1] * 255).astype(np.uint8))
         vis.destroy_window()
         return img
-
-    
-
 
 class ProcessImage:
     def __init__(self, crop):

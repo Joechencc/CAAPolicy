@@ -95,7 +95,7 @@ parking_model:
       empty_idx: 0
       num_level: null
       in_channels: null
-      out_channel: 17
+      out_channel: 18
       point_cloud_range: [-16.0, -16.0, -2.0, 16.0, 16.0, 2.0]
       loss_weight_cfg: null
       baseline_mode: "base"
@@ -110,6 +110,8 @@ parking_model:
   conet_x_bound: [-16.0, 16.0, 0.2]
   conet_y_bound: [-16.0, 16.0, 0.2]
   conet_z_bound: [-2.0, 2.0, 0.2]
+  conet_d_bound: [2.0, 50.0, 0.5]
+  conet_down_sample: 16
 
   ################################
   # bev model
@@ -127,8 +129,9 @@ parking_model:
 
   # segmentation
   seg_classes: 3
-  seg_classes_conet: 17
+  seg_classes_conet: 18
   seg_vehicle_weights: [1.0, 2.0, 2.0]
+  seg_conet_vehicle_weights: [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
   # transformer encoder
   tf_en_dim: 258
