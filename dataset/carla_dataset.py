@@ -17,7 +17,6 @@ def convert_slot_coord(ego_trans, target_point):
     :param target_point: target parking slot in world frame [x, y, yaw]
     :return: target parking slot in veh frame [x, y, yaw]
     """
-
     target_point_self_veh = convert_veh_coord(target_point[0], target_point[1], 1.0, ego_trans)
 
     yaw_diff = target_point[2] - ego_trans.rotation.yaw
@@ -560,45 +559,48 @@ class ProcessSemantic3D:
         # # crop image
         # cropped_image = scale_and_crop_image(image, scale, crop)
         # draw target slot on BEV semantic
-        voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound)
-
-        # create a new BEV semantic GT
-        h, w = cropped_image.shape
-        vehicle_index = cropped_image == 75
-        target_index = cropped_image == 255
-        semantics = np.zeros((h, w))
-        semantics[vehicle_index] = 1
-        semantics[target_index] = 2
-        # LSS method vehicle toward positive x-axis on image
-        semantics = semantics[::-1]
-
-        return semantics.copy()
-
-    def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound):
-        size = voxel.shape[0]
+        voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
+        np.save("visual/voxels.npy",voxels)
         import pdb; pdb.set_trace()
-        # convert target slot position into pixels
-        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
-        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
-        z_pixel = target_slot[2] / self.cfg.bev_z_bound[2]
-        target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
+        
+        # # create a new BEV semantic GT
+        # h, w = cropped_image.shape
+        # vehicle_index = cropped_image == 75
+        # target_index = cropped_image == 255
+        # semantics = np.zeros((h, w))
+        # semantics[vehicle_index] = 1
+        # semantics[target_index] = 2
+        # # LSS method vehicle toward positive x-axis on image
+        # semantics = semantics[::-1]
 
+        return voxels.copy()
+
+    def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
+        size_h, size_w, size_d = voxel.shape
+        # convert target slot position into pixels
+        x_pixel = target_slot[0] / resolution
+        y_pixel = target_slot[1] / resolution
+        z_pixel = target_slot[2] / resolution
+        target_point = np.array([size_h / 2 - x_pixel, size_w / 2 + y_pixel, size_d / 2 + z_pixel], dtype=int)
+        
         # draw the whole parking slot
         slot_points = []
-        for x in range(-27, 28):
-            for y in range(-15, 16):
-                slot_points.append(np.array([x, y, 1, 1], dtype=int))
+        for x in range(-21, 22):
+            for y in range(-13, 14):
+                for z in range(-3, 4):
+                    slot_points.append(np.array([x, y, z, 1], dtype=int))
 
         # rotate parking slots points
 
         slot_trans = np.array(
-            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[2]))).get_matrix())
+            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[3]))).get_matrix())
         slot_points = np.vstack(slot_points).T
-        slot_points_ego = (slot_trans @ slot_points)[0:2].astype(int)
+        slot_points_ego = (slot_trans @ slot_points)[0:3].astype(int)
 
         # get parking slot points on pixel frame
         slot_points_ego[0] += target_point[0]
         slot_points_ego[1] += target_point[1]
+        slot_points_ego[2] += target_point[2]
 
         voxel[tuple(slot_points_ego)] = 255
 
