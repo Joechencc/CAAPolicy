@@ -172,6 +172,7 @@ class NetworkEvaluator:
             logging.info("parking timeout for task %s-%d, timeout_num: %d",
                          parking_position.slot_id[self._eva_task_idx],
                          self._eva_parking_idx + 1, self._timeout_nums)
+            self._batch_data_frames.clear()
             self.start_next_parking()
             return
 
@@ -187,6 +188,7 @@ class NetworkEvaluator:
             logging.info("parking outbound for task %s-%d, outbound_num: %d",
                          parking_position.slot_id[self._eva_task_idx],
                          self._eva_parking_idx + 1, self._outbound_nums)
+            self._batch_data_frames.clear()
             self.start_next_parking()
             return
 
@@ -360,8 +362,9 @@ class NetworkEvaluator:
 
         # check fail parking
         if self.check_fail_slot(closest_goal, t):
-            self.save_sensor_data(closest_goal)
-            print("saved")
+            #self.save_sensor_data(closest_goal)
+            #print("saved")
+            self._batch_data_frames.clear()
             self.start_next_parking()
             return
 
