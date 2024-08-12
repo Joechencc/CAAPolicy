@@ -60,6 +60,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
+        
         pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
@@ -93,6 +94,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
+
         pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)

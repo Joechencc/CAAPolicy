@@ -291,7 +291,7 @@ class OccNet(BEVDepth):
             H, W, D = self.occ_size
             pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
             pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
-            # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+            self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
 
         pred_f = None
         SSC_metric_fine = None
@@ -314,8 +314,8 @@ class OccNet(BEVDepth):
                 H, W, D = self.occ_size
                 pred_f = F.interpolate(pred_f, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
                 pred_f = torch.argmax(pred_f[0], dim=0).cpu().numpy()
-                # self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
-        # import pdb; pdb.set_trace()
+                self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
+        import pdb; pdb.set_trace()
         coarse_occ_mask = output['coarse_occ_mask']
         if gt_occ is not None:
             test_output = {

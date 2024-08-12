@@ -9,6 +9,7 @@ import pygame
 
 import numpy as np
 import matplotlib.pyplot as plt
+import open3d as o3d
 
 from PIL import Image
 from PIL import ImageDraw
@@ -21,7 +22,9 @@ from dataset.carla_dataset import detokenize
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
-
+from collections import Counter
+from copy import deepcopy
+import cv2
 
 def show_control_info(window, control, steering_wheel_image, width, height, font):
     histogram_width = 15
@@ -433,7 +436,7 @@ class ParkingAgent:
             self.model.eval()
             with torch.no_grad():
                 start_time = time.time()
-
+                import pdb; pdb.set_trace()
                 pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
@@ -501,7 +504,6 @@ class ParkingAgent:
             self.boost = False
 
     def get_model_data(self, data_frame):
-
         vehicle_transform = data_frame['veh_transfrom']
         imu_data = data_frame['imu']
         vehicle_velocity = data_frame['veh_velocity']
@@ -535,15 +537,102 @@ class ParkingAgent:
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
 
         if self.show_eva_imgs:
-            img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
-            img = np.moveaxis(img, 0, 2)
-            img = Image.fromarray(img)
-            seg_gt = self.semantic_process(image=img, scale=0.5, crop=200, target_slot=target_point)
-            seg_gt[seg_gt == 1] = 128
-            seg_gt[seg_gt == 2] = 255
-            data['segmentation'] = Image.fromarray(seg_gt)
-
+            if self.cfg.feature_encoder == "bev":
+                img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
+                img = np.moveaxis(img, 0, 2)
+                img = Image.fromarray(img)
+                seg_gt = self.semantic_process(image=img, scale=0.5, crop=200, target_slot=target_point)
+                seg_gt[seg_gt == 1] = 128
+                seg_gt[seg_gt == 2] = 255
+                data['segmentation'] = Image.fromarray(seg_gt)
+            elif self.cfg.feature_encoder == "conet":
+                segmentation = self.semantic_process3D(data_frame['lidar'], visual=True)
+                
         return data
+
+    def semantic_process3D(self, lidar, visual=False):
+        data = np.frombuffer(lidar.raw_data, dtype=np.dtype([
+            ('x', np.float32),
+            ('y', np.float32),
+            ('z', np.float32),
+            ('cos_angle', np.float32),
+            ('object_idx', np.uint32),
+            ('object_tag', np.uint32)
+        ]))
+        points = np.stack((data['x'],data['y'],data['z']), axis=-1)
+        points = self.lidar2ego(points,np.array([0,0,1.6]))
+        categories = data['object_tag'].astype(int)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        resolution = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / self.cfg.occ_size[0]
+        min_bound = self.cfg.point_cloud_range[0:3]
+        max_bound = self.cfg.point_cloud_range[3:]
+        voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud_within_bounds(pcd, resolution, min_bound, max_bound)
+        
+        # Map each point to its corresponding voxel and category
+        point_to_voxel_map = {}
+        for point, category in zip(np.asarray(pcd.points), categories):
+            if point[0]<max_bound[0] and point[0]>min_bound[0] and point[1]<max_bound[1] and point[1]>min_bound[1] and point[2]<max_bound[2] and point[2]>min_bound[2]:
+                voxel_index = tuple(voxel_grid.get_voxel(point))
+                if voxel_index in point_to_voxel_map:
+                    point_to_voxel_map[voxel_index].append(category)
+                else:
+                    point_to_voxel_map[voxel_index] = [category]
+        # Determine the majority category for each voxel
+        voxel_categories = {voxel: self.most_common(categories) for voxel, categories in point_to_voxel_map.items()}
+        for key in voxel_categories.keys():
+            value = convert_semantic_label(voxel_categories[key])
+            voxel_categories[key]=value
+        if visual:
+            NUSC_COLOR_MAP = {  # RGB.
+                # 0: (0, 0, 0),  # Black. noise
+                1: (112, 128, 144),  # Slategrey barrier
+                2: (220, 20, 60),  # Crimson bicycle
+                3: (255, 127, 80),  # Orangered bus
+                4: (255, 158, 0),  # Orange car
+                5: (233, 150, 70),  # Darksalmon construction
+                6: (255, 61, 99),  # Red motorcycle
+                7: (0, 0, 230),  # Blue pedestrian
+                8: (47, 79, 79),  # Darkslategrey trafficcone
+                9: (255, 140, 0),  # Darkorange trailer
+                10: (255, 99, 71),  # Tomato truck
+                11: (0, 207, 191),  # nuTonomy green driveable_surface
+                12: (175, 0, 75),  # flat other
+                13: (75, 0, 75),  # sidewalk
+                14: (112, 180, 60),  # terrain
+                15: (222, 184, 135),  # Burlywood mannade
+                16: (0, 175, 0),  # Green vegetation
+            }
+            boxes = o3d.geometry.TriangleMesh()
+            for coord_inds, values in voxel_categories.items():
+                box = o3d.geometry.TriangleMesh.create_box(1.0, 1.0, 1.0)
+                pose = np.array(coord_inds)
+                pose[0] = 320 - pose[0]
+                pose = np.array(min_bound)+ pose*0.2
+                box.translate(pose)
+                if values != 255:
+                    # import pdb; pdb.set_trace()
+                    # box.paint_uniform_color(np.array([255, 0, 0]) / 255.0)
+                    box.paint_uniform_color(np.array(NUSC_COLOR_MAP[values]) / 255.0)
+                else:
+                    # box.paint_uniform_color((0.0, 0.0, 0.0))
+                    continue
+                boxes += box
+            render_img_high_view([boxes], fname="./visual/voxel.png")
+        # Color mapping normalized to [0, 1]
+        import pdb; pdb.set_trace()
+        return voxel_categories
+    
+    def lidar2ego(self, points,translation,rotation=None):
+        # input should be (n,3)
+        if(rotation is not None):
+            print("lidar should be at same orientation with vehicle!!!!")
+        translated_points = points + translation
+        return translated_points
+
+    def most_common(self, lst):
+        data = Counter(lst)
+        return data.most_common(1)[0][0]
 
     def draw_waypoints(self, waypoints):
         ego_t = self.world.player.get_transform()
@@ -661,3 +750,136 @@ class ParkingAgent:
             'reverse': self.trans_control.reverse,
         }
         return control
+
+
+def render_img(geometries, fname=None, view_point=-100, zoom=0.7, show_wireframe=True, point_size=5):
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(width=1360, height=1080)
+    for g in geometries:
+        vis.add_geometry(g)
+    renderoption = vis.get_render_option()
+    # renderoption.load_from_json('/home/wru1syv/avp/data/renderoption.json')
+    renderoption.mesh_show_wireframe = show_wireframe
+    renderoption.point_size = point_size
+    ctr = vis.get_view_control()
+    ctr.rotate(0.0, view_point)
+    ctr.set_zoom(zoom)
+    vis.poll_events()
+    vis.update_renderer()
+    img = np.asarray(vis.capture_screen_float_buffer())
+    if fname:
+        # import pdb; pdb.set_trace()
+        cv2.imwrite(fname, (img[:, :, ::-1] * 255).astype(np.uint8))
+    vis.destroy_window()
+    return img
+
+def render_img_cam_param(geometries, cam_param, fname=None, show_wireframe=True, point_size=5):
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(width=cam_param.intrinsic.width, height=cam_param.intrinsic.height)
+    for g in geometries:
+        vis.add_geometry(g)
+    renderoption = vis.get_render_option()
+    renderoption.load_from_json('/home/wru1syv/avp/data/renderoption.json')
+    renderoption.mesh_show_wireframe = show_wireframe
+    renderoption.point_size = point_size
+    ctr = vis.get_view_control()
+    ctr.convert_from_pinhole_camera_parameters(cam_param, allow_arbitrary=True)
+    vis.poll_events()
+    vis.update_renderer()
+    img = np.asarray(vis.capture_screen_float_buffer())
+    if fname:
+        cv2.imwrite(fname, (img[:, :, ::-1] * 255).astype(np.uint8))
+    vis.destroy_window()
+    return img
+
+
+def render_img_high_view(geometries, **kwargs):
+    kwargs_default = {'fname': None, 'view_point': -100, 'zoom': 0.7, 'show_wireframe': True, 'point_size': 5}
+    kwargs = {**kwargs_default, **kwargs}
+    # R = geometries[0].get_rotation_matrix_from_zyx((np.pi / 2, 0, 0))
+    # R = np.array([[-1,0,0],[0,1,0],[0,0,1]])
+    R = geometries[0].get_rotation_matrix_from_zyx((-np.pi / 2, 0, 0))
+    # R = R@R_
+
+    # import pdb; pdb.set_trace()
+    geometries_rot = []
+    for g in geometries:
+        dg = deepcopy(g)
+        if type(g) != o3d.geometry.AxisAlignedBoundingBox:
+            dg.rotate(R, center=(0, 0, 0))
+        geometries_rot.append(dg) 
+    img = render_img(geometries_rot, **kwargs)
+    return img
+
+
+# convert from carla to nuscenes
+def convert_semantic_label(category_index):
+    carla_categories = {
+        0: "Unlabeled",
+        1: "Building",
+        2: "Fence",
+        3: "Other",
+        4: "Pedestrian",
+        5: "Pole",
+        6: "RoadLine",
+        7: "Road",
+        8: "SideWalk",
+        9: "Vegetation",
+        10: "Vehicles",
+        11: "Wall",
+        12: "TrafficSign",
+        13: "Sky",
+        14: "Ground",
+        15: "Bridge",
+        16: "RailTrack",
+        17: "GuardRail",
+        18: "TrafficLight",
+        19: "Static",
+        20: "Dynamic",
+        21: "Water",
+        22: "Terrain"
+    }
+    categories = {
+        1: "barrier",
+        2: "bicycle",
+        3: "bus",
+        4: "car",
+        5: "construction_vehicle",
+        6: "motorcycle",
+        7: "pedestrian",
+        8: "traffic_cone",
+        9: "trailer",
+        10: "truck",
+        11: "driveable_surface",
+        12: "other_flat",
+        13: "sidewalk",
+        14: "terrain",
+        15: "manmade",
+        16: "vegetation"
+    }
+    mapping = {
+        0: 1,   # Unlabeled -> barrier
+        1: 15,  # Building -> manmade
+        2: 1,   # Fence -> barrier
+        3: 1,   # Other -> barrier
+        4: 7,   # Pedestrian -> pedestrian
+        5: 1,   # Pole -> barrier
+        6: 12,  # RoadLine -> other_flat
+        7: 11,  # Road -> driveable_surface
+        8: 13,  # SideWalk -> sidewalk
+        9: 16,  # Vegetation -> vegetation
+        10: 4,  # Vehicles -> car
+        11: 1,  # Wall -> barrier
+        12: 1,  # TrafficSign -> barrier
+        13: 12, # Sky -> other_flat
+        14: 12, # Ground -> other_flat
+        15: 12, # Bridge -> other_flat
+        16: 12, # RailTrack -> other_flat
+        17: 1,  # GuardRail -> barrier
+        18: 1,  # TrafficLight -> barrier
+        19: 1,  # Static -> barrier
+        20: 1,  # Dynamic -> barrier
+        21: 14, # Water -> terrain
+        22: 14  # Terrain -> terrain
+    }
+    return mapping.get(category_index, 1) 

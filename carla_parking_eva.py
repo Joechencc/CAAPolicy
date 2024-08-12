@@ -102,8 +102,8 @@ def main():
         help='path to model_CONET.pth')
     argparser.add_argument(
         '--model_config_path',
-        default='./config/training.yaml',
-        help='path to model training.yaml')
+        default='./config/training_conet.yaml',
+        help='path to model training_conet.yaml')
     argparser.add_argument(
         '--eva_epochs',
         default=4,
@@ -145,7 +145,7 @@ def main():
         choices=['cpu', 'cuda'])
     argparser.add_argument(
         '--show_eva_imgs',
-        default=False,
+        default=True,
         type=str2bool,
         help='show eva figure in eva model (default: False)')
     argparser.add_argument(
