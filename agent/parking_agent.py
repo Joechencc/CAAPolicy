@@ -333,12 +333,12 @@ class ParkingAgent:
         self.intrinsic_crop = self.intrinsic_crop.unsqueeze(0).expand(6, 3, 3)
 
         veh2cam_dict = self.world.veh2cam_dict
-        front_to_ego = torch.from_numpy(veh2cam_dict['rgb_front']).float().unsqueeze(0)
-        front_left_to_ego = torch.from_numpy(veh2cam_dict['rgb_front_left']).float().unsqueeze(0)
-        front_right_to_ego = torch.from_numpy(veh2cam_dict['rgb_front_right']).float().unsqueeze(0)
-        back_to_ego = torch.from_numpy(veh2cam_dict['rgb_back']).float().unsqueeze(0)
-        back_left_to_ego = torch.from_numpy(veh2cam_dict['rgb_back_left']).float().unsqueeze(0)
-        back_right_to_ego = torch.from_numpy(veh2cam_dict['rgb_back_right']).float().unsqueeze(0)
+        front_to_ego = torch.from_numpy(veh2cam_dict['camera_front']).float().unsqueeze(0)
+        front_left_to_ego = torch.from_numpy(veh2cam_dict['camera_front_left']).float().unsqueeze(0)
+        front_right_to_ego = torch.from_numpy(veh2cam_dict['camera_front_right']).float().unsqueeze(0)
+        back_to_ego = torch.from_numpy(veh2cam_dict['camera_back']).float().unsqueeze(0)
+        back_left_to_ego = torch.from_numpy(veh2cam_dict['camera_back_left']).float().unsqueeze(0)
+        back_right_to_ego = torch.from_numpy(veh2cam_dict['camera_back_right']).float().unsqueeze(0)
         self.extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego, back_to_ego,back_left_to_ego,back_right_to_ego], dim=0)
 
         self.image_process = ProcessImage(self.cfg.image_crop)
@@ -459,12 +459,12 @@ class ParkingAgent:
 
         target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
 
-        front_final, self.rgb_front = self.image_process(data_frame['rgb_front'])
-        front_left_final, self.rgb_front_left = self.image_process(data_frame['rgb_front_left'])
-        front_right_final, self.rgb_front_right = self.image_process(data_frame['rgb_front_right'])
-        back_right_final, self.rgb_back_right = self.image_process(data_frame['rgb_back_right'])
-        back_left_final, self.rgb_bleft_right = self.image_process(data_frame['rgb_back_left'])
-        back_final, self.rgb_back = self.image_process(data_frame['rgb_back'])
+        front_final, self.rgb_front = self.image_process(data_frame['camera_front'])
+        front_left_final, self.rgb_front_left = self.image_process(data_frame['camera_front_left'])
+        front_right_final, self.rgb_front_right = self.image_process(data_frame['camera_front_right'])
+        back_right_final, self.rgb_back_right = self.image_process(data_frame['camera_back_right'])
+        back_left_final, self.rgb_bleft_right = self.image_process(data_frame['camera_back_left'])
+        back_final, self.rgb_back = self.image_process(data_frame['camera_back'])
 
         images = [front_final, front_left_final,front_right_final,back_final,back_left_final,back_right_final]
         images = torch.cat(images, dim=0)

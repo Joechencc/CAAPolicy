@@ -457,7 +457,7 @@ class World(object):
                                     [0, 0, 0, 1]], dtype=float)
 
         for cam_id, cam_spec in self._cam_specs.items():
-            if cam_id.startswith('rgb'):
+            if cam_id.startswith('camera'):
                 cam2veh = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
                                           carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
                                                          roll=cam_spec['roll']))

@@ -94,7 +94,7 @@ def main():
         help='Gamma correction of the camera (default: 0.0)')
     argparser.add_argument(
         '--model_path',
-        default='./ckpt/exp_2024_7_30_21_16_21/E2EParking-epoch=19-val_loss=1.62.ckpt',
+        default='/home/jas0n/PycharmProjects/ParkWithUncertainty/ckpt/exp_2024_8_12_19_36_56/E2EParking-epoch=19-val_loss=1.16.ckpt',
         # default='/home/jas0n/Desktop/e2e-parking-carla/last-0.75.ckpt',
         help='path to model.ckpt')
     argparser.add_argument(
