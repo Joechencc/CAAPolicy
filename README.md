@@ -12,6 +12,11 @@ evaluate and collect data using 6 camera:
 python3 carla_parking_eva.py
 ```
 
+train using 6 camera dataset:
+```shell
+python pl_train.py
+```
+
 # axis
 ## carla
 ## conet

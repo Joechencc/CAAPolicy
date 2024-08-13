@@ -211,32 +211,32 @@ class CarlaDataset(torch.utils.data.Dataset):
         cam_config = {'width': 1600, 'height': 900, 'fov': 70}
 
         cam_specs = {
-            'rgb_front': {
+            'camera_front': {
                 'x': 2.36, 'y': 0.0, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_front_left': {
+            'camera_front_left': {
                 'x': 2.36, 'y': -0.792, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_front_right': {
+            'camera_front_right': {
                 'x': 2.36, 'y': 0.792, 'z': 1.5,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_back': {
+            'camera_back': {
                 'x': -2.36, 'y': 0.0, 'z': 1.55,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_back_left': {
+            'camera_back_left': {
                 'x': -2.36, 'y': -0.792, 'z': 1.55,
                 'roll': 0, 'pitch': 0.0, 'yaw': -110,
                 'type': 'sensor.camera.rgb',
             },
-            'rgb_back_right': {
+            'camera_back_right': {
                 'x': -2.36, 'y': 0.792, 'z': 1.55,
                 'roll': 0, 'pitch': 0.0, 'yaw': 110,
                 'type': 'sensor.camera.rgb',
@@ -277,12 +277,12 @@ class CarlaDataset(torch.utils.data.Dataset):
                                                      roll=cam_spec['roll']))
             veh2cam = cam2pixel @ np.array(cam2veh.get_inverse_matrix())
             self.veh2cam_dict[cam_id] = veh2cam
-        front_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front']).float().unsqueeze(0)
-        front_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_left']).float().unsqueeze(0)
-        front_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_right']).float().unsqueeze(0)
-        back_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back']).float().unsqueeze(0)
-        back_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_left']).float().unsqueeze(0)
-        back_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_right']).float().unsqueeze(0)
+        front_to_ego = torch.from_numpy(self.veh2cam_dict['camera_front']).float().unsqueeze(0)
+        front_left_to_ego = torch.from_numpy(self.veh2cam_dict['camera_front_left']).float().unsqueeze(0)
+        front_right_to_ego = torch.from_numpy(self.veh2cam_dict['camera_front_right']).float().unsqueeze(0)
+        back_to_ego = torch.from_numpy(self.veh2cam_dict['camera_back']).float().unsqueeze(0)
+        back_left_to_ego = torch.from_numpy(self.veh2cam_dict['camera_back_left']).float().unsqueeze(0)
+        back_right_to_ego = torch.from_numpy(self.veh2cam_dict['camera_back_right']).float().unsqueeze(0)
         self.extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego, back_to_ego,
                                     back_left_to_ego, back_right_to_ego], dim=0)
 
@@ -309,12 +309,12 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
-                self.front.append(task_path + "/rgb_front/" + filename)
-                self.front_left.append(task_path + "/rgb_front_left/" + filename)
-                self.front_right.append(task_path + "/rgb_front_right/" + filename)
-                self.back.append(task_path + "/rgb_back/" + filename)
-                self.back_left.append(task_path + "/rgb_back_left/" + filename)
-                self.back_right.append(task_path + "/rgb_back_right/" + filename)
+                self.front.append(task_path + "/camera_front/" + filename)
+                self.front_left.append(task_path + "/camera_front_left/" + filename)
+                self.front_right.append(task_path + "/camera_front_right/" + filename)
+                self.back.append(task_path + "/camera_back/" + filename)
+                self.back_left.append(task_path + "/camera_back_left/" + filename)
+                self.back_right.append(task_path + "/camera_back_right/" + filename)
 
                 # depth
                 self.front_depth.append(task_path + "/depth_front/" + filename)
