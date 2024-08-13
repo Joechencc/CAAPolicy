@@ -546,7 +546,7 @@ class ParkingAgent:
                 seg_gt[seg_gt == 2] = 255
                 data['segmentation'] = Image.fromarray(seg_gt)
             elif self.cfg.feature_encoder == "conet":
-                segmentation = self.semantic_process3D(data_frame['lidar'], visual=True)
+                data['segmentation'] = self.semantic_process3D(data_frame['lidar'], visual=True)
                 
         return data
 
@@ -583,6 +583,12 @@ class ParkingAgent:
         for key in voxel_categories.keys():
             value = convert_semantic_label(voxel_categories[key])
             voxel_categories[key]=value
+        
+        voxel_grids = np.zeros(tuple( self.cfg.occ_size), dtype=np.int)
+        # fill data
+        for key, value in voxel_categories.items():
+            voxel_grids[key] = int(value)
+
         if visual:
             NUSC_COLOR_MAP = {  # RGB.
                 # 0: (0, 0, 0),  # Black. noise
@@ -610,7 +616,8 @@ class ParkingAgent:
                 pose[0] = 320 - pose[0]
                 pose = np.array(min_bound)+ pose*0.2
                 box.translate(pose)
-                if values != 255:
+                
+                if values not in [11,12,13]:
                     # import pdb; pdb.set_trace()
                     # box.paint_uniform_color(np.array([255, 0, 0]) / 255.0)
                     box.paint_uniform_color(np.array(NUSC_COLOR_MAP[values]) / 255.0)
@@ -620,8 +627,7 @@ class ParkingAgent:
                 boxes += box
             render_img_high_view([boxes], fname="./visual/voxel.png")
         # Color mapping normalized to [0, 1]
-        import pdb; pdb.set_trace()
-        return voxel_categories
+        return voxel_grids
     
     def lidar2ego(self, points,translation,rotation=None):
         # input should be (n,3)

@@ -575,6 +575,9 @@ class ProcessSemantic3D:
         min_index = np.floor((np.array(self.cfg.point_cloud_range[:3]) - np.array(min_bound)) / resolution).astype(int)
         max_index = np.ceil((np.array(self.cfg.point_cloud_range[3:]) - np.array(max_bound)) / resolution).astype(int)
         cropped_voxels = voxels[min_index[0]:max_index[0], min_index[1]:max_index[1], min_index[2]:max_index[2]]
+        #Exclude the car itself
+        cropped_voxels[-4:4,-4:4,:-4:4] = 0
+        import pdb; pdb.set_trace()
 
         return cropped_voxels.copy()
 
@@ -696,4 +699,3 @@ class ProcessImage:
         crop_image = scale_and_crop_image(image, scale=1.0, crop=self.crop)
 
         return self.normalise_image(np.array(crop_image)).unsqueeze(0), crop_image
-
