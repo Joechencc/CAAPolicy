@@ -345,6 +345,7 @@ class NetworkEvaluator:
                 self._y_diff_to_goal = abs(t.y - parking_goal.y)
                 closest_goal[0] = parking_goal.x
                 closest_goal[1] = parking_goal.y
+                closest_goal[2] = r.yaw
 
         # check stop
         is_stop = (c.throttle == 0.0) and (speed < 1e-3) and c.reverse
@@ -579,7 +580,7 @@ class NetworkEvaluator:
     def save_sensor_data(self, parking_goal):
 
         # create dirs
-        self._save_path = "./e2e_parking/eval/"+datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+        self._save_path = "./e2e_parking/eval/"+datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
         cur_save_path.mkdir(parents=True, exist_ok=False)
         (cur_save_path / 'measurements').mkdir()
@@ -613,7 +614,7 @@ class NetworkEvaluator:
         with open(measurements_file, 'w') as f:
             data = {'x': parking_goal[0],
                     'y': parking_goal[1],
-                    'z':0 
+                    'yaw':parking_goal[2]
                     }
             json.dump(data, f, indent=4)
 
