@@ -135,6 +135,20 @@ def highlight_grid(image, grid_indexes, grid_size=14):
         a.rectangle([(y * w, x * h), (y * w + w, x * h + h)], fill=None, outline='red', width=2)
     return image
 
+def highlight_grid_3D(image, grid_indexes, grid_size=14):
+    assert(isinstance(grid_size, tuple))
+
+    W, H, D = image.size
+    h = H / grid_size[0]
+    w = W / grid_size[1]
+    d = D / grid_size[1]
+    image = image.copy()
+    for grid_index in grid_indexes:
+        x, y, z = np.unravel_index(grid_index, (grid_size[0], grid_size[1], grid_size[2]))
+        a = ImageDraw.ImageDraw(image)
+        a.rectangle([(y * w, x * h), (y * w + w, x * h + h)], fill=None, outline='red', width=2)
+    return image
+
 
 def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
     if not isinstance(grid_size, tuple):
@@ -147,6 +161,17 @@ def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
     atten_avg = average_att_map[grid_index].reshape(grid_size[0], grid_size[1])
     atten_avg = Image.fromarray(atten_avg.numpy()).resize(image.size)
     return grid_image, atten_avg
+
+def get_atten_avg_map_3D(att_map, grid_index, image, grid_size=16):
+    if not isinstance(grid_size, tuple):
+        grid_size = (grid_size, grid_size)
+
+    # grid_image = highlight_grid_3D(image, [grid_index], grid_size)
+    att_map = att_map.squeeze()
+    average_att_map = att_map.mean(axis=0)
+    atten_avg = average_att_map[grid_index].reshape(grid_size[0], grid_size[1], grid_size[2])
+    atten_avg = Image.fromarray(atten_avg.numpy().sum(-1).astype(np.uint8)).resize(image.size)
+    return image, atten_avg
 
 
 def visualize_grid_to_grid(att_map, grid_index, image, grid_size=16, alpha=0.6):
@@ -233,7 +258,7 @@ class ParkingAgent:
         self.process_frequency = 3  # process sensor data for every 3 steps 0.1s
         self.step = -1
 
-        self.prev_xy_thea = None
+        self.prev_loc_thea = None
 
         self.trans_control = carla.VehicleControl()
         self.gru_control = carla.VehicleControl()
@@ -299,12 +324,30 @@ class ParkingAgent:
         # image_file = pathlib.Path(self.cfg.log_dir) / ('%04d.png' % self.step)
         # Image.fromarray(np.uint8(pred_seg_img), mode='L').save(image_file)
         self.seg_bev = pred_seg_img
+    
+    def save_seg_img_3D(self, pred_segmentation):
+        pred_segmentation = pred_segmentation[0]
+        pred_segmentation = torch.argmax(pred_segmentation, dim=0, keepdim=True)
+        pred_segmentation = pred_segmentation.detach().cpu().numpy()
+        pred_segmentation[(pred_segmentation != 0) & (pred_segmentation != 17)] = 128
+        pred_segmentation[pred_segmentation == 17] = 255
+        pred_seg_img = pred_segmentation[0, :, :, :][::-1]
+        # image_file = pathlib.Path(self.cfg.log_dir) / ('%04d.png' % self.step)
+        # Image.fromarray(np.uint8(pred_seg_img), mode='L').save(image_file)
+        self.seg_bev = pred_seg_img
 
     def save_target_bev_img(self, target_bev):
         target_bev = target_bev[0]
         target_bev = target_bev.detach().cpu().numpy()
         target_bev[target_bev == 1] = 255
         target_bev_img = target_bev[0, :, :][::-1]
+        self.target_bev = target_bev_img
+    
+    def save_target_bev_img_3D(self, target_bev):
+        target_bev = target_bev[0]
+        target_bev = target_bev.detach().cpu().numpy()
+        target_bev[target_bev == 1] = 255
+        target_bev_img = target_bev[0, :, :, :][::-1]
         self.target_bev = target_bev_img
 
     def save_prev_target(self, pred_segmentation):
@@ -409,6 +452,19 @@ class ParkingAgent:
         atten_avg = np.asarray(atten_avg)[::-1, ...]
         return grid_image, atten_avg
 
+    def save_atten_avg_map_conet(self, data):
+        atten = self.save_output.outputs[0].detach().cpu()
+        # visualize_heads(atten)
+
+        seg_feat = data['segmentation']
+        image = Image.fromarray(seg_feat.sum(-1).astype(np.uint8))
+        # bev = bev.convert("RGB")
+        # visualize_grid_to_grid(atten, 136, bev)
+        grid_image, atten_avg = get_atten_avg_map_3D(atten, 100, image, tuple(self.cfg.seg_dim))
+        grid_image = np.asarray(grid_image)[::-1, ...]
+        atten_avg = np.asarray(atten_avg)[::-1, ...]
+        return grid_image, atten_avg
+
     def tick(self):
         if self.net_eva.agent_need_init:
             self.init_agent()
@@ -436,7 +492,6 @@ class ParkingAgent:
             self.model.eval()
             with torch.no_grad():
                 start_time = time.time()
-                import pdb; pdb.set_trace()
                 pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
@@ -454,19 +509,30 @@ class ParkingAgent:
                 self.trans_control.reverse = control_signal[3]
 
                 self.speed_limit(data_frame)
-
+    
                 if self.show_eva_imgs:
-                    self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
-                    self.save_seg_img(pred_segmentation)
-                    self.save_target_bev_img(target_bev)
-                    self.display_imgs()
+                    if self.cfg.feature_encoder == "bev":
+                        self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+                        self.save_seg_img(pred_segmentation)
+                        self.save_target_bev_img(target_bev)
+                        self.display_imgs()
+                    elif self.cfg.feature_encoder == "conet":
+                        self.grid_image, self.atten_avg = self.save_atten_avg_map_conet(data)
+                        self.save_seg_img_3D(pred_segmentation) # save to self.seg_bev
+                        self.save_target_bev_img_3D(target_bev)
+                        self.display_imgs_3D()
 
                 self.save_output.clear()
-
-            self.prev_xy_thea = [vehicle_transform.location.x,
+            if self.cfg.feature_encoder == "bev":
+                self.prev_loc_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
-
+            elif self.cfg.feature_encoder == "conet":
+                self.prev_loc_thea = [vehicle_transform.location.x,
+                                 vehicle_transform.location.y,
+                                 vehicle_transform.location.z,
+                                 imu_data.compass if np.isnan(imu_data.compass) else 0]
+        import pdb; pdb.set_trace()
         self.player.apply_control(self.trans_control)
 
     def speed_limit(self, data_frame):
@@ -744,6 +810,65 @@ class ParkingAgent:
         ax_bev.axis('off')
         ax_bev.set_title('seg_bev(output)', fontsize=10)
         ax_bev.imshow(self.seg_bev)
+
+        plt.pause(0.1)
+        plt.clf()
+
+    def display_imgs_3D(self):
+        plt.subplots_adjust(wspace=0.08, hspace=0.08, left=0.04, bottom=0.0, right=0.95, top=0.97)
+        rows = 2
+        cols = 4
+        ax_ctl = plt.subplot(rows, cols, 4)
+        ax_ctl.axis('off')
+        t_x = 0.2
+        t_y = 0.8
+        throttle_show = int(self.trans_control.throttle * 1000) / 1000
+        steer_show = int(self.trans_control.steer * 1000) / 1000
+        brake_show = int(self.trans_control.brake * 1000) / 1000
+        reverse_show = self.trans_control.reverse
+        ax_ctl.text(t_x, t_y, 'Throttle: ' + str(throttle_show), fontsize=10, color='red')
+        ax_ctl.text(t_x, t_y - 0.2, '    Steer: ' + str(steer_show), fontsize=10, color='red')
+        ax_ctl.text(t_x, t_y - 0.4, '   Brake: ' + str(brake_show), fontsize=10, color='red')
+        ax_ctl.text(t_x, t_y - 0.6, 'Reverse: ' + str(reverse_show), fontsize=10, color='red')
+        
+        ax_front = plt.subplot(rows, cols, 1)
+        ax_front.axis('off')
+        ax_front.set_title('front', fontsize=10)
+        ax_front.imshow(self.rgb_front)
+
+        ax_rear = plt.subplot(rows, cols, 2)
+        ax_rear.axis('off')
+        ax_rear.set_title('back', fontsize=10)
+        ax_rear.imshow(self.rgb_back)
+
+        ax_atten = plt.subplot(rows, cols, 7)
+        ax_atten.axis('off')
+        ax_atten.set_title('atten(output)', fontsize=10)
+        ax_atten.imshow(self.grid_image)
+        if np.max(self.atten_avg) != 0:
+            ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
+        else:
+            ax_atten.imshow(self.atten_avg, alpha=0.6, cmap='rainbow')
+
+        ax_left = plt.subplot(rows, cols, 5)
+        ax_left.axis('off')
+        ax_left.set_title('left', fontsize=10)
+        ax_left.imshow(self.rgb_front_left)
+
+        ax_right = plt.subplot(rows, cols, 6)
+        ax_right.axis('off')
+        ax_right.set_title('right', fontsize=10)
+        ax_right.imshow(self.rgb_front_right)
+
+        ax_bev = plt.subplot(rows, cols, 3)
+        ax_bev.axis('off')
+        ax_bev.set_title('target_bev(input)', fontsize=10)
+        ax_bev.imshow(self.target_bev.sum(-1))
+
+        ax_bev = plt.subplot(rows, cols, 8)
+        ax_bev.axis('off')
+        ax_bev.set_title('seg_bev(output)', fontsize=10)
+        ax_bev.imshow(self.seg_bev.sum(-1))
 
         plt.pause(0.1)
         plt.clf()
