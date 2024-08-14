@@ -16,6 +16,8 @@ from data_generation.world import World
 from data_generation.world import cam_specs_, cam2pixel_
 import numpy as np
 import carla
+import os
+import matplotlib.pyplot as plt
 
 
 class ParkingModel(nn.Module):
@@ -149,7 +151,9 @@ class ParkingModel(nn.Module):
         return pred_control, coarse_segmentation, fine_segmentation, pred_depth
 
     def predict(self, data):
-        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
+        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
+        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_new.png"))
+
         pred_multi_controls = data['gt_control'].cuda()
         for i in range(3):
             if self.cfg.feature_encoder == 'bev':
@@ -157,4 +161,25 @@ class ParkingModel(nn.Module):
             elif self.cfg.feature_encoder == 'conet':
                 pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-        return pred_multi_controls, pred_segmentation, pred_depth, bev_target
+        return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
+
+    def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        threeD_grid = torch.argmax(threeD_grid[0], dim=0).cpu().numpy()
+        H, W, D = threeD_grid.shape
+
+        twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
