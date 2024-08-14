@@ -131,7 +131,7 @@ parking_model:
   seg_classes: 3
   seg_classes_conet: 18
   seg_vehicle_weights: [1.0, 2.0, 2.0]
-  seg_conet_vehicle_weights: [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+  seg_conet_vehicle_weights: [1.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
 
   # transformer encoder
   tf_en_dim: 258

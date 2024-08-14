@@ -10,7 +10,7 @@ from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from loss.seg_loss_3d import SegmentationLoss3D
 from model.parking_model import ParkingModel
-
+import torch.nn.functional as F
 
 def setup_callbacks(cfg):
     callbacks = []
@@ -71,11 +71,13 @@ class ParkingTrainingModule(pl.LightningModule):
         if self.cfg.feature_encoder == "bev":
             segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":
+            H, W, D = pred_segmentation.shape[-3:]
+            coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
             segmentation_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-            import pdb; pdb.set_trace()
-            segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+            coarse_segmentation_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
 
         loss_dict.update({
+            "coarse_segmentation_loss": coarse_segmentation_loss,
             "segmentation_loss": segmentation_loss
         })
         depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
@@ -97,7 +99,7 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
 
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
@@ -108,9 +110,12 @@ class ParkingTrainingModule(pl.LightningModule):
         if self.cfg.feature_encoder == "bev":
             segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":
+            H,W,D = pred_segmentation.shape[-3:]
+            coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
             segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-
+            coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
         val_loss_dict.update({
+            "coarse_segmentation_val_loss": coarse_segmentation_val_loss,
             "segmentation_val_loss": segmentation_val_loss
         })
         
