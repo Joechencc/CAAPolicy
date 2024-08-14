@@ -94,7 +94,7 @@ def main():
         help='Gamma correction of the camera (default: 0.0)')
     argparser.add_argument(
         '--model_path',
-        default='ckpt/last-0.75.ckpt',
+        default='/home/chao1804/Desktop/ParkWithUncertainty/ckpt/last.ckpt',
 
         help='path to model.ckpt')
     argparser.add_argument(
@@ -142,7 +142,7 @@ def main():
         choices=['cpu', 'cuda'])
     argparser.add_argument(
         '--show_eva_imgs',
-        default=False,
+        default=True,
         type=str2bool,
         help='show eva figure in eva model (default: False)')
     argparser.add_argument(

@@ -463,6 +463,12 @@ class World(object):
                                                          roll=cam_spec['roll']))
                 veh2cam = self._cam2pixel @ np.array(cam2veh.get_inverse_matrix())
                 self._veh2cam_dict[cam_id] = veh2cam
+            if cam_id.startswith('rgb'):
+                cam2veh = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
+                                          carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
+                                                         roll=cam_spec['roll']))
+                veh2cam = self._cam2pixel @ np.array(cam2veh.get_inverse_matrix())
+                self._veh2cam_dict[cam_id] = veh2cam
 
     def spawn_rgb_camera(self, sensor_id, sensor_spec):
         blueprint_library = self._world.get_blueprint_library()

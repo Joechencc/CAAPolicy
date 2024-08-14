@@ -199,6 +199,8 @@ class ParkingAgent:
         self.seg_bev = None
         self.target_bev = None
 
+        self.topdown = None
+        self.gt_bev = None
         self.pre_target_point = None
 
         self.model = None
@@ -459,7 +461,7 @@ class ParkingAgent:
         left_final, self.rgb_left = self.image_process(data_frame['rgb_left'])
         right_final, self.rgb_right = self.image_process(data_frame['rgb_right'])
         rear_final, self.rgb_rear = self.image_process(data_frame['rgb_rear'])
-
+        self.topdown = data_frame["topdown"]
         images = [front_final, left_final, right_final, rear_final]
         images = torch.cat(images, dim=0)
         data['image'] = images.unsqueeze(0)
@@ -485,7 +487,7 @@ class ParkingAgent:
             seg_gt[seg_gt == 1] = 128
             seg_gt[seg_gt == 2] = 255
             data['segmentation'] = Image.fromarray(seg_gt)
-
+            self.gt_bev = seg_gt
         return data
 
     def draw_waypoints(self, waypoints):
@@ -559,13 +561,14 @@ class ParkingAgent:
 
         ax_front = plt.subplot(rows, cols, 1)
         ax_front.axis('off')
-        ax_front.set_title('front', fontsize=10)
-        ax_front.imshow(self.rgb_front)
+        ax_front.set_title('gt_bev', fontsize=10)
+        ax_front.imshow(self.gt_bev)
 
         ax_rear = plt.subplot(rows, cols, 2)
         ax_rear.axis('off')
-        ax_rear.set_title('rear', fontsize=10)
-        ax_rear.imshow(self.rgb_rear)
+        ax_rear.set_title('topdown', fontsize=10)
+        ax_rear.imshow(self.topdown.squeeze(0).mean(dim=0), cmap='rainbow')
+
 
         ax_atten = plt.subplot(rows, cols, 7)
         ax_atten.axis('off')
@@ -573,15 +576,6 @@ class ParkingAgent:
         ax_atten.imshow(self.grid_image)
         ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
 
-        ax_left = plt.subplot(rows, cols, 5)
-        ax_left.axis('off')
-        ax_left.set_title('left', fontsize=10)
-        ax_left.imshow(self.rgb_left)
-
-        ax_right = plt.subplot(rows, cols, 6)
-        ax_right.axis('off')
-        ax_right.set_title('right', fontsize=10)
-        ax_right.imshow(self.rgb_right)
 
         ax_bev = plt.subplot(rows, cols, 3)
         ax_bev.axis('off')
