@@ -577,7 +577,8 @@ class ProcessSemantic3D:
         cropped_voxels = voxels[min_index[0]:max_index[0], min_index[1]:max_index[1], min_index[2]:max_index[2]]
         #Exclude the car itself
         cropped_voxels[-4:4,-4:4,:-4:4] = 0
-        import pdb; pdb.set_trace()
+        mask = np.isin(cropped_voxels, [11, 12, 13])
+        cropped_voxels[mask] = 0
 
         return cropped_voxels.copy()
 
