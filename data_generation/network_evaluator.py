@@ -333,7 +333,7 @@ class NetworkEvaluator:
         speed = (3.6 * math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2))
 
         # find the closest goal
-        closest_goal = [0.0, 0.0]
+        closest_goal = [0.0, 0.0,0.0]
         self._x_diff_to_goal = sys.float_info.max
         self._y_diff_to_goal = sys.float_info.max
         self._distance_diff_to_goal = sys.float_info.max
