@@ -61,7 +61,7 @@ class ParkingTrainingModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
@@ -72,6 +72,8 @@ class ParkingTrainingModule(pl.LightningModule):
             segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":
             segmentation_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+            import pdb; pdb.set_trace()
+            segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
 
         loss_dict.update({
             "segmentation_loss": segmentation_loss

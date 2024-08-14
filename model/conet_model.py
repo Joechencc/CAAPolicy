@@ -111,15 +111,12 @@ class OccNet(BEVDepth):
         pts_feats = pts_enc_feats['pts_feats']
         return pts_enc_feats['x'], pts_feats
 
-    def extract_feat(self, points, img, img_metas):
-        """Extract features from images and points."""
+    def extract_feat(self, img, img_metas):
+        """Extract features from images."""
         img_voxel_feats = None
-        pts_voxel_feats, pts_feats = None, None
         depth, img_feats = None, None
         if img is not None:
             img_voxel_feats, depth, img_feats = self.extract_img_feat(img, img_metas)
-        if points is not None:
-            pts_voxel_feats, pts_feats = self.extract_pts_feat(points)
 
         if self.record_time:
             torch.cuda.synchronize()
@@ -137,110 +134,8 @@ class OccNet(BEVDepth):
             t1 = time.time()
             self.time_stats['occ_encoder'].append(t1 - t0)
 
-        return (voxel_feats_enc, img_feats, pts_feats, depth)
+        return (voxel_feats_enc, img_feats, depth)
     
-    @force_fp32(apply_to=('voxel_feats'))
-    def forward_pts_train(
-            self,
-            voxel_feats,
-            gt_occ=None,
-            points_occ=None,
-            img_metas=None,
-            transform=None,
-            img_feats=None,
-            pts_feats=None,
-            visible_mask=None,
-        ):
-        
-        if self.record_time:
-            torch.cuda.synchronize()
-            t0 = time.time()
-        
-        outs = self.pts_bbox_head(
-            voxel_feats=voxel_feats,
-            points=points_occ,
-            img_metas=img_metas,
-            img_feats=img_feats,
-            pts_feats=pts_feats,
-            transform=transform,
-        )
-        
-        if self.record_time:
-            torch.cuda.synchronize()
-            t1 = time.time()
-            self.time_stats['occ_head'].append(t1 - t0)
-        
-        losses = self.pts_bbox_head.loss(
-            output_voxels=outs['output_voxels'],
-            output_voxels_fine=outs['output_voxels_fine'],
-            output_coords_fine=outs['output_coords_fine'],
-            target_voxels=gt_occ,
-            target_points=points_occ,
-            img_metas=img_metas,
-            visible_mask=visible_mask,
-        )
-        
-        if self.record_time:
-            torch.cuda.synchronize()
-            t2 = time.time()
-            self.time_stats['loss_occ'].append(t2 - t1)
-        
-        return losses
-    
-    def forward_train(self,
-            points=None,
-            img_metas=None,
-            img_inputs=None,
-            gt_occ=None,
-            points_occ=None,
-            visible_mask=None,
-            **kwargs,
-        ):
-        
-        # extract bird-eye-view features from perspective images
-        voxel_feats, img_feats, pts_feats, depth = self.extract_feat(
-            points, img=img_inputs, img_metas=img_metas)
-        
-        # training losses
-        losses = dict()
-        
-        if self.record_time:        
-            torch.cuda.synchronize()
-            t0 = time.time()
-        
-        if not self.disable_loss_depth and depth is not None:
-            losses['loss_depth'] = self.img_view_transformer.get_depth_loss(img_inputs[-2], depth)
-        
-        if self.record_time:
-            torch.cuda.synchronize()
-            t1 = time.time()
-            self.time_stats['loss_depth'].append(t1 - t0)
-        
-        transform = img_inputs[1:8] if img_inputs is not None else None
-        losses_occupancy = self.forward_pts_train(voxel_feats, gt_occ,
-                        points_occ, img_metas, img_feats=img_feats, pts_feats=pts_feats, transform=transform, 
-                        visible_mask=visible_mask)
-        losses.update(losses_occupancy)
-        if self.loss_norm:
-            for loss_key in losses.keys():
-                if loss_key.startswith('loss'):
-                    losses[loss_key] = losses[loss_key] / (losses[loss_key].detach() + 1e-9)
-
-        def logging_latencies():
-            # logging latencies
-            avg_time = {key: sum(val) / len(val) for key, val in self.time_stats.items()}
-            sum_time = sum(list(avg_time.values()))
-            out_res = ''
-            for key, val in avg_time.items():
-                out_res += '{}: {:.4f}, {:.1f}, '.format(key, val, val / sum_time)
-            
-            print(out_res)
-        
-        if self.record_time:
-            logging_latencies()
-        
-        return losses
-        
     def forward(self,
             points=None,
             img_metas=None,
@@ -249,20 +144,19 @@ class OccNet(BEVDepth):
             visible_mask=None,
             **kwargs,
         ):
-        return self.simple_test(img_metas, img_inputs, points, gt_occ=gt_occ, visible_mask=visible_mask, **kwargs)
+        return self.forward_once(img_metas, img_inputs, points, gt_occ=gt_occ, visible_mask=visible_mask, **kwargs)
     
-    def simple_test(self, img_metas, img=None, points=None, rescale=False, points_occ=None, 
-            gt_occ=None, visible_mask=None, **kwargs):
+    def forward_once(self, img_metas, img=None, points=None, rescale=False, points_occ=None, 
+            gt_occ=None, visible_mask=None, visual=False, **kwargs):
 
         self.visualize(img[0], folder_path="./visual")
-        voxel_feats, img_feats, pts_feats, depth = self.extract_feat(points, img=img, img_metas=img_metas)
+        voxel_feats, img_feats, depth = self.extract_feat(img=img, img_metas=img_metas)
         transform = img[1:8] if img is not None else None
         output = self.pts_bbox_head(
             voxel_feats=voxel_feats,
             points=points_occ,
             img_metas=img_metas,
             img_feats=img_feats,
-            pts_feats=pts_feats,
             transform=transform,
             **kwargs,
         )
@@ -284,44 +178,48 @@ class OccNet(BEVDepth):
                 fine_feature = output['output_voxelsoutput_feature_fine_fine'][0]
 
         pred_c = output['output_voxels'][0]
-        if gt_occ is not None:
-            SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
-            SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)
-        else:
-            H, W, D = self.occ_size
-            pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-            pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
-            self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
-
-        pred_f = None
-        SSC_metric_fine = None
-        if output['output_voxels_fine'] is not None:
-            if output['output_coords_fine'] is not None:
-                fine_pred = output['output_voxels_fine'][0]  # N ncls
-                fine_coord = output['output_coords_fine'][0]  # 3 N
-                if gt_occ is not None:
-                    pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-                else:
-                    pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-                pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
-            else:
-                pred_f = output['output_voxels_fine'][0]
-
+        if visual:
             if gt_occ is not None:
-                SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
-                SSC_metric_fine, SSC_occ_metric_fine = self.evaluation_semantic(pred_f, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+                SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
+                SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)
             else:
                 H, W, D = self.occ_size
-                pred_f = F.interpolate(pred_f, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-                pred_f = torch.argmax(pred_f[0], dim=0).cpu().numpy()
-                self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
+                pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
+                self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+
+        # pred_f = None
+        # SSC_metric_fine = None
+        # if output['output_voxels_fine'] is not None:
+        #     if output['output_coords_fine'] is not None:
+        #         fine_pred = output['output_voxels_fine'][0]  # N ncls
+        #         fine_coord = output['output_coords_fine'][0]  # 3 N
+        #         if gt_occ is not None:
+        #             pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+        #         else:
+        #             pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+        #         pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
+        #     else:
+        #         pred_f = output['output_voxels_fine'][0]
+
+        #     if visual:
+        #         if gt_occ is not None:
+        #             SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
+        #             SSC_metric_fine, SSC_occ_metric_fine = self.evaluation_semantic(pred_f, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+        #         else:
+        #             H, W, D = self.occ_size
+        #             pred_f = F.interpolate(pred_f, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        #             pred_f = torch.argmax(pred_f[0], dim=0).cpu().numpy()
+        #             self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
+        #             # import pdb; pdb.set_trace()
+    
         coarse_occ_mask = output['coarse_occ_mask']
         if gt_occ is not None:
             test_output = {
                 'SC_metric': SC_metric,
                 'SSC_metric': SSC_metric,
                 'pred_c': pred_c,
-                'pred_f': pred_f,
+                # 'pred_f': pred_f,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
@@ -329,14 +227,14 @@ class OccNet(BEVDepth):
         else:
             test_output = {
                 'pred_c': pred_c,
-                'pred_f': pred_f,
+                # 'pred_f': pred_f,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
             }
 
-        if SSC_metric_fine is not None:
-            test_output['SSC_metric_fine'] = SSC_metric_fine
+        # if SSC_metric_fine is not None:
+        #     test_output['SSC_metric_fine'] = SSC_metric_fine
 
         return test_output
 
@@ -408,28 +306,6 @@ class OccNet(BEVDepth):
         else:
             plt.show()
         plt.close()
-    
-    def forward_dummy(self,
-            points=None,
-            img_metas=None,
-            img_inputs=None,
-            points_occ=None,
-            **kwargs,
-        ):
-
-        voxel_feats, img_feats, pts_feats, depth = self.extract_feat(points, img=img_inputs, img_metas=img_metas)
-
-        transform = img_inputs[1:8] if img_inputs is not None else None
-        output = self.pts_bbox_head(
-            voxel_feats=voxel_feats,
-            points=points_occ,
-            img_metas=img_metas,
-            img_feats=img_feats,
-            pts_feats=pts_feats,
-            transform=transform,
-        )
-        
-        return output
     
     
 def fast_hist(pred, label, max_label=18):

@@ -492,7 +492,7 @@ class ParkingAgent:
             self.model.eval()
             with torch.no_grad():
                 start_time = time.time()
-                pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_controls, coarse_segmentation, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -532,7 +532,6 @@ class ParkingAgent:
                                  vehicle_transform.location.y,
                                  vehicle_transform.location.z,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
-        import pdb; pdb.set_trace()
         self.player.apply_control(self.trans_control)
 
     def speed_limit(self, data_frame):

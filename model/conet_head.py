@@ -160,7 +160,7 @@ class CONetHead(nn.Module):
 
         return output
      
-    def forward(self, voxel_feats, img_feats=None, pts_feats=None, transform=None, **kwargs):
+    def forward(self, voxel_feats, img_feats=None, transform=None, **kwargs):
         assert type(voxel_feats) is list and len(voxel_feats) == self.num_level
         
         # forward voxel 

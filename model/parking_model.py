@@ -101,12 +101,12 @@ class ParkingModel(nn.Module):
             img_metas = self.construct_metas()
             img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
             res = self.OccNet(img_metas=img_metas,img_inputs=img) #conet_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
-            conet_feature, pred_depth = res['fine_feature'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
+            coarse_semantic, conet_feature, pred_depth = res['pred_c'], res['fine_feature'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
             conet_feature, conet_target = self.add_target_conet(conet_feature, target_point) #conet_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
             conet_down_sample = self.conet_encoder(conet_feature)
             fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
             pred_segmentation = self.seg3D_head(fuse_feature)
-            return fuse_feature, pred_segmentation, pred_depth, conet_target        
+            return fuse_feature, coarse_semantic, pred_segmentation, pred_depth, conet_target        
 
     def construct_metas(self):
         metas = {}
@@ -140,13 +140,13 @@ class ParkingModel(nn.Module):
         return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
 
     def forward(self, data):
-        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
         if self.cfg.feature_encoder == 'bev':
             pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         elif self.cfg.feature_encoder == 'conet':
             pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
         
-        return pred_control, pred_segmentation, pred_depth
+        return pred_control, coarse_segmentation, fine_segmentation, pred_depth
 
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
