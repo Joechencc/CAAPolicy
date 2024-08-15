@@ -576,8 +576,9 @@ class ProcessSemantic3D:
         max_index = np.ceil((np.array(self.cfg.point_cloud_range[3:]) - np.array(max_bound)) / resolution).astype(int)
         cropped_voxels = voxels[min_index[0]:max_index[0], min_index[1]:max_index[1], min_index[2]:max_index[2]]
         #Exclude the car itself
-        cropped_voxels[-4:4,-4:4,:-4:4] = 0
-        mask = np.isin(cropped_voxels, [11, 12, 13])
+        H, W, D = cropped_voxels.shape
+        cropped_voxels[int(H/2)-8:int(H/2)+8,int(W/2)-8:int(W/2)+8,:] = 0
+        mask = np.isin(cropped_voxels, [11, 12, 13, 14])
         cropped_voxels[mask] = 0
 
         return cropped_voxels.copy()

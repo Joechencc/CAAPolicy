@@ -11,6 +11,7 @@ from loss.seg_loss import SegmentationLoss
 from loss.seg_loss_3d import SegmentationLoss3D
 from model.parking_model import ParkingModel
 import torch.nn.functional as F
+from collections import OrderedDict
 
 def setup_callbacks(cfg):
     callbacks = []
@@ -60,15 +61,15 @@ class ParkingTrainingModule(pl.LightningModule):
         self.load_model(model_path)
     
     def load_model(self, parking_pth_path):
-        import pdb; pdb.set_trace()
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        ckpt = torch.load(parking_pth_path, map_location='cuda:0')
+        if parking_pth_path is not None:
+            ckpt = torch.load(parking_pth_path)
 
-        state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
 
-        self.parking_model.load_state_dict(state_dict, strict=True)
-
-        logging.info('Load E2EParkingModel from %s', parking_pth_path)
+            self.parking_model.load_state_dict(state_dict, strict=True)
+            print('Load E2EParkingModel from %s', parking_pth_path)
+        else:
+            print("No pretrain model loadded")
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}

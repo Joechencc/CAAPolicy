@@ -21,9 +21,9 @@ def train():
         default='./config/training_conet.yaml',
         type=str,
         help='path to training_conet.yaml (default: ./config/training_conet.yaml)')
-    argparser.add_argument(
+    arg_parser.add_argument(
         '--model_path',
-        default='./ckpt/last.ckpt',
+        default=None,
         help='path to pretrained model.ckpt')
     args = arg_parser.parse_args()
 
