@@ -21,6 +21,10 @@ def train():
         default='./config/training_conet.yaml',
         type=str,
         help='path to training_conet.yaml (default: ./config/training_conet.yaml)')
+    argparser.add_argument(
+        '--model_path',
+        default='./ckpt/last.ckpt',
+        help='path to pretrained model.ckpt')
     args = arg_parser.parse_args()
 
     with open(args.config, 'r') as yaml_file:
@@ -51,7 +55,7 @@ def train():
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
 
-    parking_model = ParkingTrainingModule(cfg)
+    parking_model = ParkingTrainingModule(cfg, args.model_path)
     parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(parking_model, datamodule=parking_datamodule)
 

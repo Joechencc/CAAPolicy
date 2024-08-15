@@ -265,7 +265,7 @@ class ParkingAgent:
 
         self.save_output = SaveOutput()
         self.hook_handle = None
-        self.load_model(args.model_path, args.model_path_conet)
+        self.load_model(args.model_path)
 
         self.stop_count = 0
         self.boost = False
@@ -283,24 +283,24 @@ class ParkingAgent:
                 logging.exception('Invalid YAML Config file {}', args.config)
         self.cfg = get_cfg(cfg_yaml)
 
-    def load_model(self, parking_pth_path, conet_pth_path):
+    def load_model(self, parking_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
-        ckpt_conet = torch.load(conet_pth_path, map_location='cuda:0')
+        # ckpt_conet = torch.load(conet_pth_path, map_location='cuda:0')
 
-        if self.cfg.feature_encoder == "conet":
-            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-            state_dict = OrderedDict([(k, v) for k, v in state_dict.items() if not (k.startswith('bev_model') or k.startswith('bev_encoder'))])
-            # Change later
-            # state_dict = OrderedDict([(k.replace('bev_model', 'conet_model').replace('bev_encoder', 'conet_encoder'), v) for k, v in state_dict.items()])
-            parts_to_include = ['img_backbone', 'img_neck', 'img_view_transformer', 'occ_encoder', 'occ_encoder_neck']
-            state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if any(part in k for part in parts_to_include)})
-            # state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if k.startswith('img_backbone') or k.startswith('img_neck')})
-        else:
-            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+        # if self.cfg.feature_encoder == "conet":
+        #     state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+        #     # state_dict = OrderedDict([(k, v) for k, v in state_dict.items() if not (k.startswith('bev_model') or k.startswith('bev_encoder'))])
+        #     # Change later
+        #     # state_dict = OrderedDict([(k.replace('bev_model', 'conet_model').replace('bev_encoder', 'conet_encoder'), v) for k, v in state_dict.items()])
+        #     parts_to_include = ['img_backbone', 'img_neck', 'img_view_transformer', 'occ_encoder', 'occ_encoder_neck']
+        #     state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if any(part in k for part in parts_to_include)})
+        #     # state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if k.startswith('img_backbone') or k.startswith('img_neck')})
+        # else:
+        state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
 
-        self.model.load_state_dict(state_dict, strict=False)
+        self.model.load_state_dict(state_dict, strict=True)
         self.model.to(self.device)
         self.model.eval()
         if self.cfg.feature_encoder == "conet":

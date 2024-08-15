@@ -152,8 +152,10 @@ class ParkingModel(nn.Module):
 
     def predict(self, data):
         fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
-        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_new.png"))
+        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+        self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
 
+        assert()
         pred_multi_controls = data['gt_control'].cuda()
         for i in range(3):
             if self.cfg.feature_encoder == 'bev':
@@ -164,10 +166,15 @@ class ParkingModel(nn.Module):
         return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
 
     def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        # import pdb; pdb.set_trace()
         threeD_grid = torch.argmax(threeD_grid[0], dim=0).cpu().numpy()
         H, W, D = threeD_grid.shape
 
+
+        threeD_grid[threeD_grid==4]=1
+        threeD_grid[threeD_grid==17]=2
         twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        twoD_map = twoD_map[::-1,::-1]
         # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
 

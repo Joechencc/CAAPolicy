@@ -35,7 +35,7 @@ def setup_callbacks(cfg):
 
 
 class ParkingTrainingModule(pl.LightningModule):
-    def __init__(self, cfg: Configuration):
+    def __init__(self, cfg: Configuration, model_path):
         super(ParkingTrainingModule, self).__init__()
         self.save_hyperparameters()
 
@@ -57,6 +57,18 @@ class ParkingTrainingModule(pl.LightningModule):
             self.depth_loss_func = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
+        self.load_model(model_path)
+    
+    def load_model(self, parking_pth_path):
+        import pdb; pdb.set_trace()
+        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        ckpt = torch.load(parking_pth_path, map_location='cuda:0')
+
+        state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+
+        self.parking_model.load_state_dict(state_dict, strict=True)
+
+        logging.info('Load E2EParkingModel from %s', parking_pth_path)
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
