@@ -4,7 +4,7 @@ parking_model:
   log_dir: './log/'
   checkpoint_dir: './ckpt'
   log_every_n_steps: 10
-  check_val_every_n_epoch: 5
+  check_val_every_n_epoch: 2
 
   epochs: 155
   learning_rate: 0.0001

@@ -243,7 +243,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.get_data()
 
     def init_camera_config(self):
-        cam_config = {'width': 1600, 'height': 900, 'fov': 70}
+        cam_config = {'width': 400, 'height': 300, 'fov': 70}
         cam_specs = cam_specs_
 
         # intrinsic
@@ -577,7 +577,7 @@ class ProcessSemantic3D:
         cropped_voxels = voxels[min_index[0]:max_index[0], min_index[1]:max_index[1], min_index[2]:max_index[2]]
         #Exclude the car itself
         H, W, D = cropped_voxels.shape
-        cropped_voxels[int(H/2)-8:int(H/2)+8,int(W/2)-8:int(W/2)+8,:] = 0
+        cropped_voxels[int(H/2)-10:int(H/2)+10,int(W/2)-10:int(W/2)+10,:] = 0
         mask = np.isin(cropped_voxels, [11, 12, 13, 14])
         cropped_voxels[mask] = 0
 

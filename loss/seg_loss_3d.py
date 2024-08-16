@@ -18,9 +18,6 @@ class SegmentationLoss3D(nn.Module):
         b, s, c, h, w, d = pred.shape
         pred_seg = pred.view(b * s, c, h, w, d)
         gt_seg = target.view(b * s, h, w, d)
-        self.plot_grid(gt_seg[0].detach().cpu().numpy(), save_path="visual/gt_grid.png")
-        assert()
-        import pdb; pdb.set_trace()
 
         seg_loss = F.cross_entropy(pred_seg,
                                    gt_seg,
@@ -30,9 +27,29 @@ class SegmentationLoss3D(nn.Module):
 
         return torch.mean(seg_loss)
 
-    def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+    def plot_grid_gt(self, threeD_grid, save_path=None, vmax=None, layer=None):
         H, W, D = threeD_grid.shape
         threeD_grid[threeD_grid==14]=0
+        twoD_map = np.max(threeD_grid, axis=2)# compress 3D-> 2D
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+
+    def plot_grid_pred(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        threeD_grid = np.mean(threeD_grid,0)
+        H, W, D = threeD_grid.shape
         twoD_map = np.max(threeD_grid, axis=2)# compress 3D-> 2D
         # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
