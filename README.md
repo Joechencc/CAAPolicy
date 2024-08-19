@@ -29,6 +29,7 @@ conda env create -f environment.yml
 conda activate E2EParking
 chmod +x setup_carla.sh
 ./setup_carla.sh
+python setup.py develop
 ```
 CUDA 11.7 is used as default. We also validate the compatibility of CUDA 10.2 and 11.3.
 
