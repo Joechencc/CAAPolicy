@@ -3,7 +3,7 @@ import logging
 import carla
 import pygame
 
-from data_generation.network_evaluator import NetworkEvaluator
+from data_generation.network_evaluator_e2e import NetworkEvaluator
 from data_generation.keyboard_control import KeyboardControl
 from agent.parking_agent_e2e import ParkingAgent, show_control_info
 
@@ -94,7 +94,7 @@ def main():
         help='Gamma correction of the camera (default: 0.0)')
     argparser.add_argument(
         '--model_path',
-        default='/home/chao1804/Desktop/ParkWithUncertainty/ckpt/last.ckpt',
+        default='/home/jas0n/PycharmProjects/ParkWithUncertainty/ckpt/last-0.75.ckpt',
 
         help='path to model.ckpt')
     argparser.add_argument(
