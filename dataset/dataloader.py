@@ -3,7 +3,7 @@ import random
 import numpy as np
 import pytorch_lightning as pl
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 
 from dataset.carla_dataset import CarlaDataset
 from tool.config import Configuration
@@ -27,20 +27,27 @@ class ParkingDataModule(pl.LightningDataModule):
         data_root = self.data_dir
         train_set = CarlaDataset(data_root, 1, self.cfg)
         val_set = CarlaDataset(data_root, 0, self.cfg)
-        self.train_loader = DataLoader(dataset=train_set,
-                                       batch_size=self.cfg.batch_size,
-                                       shuffle=True,
-                                       num_workers=8,
-                                       pin_memory=True,
-                                       worker_init_fn=seed_worker,
-                                       drop_last=True)
-        self.val_loader = DataLoader(dataset=val_set,
-                                     batch_size=self.cfg.batch_size,
-                                     shuffle=False,
-                                     num_workers=8,
-                                     pin_memory=True,
-                                     worker_init_fn=seed_worker,
-                                     drop_last=True)
+        # self.train_loader = DataLoader(dataset=train_set,
+        #                                batch_size=self.cfg.batch_size,
+        #                                shuffle=True,
+        #                                num_workers=8,
+        #                                pin_memory=True,
+        #                                worker_init_fn=seed_worker,
+        #                                drop_last=False)
+        # self.val_loader = DataLoader(dataset=val_set,
+        #                              batch_size=self.cfg.batch_size,
+        #                              shuffle=False,
+        #                              num_workers=8,
+        #                              pin_memory=True,
+        #                              worker_init_fn=seed_worker,
+        #                              drop_last=False)
+        train_size = int(0.8 * len(train_set))
+        valid_size = len(train_set) - train_size
+
+        train_subset, valid_subset = random_split(train_set, [train_size, valid_size])
+
+        self.train_loader = DataLoader(train_subset, batch_size=self.cfg.batch_size, shuffle=True, num_workers=8, pin_memory=True)
+        self.val_loader = DataLoader(valid_subset, batch_size=self.cfg.batch_size, shuffle=False, num_workers=8, pin_memory=True)
 
     def train_dataloader(self):
         return self.train_loader

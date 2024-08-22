@@ -142,28 +142,33 @@ class ParkingModel(nn.Module):
         return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
 
     def forward(self, data):
-        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
+        
         if self.cfg.feature_encoder == 'bev':
+            fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
             pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         elif self.cfg.feature_encoder == 'conet':
-            pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
-        
+            fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
+            self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+            self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+            #pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
+            pred_control = torch.randn(2, 5, 3)
         return pred_control, coarse_segmentation, fine_segmentation, pred_depth
 
-    def predict(self, data):
-        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
-        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
-        self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+    # def predict(self, data):
+    #     fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
+    #     breakpoint()
+    #     self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+    #     self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
 
-        assert()
-        pred_multi_controls = data['gt_control'].cuda()
-        for i in range(3):
-            if self.cfg.feature_encoder == 'bev':
-                pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
-            elif self.cfg.feature_encoder == 'conet':
-                pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
-            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-        return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
+    #     assert()
+    #     pred_multi_controls = data['gt_control'].cuda()
+    #     for i in range(3):
+    #         if self.cfg.feature_encoder == 'bev':
+    #             pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
+    #         elif self.cfg.feature_encoder == 'conet':
+    #             pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
+    #         pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+    #     return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
 
     def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
         # import pdb; pdb.set_trace()
@@ -174,7 +179,7 @@ class ParkingModel(nn.Module):
         threeD_grid[threeD_grid==4]=1
         threeD_grid[threeD_grid==17]=2
         twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        twoD_map = twoD_map[::-1,::-1]
+        # twoD_map = twoD_map[::-1,::-1]
         # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
 

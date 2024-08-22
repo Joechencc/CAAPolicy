@@ -51,6 +51,7 @@ class ControlCONet(nn.Module):
         tgt_mask, tgt_padding_mask = self.create_mask(tgt)
 
         tgt_embedding = self.embedding(tgt)
+
         tgt_embedding = self.pos_drop(tgt_embedding + self.pos_embed)
 
         pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)

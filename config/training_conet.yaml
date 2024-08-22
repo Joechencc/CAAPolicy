@@ -13,8 +13,8 @@ parking_model:
 
   training_map: "Town04_Opt"
   validation_map: "Town04_Opt_Val"
-  future_frame_nums: 4
-  hist_frame_nums: 10
+  future_frame_nums: 0
+  hist_frame_nums: 0
   token_nums: 204
   image_crop: 256
 
@@ -131,7 +131,7 @@ parking_model:
   seg_classes: 3
   seg_classes_conet: 18
   seg_vehicle_weights: [1.0, 2.0, 2.0]
-  seg_conet_vehicle_weights: [1.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
+  seg_conet_vehicle_weights: [1.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0]
 
   # transformer encoder
   tf_en_dim: 258
