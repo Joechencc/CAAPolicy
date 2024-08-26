@@ -423,17 +423,17 @@ class World(object):
         #lidar
         self._lidar_config = {
             'lidar_01': {
-                'x': -10.0, 'y': -10.0, 'z': 10,
+                'x': -20.0, 'y': -20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
 
                 'horizontal_fov': 360,
-                'upper_fov':0,
+                'upper_fov': 0,
                 'lower_fov': -90,
             },
             'lidar_02': {
-                'x': -10.0, 'y': 10.0, 'z': 10,
+                'x': -20.0, 'y': 20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -443,7 +443,7 @@ class World(object):
                 'lower_fov': -90,
             },
             'lidar_03': {
-                'x': 10.0, 'y': -10.0, 'z': 10,
+                'x': 20.0, 'y': -20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -453,7 +453,7 @@ class World(object):
                 'lower_fov': -90,
             },
             'lidar_04': {
-                'x': 10.0, 'y': 10.0, 'z': 10,
+                'x': 20.0, 'y': 20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -462,7 +462,16 @@ class World(object):
                 'upper_fov': 0,
                 'lower_fov': -90,
             },
+            'lidar_05': {
+                'x': 0.0, 'y': 0.0, 'z': 10,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'channels': 160, 'range': 50, 'points_per_second': 1000000,
+                'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
 
+                'horizontal_fov': 360,
+                'upper_fov': 0,
+                'lower_fov': -90,
+            }
         }
 
         for key, value in self._lidar_config.items():

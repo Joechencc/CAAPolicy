@@ -26,7 +26,7 @@ class NetworkEvaluator:
     def __init__(self, carla_world, args):
         self._lidar_config = {
             'lidar_01': {
-                'x': -10.0, 'y': -10.0, 'z': 10,
+                'x': -20.0, 'y': -20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -36,7 +36,7 @@ class NetworkEvaluator:
                 'lower_fov': -90,
             },
             'lidar_02': {
-                'x': -10.0, 'y': 10.0, 'z': 10,
+                'x': -20.0, 'y': 20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -46,7 +46,7 @@ class NetworkEvaluator:
                 'lower_fov': -90,
             },
             'lidar_03': {
-                'x': 10.0, 'y': -10.0, 'z': 10,
+                'x': 20.0, 'y': -20.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -56,7 +56,17 @@ class NetworkEvaluator:
                 'lower_fov': -90,
             },
             'lidar_04': {
-                'x': 10.0, 'y': 10.0, 'z': 10,
+                'x': 20.0, 'y': 20.0, 'z': 10,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'channels': 160, 'range': 50, 'points_per_second': 1000000,
+                'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
+
+                'horizontal_fov': 360,
+                'upper_fov': 0,
+                'lower_fov': -90,
+            },
+            'lidar_05': {
+                'x': 0.0, 'y': 0.0, 'z': 10,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'channels': 160, 'range': 50, 'points_per_second': 1000000,
                 'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
@@ -380,19 +390,21 @@ class NetworkEvaluator:
         speed = (3.6 * math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2))
 
         # find the closest goal
-        closest_goal = [0.0, 0.0,0.0]
+        closest_goal = [0.0, 0.0,0.0,0,0]
         self._x_diff_to_goal = sys.float_info.max
         self._y_diff_to_goal = sys.float_info.max
         self._distance_diff_to_goal = sys.float_info.max
         self._orientation_diff_to_goal = min(abs(r.yaw), 180 - abs(r.yaw))
         for parking_goal in self._world.all_parking_goals:
             if t.distance(parking_goal) < self._distance_diff_to_goal:
+                breakpoint()
                 self._distance_diff_to_goal = t.distance(parking_goal)
                 self._x_diff_to_goal = abs(t.x - parking_goal.x)
                 self._y_diff_to_goal = abs(t.y - parking_goal.y)
                 closest_goal[0] = parking_goal.x
                 closest_goal[1] = parking_goal.y
-                closest_goal[2] = r.yaw
+                closest_goal[2] = t.z
+                closest_goal[3] = r.yaw
         # check stop
         is_stop = (c.throttle == 0.0) and (speed < 1e-3) and c.reverse
         if not is_stop:
@@ -661,7 +673,8 @@ class NetworkEvaluator:
         with open(measurements_file, 'w') as f:
             data = {'x': parking_goal[0],
                     'y': parking_goal[1],
-                    'yaw': parking_goal[2]
+                    'z': parking_goal[2],
+                    'yaw': parking_goal[3]
                     }
             json.dump(data, f, indent=4)
 
@@ -695,7 +708,7 @@ class NetworkEvaluator:
                 # Process and merge point clouds
                 merged_point_cloud = transform_and_merge_point_clouds(tmp_point_clouds, tmp_specs)
                 # Save voxelized version of the merged point cloud
-                voxel_file_path = voxel_path / (ply_file.stem + ".ply")
+                voxel_file_path = voxel_path / ply_file.stem
                 voxelization_from_np_save(merged_point_cloud, str(voxel_file_path))
 
         return 0
