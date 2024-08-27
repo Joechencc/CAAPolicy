@@ -77,11 +77,11 @@ def main():
     vehicle.set_autopilot(True)
     print('Created %s' % vehicle.type_id)
     camera, lidar = attach_sensors_to_vehicle(world, vehicle)
-    setup_sensor_callbacks(camera, lidar)  # 直接设置回调函数
+    setup_sensor_callbacks(camera, lidar)
 
     try:
         while True:
-            update_spectator_to_vehicle(world, vehicle)  # 持续更新观察者位置
+            update_spectator_to_vehicle(world, vehicle)
             time.sleep(0.05)
     except KeyboardInterrupt:
         print('\nSimulation stopped by user.')

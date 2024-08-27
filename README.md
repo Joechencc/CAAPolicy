@@ -17,8 +17,7 @@ train using 6 camera dataset:
 python pl_train.py
 ```
 
-# axis
-## carla
-## conet
-![img_1.png](img_1.png)
-![img2.png](img2.png)
+# To Do List
+* dataset specs, justify my dataset
+* more dynamic cars
+* remove the ego motion and target(?) from feature fusion
