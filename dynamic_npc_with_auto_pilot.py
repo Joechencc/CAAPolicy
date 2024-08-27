@@ -1,5 +1,3 @@
-from tornado.gen import sleep
-
 import carla
 import random
 import pygame
@@ -10,6 +8,24 @@ def init_pygame():
     size = (200, 200)
     pygame.display.set_mode(size)
 
+
+def configure_traffic_manager(client, global_distance=2.0, global_sensitivity=1.0):
+    """
+    Configure the traffic manager settings for vehicle behavior in the simulation.
+
+    :param client: Carla client object.
+    :param global_distance: Global safe distance to leading vehicle.
+    :param global_sensitivity: Global driving sensitivity.
+    """
+    # 获取交通管理器实例，默认端口8000
+    traffic_manager = client.get_trafficmanager(8000)
+
+    # 设置全局车辆间的安全距离
+    traffic_manager.set_global_distance_to_leading_vehicle(global_distance)
+
+    # 设置驾驶敏感度（0.0 = 最不敏感，1.0 = 最敏感）
+    traffic_manager.global_percentage_speed_difference(global_sensitivity)
+    return traffic_manager
 def update_spectator_to_vehicle(world, vehicle, offset=carla.Location(x=-8, z=5)):
     spectator = world.get_spectator()
     transform = vehicle.get_transform()
@@ -33,18 +49,20 @@ def try_spawn_vehicle(world, blueprint, spawn_point, retries=5):
 def main():
     init_pygame()
 
-    num_NPC = 10
+    num_NPC = 30
     proximity_range = 200
-    min_npc_distance = 40  # Minimum distance between NPCs
+    min_npc_distance = 10
     client = carla.Client('localhost', 2000)
     client.set_timeout(10.0)
+    tm = configure_traffic_manager(client)
     world = client.get_world()
     blueprint_library = world.get_blueprint_library()
 
     all_vehicle_blueprints = list(blueprint_library.filter('vehicle.*'))
     random.shuffle(all_vehicle_blueprints)
-
     car_bp = blueprint_library.find('vehicle.tesla.model3')
+
+    all_vehicles = []
     if not car_bp:
         print("Car blueprint 'vehicle.tesla.model3' not found.")
         pygame.quit()
@@ -56,11 +74,10 @@ def main():
         print("Failed to spawn main vehicle.")
         pygame.quit()
         return
-
-    vehicle.set_autopilot(True)
+    all_vehicles.append(vehicle)
     print('Created %s' % vehicle.type_id)
 
-    npc_positions = []  # List to store positions of spawned NPCs
+    npc_positions = []
     sum = 0
     while sum < num_NPC:
         nearby_spawn_points = [
@@ -78,8 +95,7 @@ def main():
             npc_bp = random.choice(all_vehicle_blueprints)
             npc_vehicle = try_spawn_vehicle(world, npc_bp, npc_spawn_point)
             if npc_vehicle:
-                npc_vehicle.set_autopilot(True)
-                sleep(1)
+                all_vehicles.append(npc_vehicle)
                 npc_positions.append(npc_vehicle.get_location())
                 sum += 1
                 print('Spawned NPC %s at %s' % (npc_vehicle.type_id, npc_spawn_point.location))
@@ -89,6 +105,9 @@ def main():
             print('No suitable spawn points available for NPCs')
 
     tracking_enabled = False
+    for v in all_vehicles:
+        v.set_autopilot(True, tm.get_port())
+    print("Start driving！！！")
     try:
         while True:
             if check_for_h_key():
