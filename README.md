@@ -19,5 +19,5 @@ python pl_train.py
 
 # To Do List
 * dataset specs, justify my dataset
-* more dynamic cars
 * remove the ego motion and target(?) from feature fusion
+* save data from sensors
