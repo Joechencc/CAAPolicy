@@ -20,4 +20,4 @@ python pl_train.py
 # To Do List
 * dataset specs, justify my dataset
 * remove the ego motion and target(?) from feature fusion
-* save data from sensors, camera, ego measures and stuff
+* save data for ego measures and stuff

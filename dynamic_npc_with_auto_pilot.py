@@ -23,12 +23,6 @@ def save_unit_data(sensor_data_frame,cur_save_path,ticks,lidar_specs):
     cur_save_path = Path(cur_save_path)  # 确保 cur_save_path 是 Path 对象
 
     for sensor in data_frame.keys():
-        # if sensor.startswith('rgb'):
-        #     # _, image = self.image_process(self.target_parking_goal, cam_id=sensor, image=data_frame[sensor])
-        #     # image = Image.fromarray(image)
-        #     # image.save(str(cur_save_path / sensor / ('%04d.png' % index)))
-        #     data_frame[sensor].save_to_disk(
-        #         str(cur_save_path / sensor / ('%04d.png' % index)))
         if sensor.startswith('depth') and not sensor.startswith("depth_e2e"):
             data_frame[sensor].save_to_disk(
                 str(cur_save_path / sensor / (f"{ticks:04}.png")))
@@ -43,6 +37,24 @@ def save_unit_data(sensor_data_frame,cur_save_path,ticks,lidar_specs):
 
 def sensor_callback(sensor_data, sensor_queue, sensor_name):
     sensor_queue.put((sensor_data, sensor_name))
+def spawn_camera(world,vehicle,camera_id,camera_specs,sensor_list,sensor_queue):
+    blueprint_library = world.get_blueprint_library()
+    sensor_bp = blueprint_library.find(camera_specs["type"])
+    camera_location = carla.Location(x=camera_specs['x'], y=camera_specs['y'], z=camera_specs['z'])
+    camera_rotation = carla.Rotation(pitch=camera_specs['pitch'], roll=camera_specs['roll'], yaw=camera_specs['yaw'])
+    camera_transform = carla.Transform(camera_location, camera_rotation)
+
+    if "fov" in camera_specs and camera_specs["fov"] is not None:
+        sensor_bp.set_attribute("fov", str(camera_specs["fov"]))
+    if "width" in camera_specs and camera_specs["width"] is not None:
+        sensor_bp.set_attribute('image_size_x', str(camera_specs["width"]))
+    if "height" in camera_specs and camera_specs["height"] is not None:
+        sensor_bp.set_attribute('image_size_y', str(camera_specs["height"]))
+    sensor = world.spawn_actor(sensor_bp, camera_transform, attach_to=vehicle,
+                              attachment_type=carla.AttachmentType.Rigid)
+
+    sensor.listen(lambda data: sensor_callback(data, sensor_queue, camera_id))
+    sensor_list.append(sensor)
 def spawn_semantic_lidar(world,vehicle,lidar_id,lidar_specs,sensor_list,sensor_queue):
     blueprint_library = world.get_blueprint_library()
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
@@ -64,8 +76,7 @@ def spawn_semantic_lidar(world,vehicle,lidar_id,lidar_specs,sensor_list,sensor_q
     lidar.listen(lambda data: sensor_callback(data, sensor_queue, lidar_id))
     sensor_list.append(lidar)
 
-def process_sensor_data(data):
-    print(f"处理了数据：{data.frame}")
+
 def configure_traffic_manager(client, global_distance=2.0, global_sensitivity=1.0):
     """
     Configure the traffic manager settings for vehicle behavior in the simulation.
@@ -116,20 +127,13 @@ def main():
         sun_altitude_angle=70.0  # 太阳的高度角
     )
     client = carla.Client('localhost', 2000)
-    client.set_timeout(10.0)
+    client.set_timeout(100.0)
     tm = configure_traffic_manager(client)
     world = client.load_world(map)
     world.set_weather(weather)
     traffic_lights = world.get_actors().filter('traffic.traffic_light')
 
-    # set all traffic lights green
-    for traffic_light in traffic_lights:
-        traffic_light.set_state(carla.TrafficLightState.Green)
-        traffic_light.freeze(True)
-    sensor_list = []
-    sensor_queue = Queue()
-    batch_sensor_data = []
-    lidar_specs = {}
+    #################  spawn npc and ego ########
     blueprint_library = world.get_blueprint_library()
 
     all_vehicle_blueprints = list(blueprint_library.filter('vehicle.*'))
@@ -143,31 +147,20 @@ def main():
         return
 
     spawn_point = random.choice(world.get_map().get_spawn_points())
-    vehicle = try_spawn_vehicle(world, car_bp, spawn_point)
-    if not vehicle:
+    ego_vehicle = try_spawn_vehicle(world, car_bp, spawn_point)
+    if not ego_vehicle:
         print("Failed to spawn main vehicle.")
         pygame.quit()
         return
-    all_vehicles.append(vehicle)
-    print('Created %s' % vehicle.type_id)
-    ################# setup sensors ############
-    sensor_data_frame = {}
-    with open('sensor_setup.yaml', 'r') as file:
-        data = yaml.safe_load(file)
-
-        cam_spec = data['cam_specs']
-        lidar_specs = data['lidar_specs']
-
-        for key, value in lidar_specs.items():
-            spawn_semantic_lidar(world,vehicle,key,value,sensor_list,sensor_queue)
-
-    #################  spawn npc ########
+    all_vehicles.append(ego_vehicle)
+    print('Created %s' % ego_vehicle.type_id)
     npc_positions = []
     sum = 0
     while sum < num_NPC:
         nearby_spawn_points = [
             sp for sp in world.get_map().get_spawn_points()
-            if sp.location.distance(vehicle.get_location()) <= proximity_range and sp.location.distance(vehicle.get_location()) > 10
+            if sp.location.distance(ego_vehicle.get_location()) <= proximity_range and sp.location.distance(
+                ego_vehicle.get_location()) > 10
         ]
 
         valid_spawn_points = [
@@ -189,15 +182,39 @@ def main():
         else:
             print('No suitable spawn points available for NPCs')
 
-    tracking_enabled = True
     for v in all_vehicles:
+        print("set!")
         v.set_autopilot(True, tm.get_port())
-
     settings = world.get_settings()
     settings.synchronous_mode = True
     settings.fixed_delta_seconds = 0.1
     world.apply_settings(settings)
+
+    # set all traffic lights green
+    for traffic_light in traffic_lights:
+        traffic_light.set_state(carla.TrafficLightState.Green)
+        traffic_light.freeze(True)
+    sensor_list = []
+    sensor_queue = Queue()
+    batch_sensor_data = []
+    lidar_specs = {}
+
+    ################# setup sensors ############
+    sensor_data_frame = {}
+    with open('sensor_setup.yaml', 'r') as file:
+        data = yaml.safe_load(file)
+
+        cam_specs = data['cam_specs']
+        lidar_specs = data['lidar_specs']
+
+        for key, value in lidar_specs.items():
+            spawn_semantic_lidar(world,ego_vehicle,key,value,sensor_list,sensor_queue)
+        for key, value in cam_specs.items():
+            spawn_camera(world,ego_vehicle,key,value,sensor_list,sensor_queue)
+
+
     ticks = 0
+    tracking_enabled = True
     try:
         print("Start driving！！！")
         now = datetime.now()
@@ -216,11 +233,11 @@ def main():
 
 
             if tracking_enabled:
-                update_spectator_to_vehicle(world, vehicle)
+                update_spectator_to_vehicle(world, ego_vehicle)
             if ticks%5 == 0: # 2hz as NuScenes setup
                 print("should save data now!!!")
                 save_unit_data(sensor_data_frame,"./output"+ "/" + formatted_time + "/task0",ticks,lidar_specs)
-                # for sensor in sensor_list:
+
 
     except KeyboardInterrupt:
         print('\nSimulation stopped by user.')
