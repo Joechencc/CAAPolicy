@@ -1,3 +1,6 @@
+import json
+import math
+import os
 from pathlib import Path
 from queue import Queue
 from datetime import datetime
@@ -16,11 +19,11 @@ def init_pygame():
     pygame.init()
     size = (200, 200)
     pygame.display.set_mode(size)
-def save_unit_data(sensor_data_frame,cur_save_path,ticks,lidar_specs):
+def save_unit_data(sensor_data_frame,cur_save_path,ticks,lidar_specs,ego_vehicle):
 
     data_frame = sensor_data_frame
     ticks = int(ticks/5-1)
-    cur_save_path = Path(cur_save_path)  # 确保 cur_save_path 是 Path 对象
+    cur_save_path = Path(cur_save_path)
 
     for sensor in data_frame.keys():
         if sensor.startswith('depth') and not sensor.startswith("depth_e2e"):
@@ -33,7 +36,44 @@ def save_unit_data(sensor_data_frame,cur_save_path,ticks,lidar_specs):
             data_frame[sensor].save_to_disk(
                 str(cur_save_path / sensor / (f"{ticks:04}.ply")))
     align_from_path_save(cur_save_path,lidar_specs,ticks )
+    # save measurements
+    imu_data = data_frame['imu']
+    gnss_data = data_frame['gnss']
+    vehicle_transform = ego_vehicle.get_transform()
+    vehicle_velocity = ego_vehicle.get_velocity()
+    vehicle_control = ego_vehicle.get_control()
 
+    data = {
+        'x': vehicle_transform.location.x,
+        'y': vehicle_transform.location.y,
+        'z': vehicle_transform.location.z,
+        'pitch': vehicle_transform.rotation.pitch,
+        'yaw': vehicle_transform.rotation.yaw,
+        'roll': vehicle_transform.rotation.roll,
+        'speed': (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)),
+        'Throttle': vehicle_control.throttle,
+        'Steer': vehicle_control.steer,
+        'Brake': vehicle_control.brake,
+        'Reverse': vehicle_control.reverse,
+        'Hand brake': vehicle_control.hand_brake,
+        'Manual': vehicle_control.manual_gear_shift,
+        'Gear': {-1: 'R', 0: 'N'}.get(vehicle_control.gear, vehicle_control.gear),
+        'acc_x': imu_data.accelerometer.x,
+        'acc_y': imu_data.accelerometer.y,
+        'acc_z': imu_data.accelerometer.z,
+        'gyr_x': imu_data.gyroscope.x,
+        'gyr_y': imu_data.gyroscope.y,
+        'gyr_z': imu_data.gyroscope.z,
+        'compass': imu_data.compass,
+        'lat': gnss_data.latitude,
+        'lon': gnss_data.longitude
+    }
+
+    if not os.path.exists(cur_save_path / 'measurements'):
+        os.makedirs(cur_save_path / 'measurements')
+    measurements_file = cur_save_path / 'measurements' / f"{ticks:04}.json"
+    with open(measurements_file, 'w') as f:
+        json.dump(data, f, indent=4)
 
 def sensor_callback(sensor_data, sensor_queue, sensor_name):
     sensor_queue.put((sensor_data, sensor_name))
@@ -211,7 +251,18 @@ def main():
             spawn_semantic_lidar(world,ego_vehicle,key,value,sensor_list,sensor_queue)
         for key, value in cam_specs.items():
             spawn_camera(world,ego_vehicle,key,value,sensor_list,sensor_queue)
+        bp_gnss = world.get_blueprint_library().find('sensor.other.gnss')
+        gnss = world.spawn_actor(bp_gnss, carla.Transform(), attach_to=ego_vehicle,
+                                       attachment_type=carla.AttachmentType.Rigid)
+        gnss.listen(lambda data: sensor_callback(data, sensor_queue, "gnss"))
+        sensor_list.append(gnss)
 
+        # imu
+        bp_imu = world.get_blueprint_library().find('sensor.other.imu')
+        imu = world.spawn_actor(bp_imu, carla.Transform(), attach_to=ego_vehicle,
+                                      attachment_type=carla.AttachmentType.Rigid)
+        imu.listen(lambda data: sensor_callback(data, sensor_queue, "imu"))
+        sensor_list.append(imu)
 
     ticks = 0
     tracking_enabled = True
@@ -236,7 +287,7 @@ def main():
                 update_spectator_to_vehicle(world, ego_vehicle)
             if ticks%5 == 0: # 2hz as NuScenes setup
                 print("should save data now!!!")
-                save_unit_data(sensor_data_frame,"./output"+ "/" + formatted_time + "/task0",ticks,lidar_specs)
+                save_unit_data(sensor_data_frame,"./output"+ "/" + formatted_time + "/task0",ticks,lidar_specs,ego_vehicle)
 
 
     except KeyboardInterrupt:
