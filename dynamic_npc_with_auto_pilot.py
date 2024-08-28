@@ -1,17 +1,49 @@
+from pathlib import Path
+from queue import Queue
+from datetime import datetime
 import yaml
+
 
 import carla
 import random
 import pygame
 import time
 
+from utils.ply2voxel import voxelization_save, align_from_path_save
+
+
 def init_pygame():
     pygame.init()
     size = (200, 200)
     pygame.display.set_mode(size)
+def save_unit_data(sensor_data_frame,cur_save_path,ticks,lidar_specs):
+
+    data_frame = sensor_data_frame
+    ticks = int(ticks/5-1)
+    cur_save_path = Path(cur_save_path)  # 确保 cur_save_path 是 Path 对象
+
+    for sensor in data_frame.keys():
+        # if sensor.startswith('rgb'):
+        #     # _, image = self.image_process(self.target_parking_goal, cam_id=sensor, image=data_frame[sensor])
+        #     # image = Image.fromarray(image)
+        #     # image.save(str(cur_save_path / sensor / ('%04d.png' % index)))
+        #     data_frame[sensor].save_to_disk(
+        #         str(cur_save_path / sensor / ('%04d.png' % index)))
+        if sensor.startswith('depth') and not sensor.startswith("depth_e2e"):
+            data_frame[sensor].save_to_disk(
+                str(cur_save_path / sensor / (f"{ticks:04}.png")))
+        if sensor.startswith('camera'):
+            data_frame[sensor].save_to_disk(
+                str(cur_save_path / sensor / (f"{ticks:04}.png")))
+        elif sensor.startswith('lidar'):
+            data_frame[sensor].save_to_disk(
+                str(cur_save_path / sensor / (f"{ticks:04}.ply")))
+    align_from_path_save(cur_save_path,lidar_specs,ticks )
+
+
 def sensor_callback(sensor_data, sensor_queue, sensor_name):
-    sensor_queue.append((sensor_data, sensor_name))
-def spawn_semantic_lidar(world,vehicle,lidar_id,lidar_specs,sensor_list):
+    sensor_queue.put((sensor_data, sensor_name))
+def spawn_semantic_lidar(world,vehicle,lidar_id,lidar_specs,sensor_list,sensor_queue):
     blueprint_library = world.get_blueprint_library()
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
     lidar_bp.set_attribute('rotation_frequency', str(lidar_specs['rotation_frequency']))
@@ -29,6 +61,7 @@ def spawn_semantic_lidar(world,vehicle,lidar_id,lidar_specs,sensor_list):
     lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=vehicle,
                                        attachment_type=carla.AttachmentType.Rigid)
 
+    lidar.listen(lambda data: sensor_callback(data, sensor_queue, lidar_id))
     sensor_list.append(lidar)
 
 def process_sensor_data(data):
@@ -94,7 +127,9 @@ def main():
         traffic_light.set_state(carla.TrafficLightState.Green)
         traffic_light.freeze(True)
     sensor_list = []
-
+    sensor_queue = Queue()
+    batch_sensor_data = []
+    lidar_specs = {}
     blueprint_library = world.get_blueprint_library()
 
     all_vehicle_blueprints = list(blueprint_library.filter('vehicle.*'))
@@ -116,14 +151,15 @@ def main():
     all_vehicles.append(vehicle)
     print('Created %s' % vehicle.type_id)
     ################# setup sensors ############
+    sensor_data_frame = {}
     with open('sensor_setup.yaml', 'r') as file:
         data = yaml.safe_load(file)
 
         cam_spec = data['cam_specs']
-        lidar_spec = data['lidar_specs']
+        lidar_specs = data['lidar_specs']
 
-        for key, value in lidar_spec.items():
-            spawn_semantic_lidar(world,vehicle,key,value,sensor_list)
+        for key, value in lidar_specs.items():
+            spawn_semantic_lidar(world,vehicle,key,value,sensor_list,sensor_queue)
 
     #################  spawn npc ########
     npc_positions = []
@@ -156,15 +192,22 @@ def main():
     tracking_enabled = True
     for v in all_vehicles:
         v.set_autopilot(True, tm.get_port())
-    print("Start driving！！！")
+
     settings = world.get_settings()
     settings.synchronous_mode = True
     settings.fixed_delta_seconds = 0.1
     world.apply_settings(settings)
     ticks = 0
     try:
+        print("Start driving！！！")
+        now = datetime.now()
+        formatted_time = now.strftime('%Y_%m_%d_%H_%M_%S')
         while ticks<200:
+
             world.tick()
+            for i in range(0, len(sensor_list)):
+                s_data = sensor_queue.get(block=True, timeout=1.0)
+                sensor_data_frame[s_data[1]] = s_data[0]
             ticks += 1
             print("ticked once!")
             if check_for_h_key():
@@ -176,6 +219,7 @@ def main():
                 update_spectator_to_vehicle(world, vehicle)
             if ticks%5 == 0: # 2hz as NuScenes setup
                 print("should save data now!!!")
+                save_unit_data(sensor_data_frame,"./output"+ "/" + formatted_time + "/task0",ticks,lidar_specs)
                 # for sensor in sensor_list:
 
     except KeyboardInterrupt:
@@ -185,6 +229,8 @@ def main():
         for actor in world.get_actors():
             if actor.type_id.startswith('vehicle.'):
                 actor.destroy()
+        for sensor in sensor_list:
+            sensor.destroy()
         pygame.quit()
 
 if __name__ == '__main__':
