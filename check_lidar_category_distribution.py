@@ -2,7 +2,7 @@ import os
 import numpy as np
 from collections import defaultdict
 
-from utils.convertSemanticLabel import convert_semantic_label_vectorized
+from utils.convertSemanticLabel import  convert_carla2nuScenes, mapping
 
 categories = {
     0: "noise",
@@ -30,7 +30,11 @@ def read_ply_file(file_path):
     end_header = next(i for i, line in enumerate(lines) if "end_header" in line)
     data_lines = lines[end_header + 1:]
     data = np.array([list(map(float, line.split())) for line in data_lines])
-    return data[:, -1]  # Assuming labels are the last column
+    data =  data[:, -1]
+    unique_elements, counts = np.unique(data, return_counts=True)
+    labels_dict = dict(zip(unique_elements, counts))
+    return labels_dict
+
 
 def scan_directory(base_dir):
     category_distribution = defaultdict(int)
@@ -39,11 +43,10 @@ def scan_directory(base_dir):
             for file in files:
                 if file.endswith('.ply'):
                     file_path = os.path.join(root, file)
-                    labels = read_ply_file(file_path)
-                    labels = convert_semantic_label_vectorized(labels)  # Vectorized label conversion
-                    unique, counts = np.unique(labels, return_counts=True)
-                    for label, count in zip(unique, counts):
-                        category_distribution[int(label)] += count
+                    labels_dict = read_ply_file(file_path)
+                    for key in labels_dict.keys():
+                        category_distribution[key] += labels_dict[key]
+    category_distribution = convert_carla2nuScenes(category_distribution, mapping)
     return category_distribution
 
 
