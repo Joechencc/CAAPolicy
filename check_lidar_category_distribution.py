@@ -46,10 +46,6 @@ def scan_directory(base_dir):
                         category_distribution[int(label)] += count
     return category_distribution
 
-# Assuming convert_semantic_label is vectorizable
-def convert_semantic_label_vectorized(labels):
-    # Modify this function to handle numpy arrays appropriately
-    return labels - 1  # Example transformation, adjust as necessary
 
 if __name__ == "__main__":
     base_dir = './output'
