@@ -1,42 +1,67 @@
 # Dataset Description
 ## Overall Specs
-| Description          | NuScenes                                                                       | Ours                                                                                                         |
-|----------------------|--------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
-| Frequency            | 2hz                                                                            | 2hz                                                                                                          |
-| Citys                | Boston, Singapore                                                              | 6 towns in Carla                                                                                             |
-| Scenes               | 1000                                                                           | should be 1000, 16mins for each, 10 days on Bosch Machine <br/>If manage to do in parallel, should be 5 days |
-| Length of each frame | 20s                                                                            | 20s                                                                                                          |
-| Semantic classes     | 32->16                                                                         | 28->16                                                                                                       |
-| camera images        | full dataset 1.4M<br/>among them 1000 * 6 * 40 should be consistent with lidar | 1000 * 6 * 40 = 240000                                                                                       |
-| Lidar point cloud    | 40000                                                                          | 1000 * 1 * 40 = 40000                                                                                        | 
-| Annotated Points     | 1.4 billion                                                                    |                                                                                                              |
+| Description          | NuScenes-LidarSeg                                                                                             | Ours                                                                                                                                            |
+|----------------------|---------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| Frequency            | 2hz                                                                                                           | 2hz                                                                                                                                             |
+| City                 | Boston, Singapore, 4 Towns(Boston Seaport,Singapore Queenstown,Singapore One North,Singapore Holland Village) | 6 towns in Carla                                                                                                                                |
+| Scenes               | 1000                                                                                                          | should be 1000, 16mins for each, 10 days on Bosch Machine <br/>If manage to do in parallel, should be 5 days(depends on the system performance) |
+| Length of each Scene | 20s                                                                                                           | 20s                                                                                                                                             |
+| Semantic classes     | 32->16                                                                                                        | 28->16                                                                                                                                          |
+| camera images        | full dataset 1.4M<br/>among them 1000 * 6 * 40 should be consistent with lidar                                | 1000 * 6 * 40 = 240000                                                                                                                          |
+| Lidar point cloud    | 40000                                                                                                         | 1000 * 1 * 40 = 40000                                                                                                                           | 
+| Annotated Points     | 1.4 billion, 1.4 million per scene                                                                            | much denser, 12 million per scene<br/>but after convert to voxel for GT, should not make any difference                                         |
 
 ## Distribution
-| Category                                     | nuScenes cuboids | Cuboid ratio | Lidarseg points | Point ratio |
-|----------------------------------------------|------------------|--------------|-----------------|-------------|
-| human.pedestrian.adult                       | 208,240          | 17.86%       | 2,156,470       | 2.73%       |
-| movable_object.barrier                       | 152,087          | 13.04%       | 9,305,106       | 11.79%      |
-| vehicle.bus.rigid                            | 14,501           | 1.24%        | 4,247,297       | 5.38%       |
-| vehicle.car                                  | 493,322          | 42.30%       | 38,104,219      | 48.27%      |
-| vehicle.construction                         | 14,671           | 1.26%        | 1,514,414       | 1.92%       |
-| vehicle.trailer                              | 24,860           | 2.13%        | 4,907,511       | 6.22%       |
-| vehicle.truck                                | 88,519           | 7.59%        | 15,841,384      | 20.07%      |
+### nuScenes
+| Category                  | Lidar Points | Percentage |
+|---------------------------|--------------|------------|
+| human.pedestrian.adult    | 2,156,470    | 0.1841%    |
+| movable_object.barrier    | 9,305,106    | 0.7944%    |
+| vehicle.bus.rigid         | 4,247,297    | 0.3626%    |
+| vehicle.car               | 38,104,219   | 3.2530%    |
+| vehicle.construction      | 1,514,414    | 0.1293%    |
+| vehicle.trailer           | 4,907,511    | 0.4190%    |
+| vehicle.truck             | 15,841,384   | 1.3524%    |
+| flat.driveable_surface    | 316,958,899  | 27.0592%   |
+| flat.sidewalk             | 70,197,461   | 5.9929%    |
+| flat.terrain              | 70,289,730   | 6.0007%    |
+| static.manmade            | 178,178,063  | 15.2113%   |
+| static.vegetation         | 122,581,273  | 10.4649%   |
+| vehicle.ego               | 337,070,621  | 28.7762%   |
 
-| Category                                     | nuScenes cuboids | Cuboid ratio | Lidarseg points | Point ratio |
-|----------------------------------------------|------------------|--------------|-----------------|-------------|
-| flat.driveable_surface                       | -                | -            | 316,958,899     | 28.64%      |
-| flat.sidewalk                                | -                | -            | 70,197,461      | 6.34%       |
-| flat.terrain                                 | -                | -            | 70,289,730      | 6.35%       |
-| static.manmade                               | -                | -            | 178,178,063     | 16.10%      |
-| static.vegetation                            | -                | -            | 122,581,273     | 11.08%      |
-| vehicle.ego                                  | -                | -            | 337,070,621     | 30.46%      |
+### Our(in 8 trajectory)
+| Category          | Count     | Percentage |
+|-------------------|-----------|------------|
+| barrier           | 59142528  | 13.1454%   |
+| bicycle           | 1540      | 0.0003%    |
+| bus               | 60740     | 0.0135%    |
+| car               | 14052539  | 3.1234%    |
+| driveable_surface | 104038626 | 23.1243%   |
+| manmade           | 130729131 | 29.0567%   |
+| motorcycle        | 28965     | 0.0064%    |
+| other_flat        | 17790610  | 3.9543%    |
+| sidewalk          | 69946332  | 15.5467%   |
+| terrain           | 13082662  | 2.9078%    |
+| truck             | 5255302   | 1.1681%    |
+| vegetation        | 35781960  | 7.9531%    |
+| **Total**         | 449910935 | 100.0000%  |
+
+barrier: 59142528
+bicycle: 1540
+bus: 60740
+car: 14052539
+driveable_surface: 104038626
+manmade: 130729131
+motorcycle: 28965
+other_flat: 17790610
+sidewalk: 69946332
+terrain: 13082662
+truck: 5255302
+vegetation: 35781960
 
 
 
-
-
-
-
+# ****************************************************************
 * we collected 1000 driving scenes in Boston and Singapore
 * the scenes of 20 second length are manually selected to show a diverse and interesting set of driving maneuvers
 * we annotate 23 object classes with accurate 3D bounding boxes at 2Hz
@@ -83,7 +108,24 @@
 | noise                                        | -                | -            | 2,061,156       | 0.19%       |
 | **Total**                                    | -                | -            | 1,106,713,569   | 100.00%     |
 
+| Category                                     | nuScenes cuboids | Cuboid ratio | Lidarseg points | Point ratio |
+|----------------------------------------------|------------------|--------------|-----------------|-------------|
+| human.pedestrian.adult                       | 208,240          | 17.86%       | 2,156,470       | 2.73%       |
+| movable_object.barrier                       | 152,087          | 13.04%       | 9,305,106       | 11.79%      |
+| vehicle.bus.rigid                            | 14,501           | 1.24%        | 4,247,297       | 5.38%       |
+| vehicle.car                                  | 493,322          | 42.30%       | 38,104,219      | 48.27%      |
+| vehicle.construction                         | 14,671           | 1.26%        | 1,514,414       | 1.92%       |
+| vehicle.trailer                              | 24,860           | 2.13%        | 4,907,511       | 6.22%       |
+| vehicle.truck                                | 88,519           | 7.59%        | 15,841,384      | 20.07%      |
 
+| Category                                     | nuScenes cuboids | Cuboid ratio | Lidarseg points | Point ratio |
+|----------------------------------------------|------------------|--------------|-----------------|-------------|
+| flat.driveable_surface                       | -                | -            | 316,958,899     | 28.64%      |
+| flat.sidewalk                                | -                | -            | 70,197,461      | 6.34%       |
+| flat.terrain                                 | -                | -            | 70,289,730      | 6.35%       |
+| static.manmade                               | -                | -            | 178,178,063     | 16.10%      |
+| static.vegetation                            | -                | -            | 122,581,273     | 11.08%      |
+| vehicle.ego                                  | -                | -            | 337,070,621     | 30.46%      |
 ## carla label
 | Value | Tag          | Converted color | Description                                                                                                                                                                                                                            |
 |-------|--------------|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -138,24 +180,3 @@
 | 15    | mannade           |
 | 16    | vegetation        |
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# 都需要那些数据？？？
-# 这样的路径，训练出来的目的是什么？
