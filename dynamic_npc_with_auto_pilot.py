@@ -324,6 +324,7 @@ def main(map="Town01",weather = carla.WeatherParameters(
                     sensor.destroy()
                 except Exception as e:
                     print(f"Failed to destroy sensor: {e}")
+        del client
         pygame.quit()
 
 

@@ -2,6 +2,8 @@ import os
 import numpy as np
 from collections import defaultdict
 
+from utils.convertSemanticLabel import convert_semantic_label
+
 categories = {
     0: "noise",
     1: "barrier",
@@ -45,6 +47,7 @@ def scan_directory(base_dir):
                     file_path = os.path.join(root, file)
                     labels = read_ply_file(file_path)
                     for label in labels:
+                        label = convert_semantic_label(label)
                         category_distribution[int(label)] += 1
 
     return category_distribution
