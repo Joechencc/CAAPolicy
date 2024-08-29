@@ -117,7 +117,7 @@ def spawn_semantic_lidar(world,vehicle,lidar_id,lidar_specs,sensor_list,sensor_q
     sensor_list.append(lidar)
 
 
-def configure_traffic_manager(client, global_distance=2.0, global_sensitivity=1.0):
+def configure_traffic_manager(client, global_distance=2.0, global_sensitivity=0.5):
     """
     Configure the traffic manager settings for vehicle behavior in the simulation.
 
@@ -154,17 +154,16 @@ def try_spawn_vehicle(world, blueprint, spawn_point, retries=5):
             return vehicle
     return None
 
-def main(map="Town01"):
+def main(map="Town01",weather = carla.WeatherParameters(
+        cloudiness=80.0,  # 云量
+        precipitation_deposits =70.0,  # 降水量
+        sun_altitude_angle=70.0  # 太阳的高度角
+    )):
     init_pygame()
     ############ setup world  ###############################
     num_NPC = 100
     proximity_range = 300
     min_npc_distance = 0
-    weather = carla.WeatherParameters(
-        cloudiness=80.0,  # 云量
-        precipitation_deposits =70.0,  # 降水量
-        sun_altitude_angle=70.0  # 太阳的高度角
-    )
     client = carla.Client('localhost', 2000)
     client.set_timeout(100.0)
     tm = configure_traffic_manager(client)
@@ -179,6 +178,10 @@ def main(map="Town01"):
     blueprint_library = world.get_blueprint_library()
 
     all_vehicle_blueprints = list(blueprint_library.filter('vehicle.*'))
+    all_truck_blueprints = list(blueprint_library.filter('vehicle.carlamotors.firetruck')) + list(
+        blueprint_library.filter('vehicle.carlamotors.european_hgv'))
+    all_vehicle_blueprints = [bp for bp in all_vehicle_blueprints if bp not in all_truck_blueprints]
+
     random.shuffle(all_vehicle_blueprints)
     car_bp = blueprint_library.find('vehicle.tesla.model3')
 
@@ -198,6 +201,9 @@ def main(map="Town01"):
     print('Created %s' % ego_vehicle.type_id)
     npc_positions = []
     sum = 0
+    truck_count = 0
+    total_NPC = num_NPC
+    failed_spawn = 0
     while sum < num_NPC:
         nearby_spawn_points = [
             sp for sp in world.get_map().get_spawn_points()
@@ -212,7 +218,14 @@ def main(map="Town01"):
 
         if valid_spawn_points:
             npc_spawn_point = random.choice(valid_spawn_points)
-            npc_bp = random.choice(all_vehicle_blueprints)
+
+
+            if truck_count / total_NPC < 0.20:
+                npc_bp = random.choice(all_truck_blueprints)
+                truck_count += 1
+            else:
+                npc_bp = random.choice(all_vehicle_blueprints)
+
             npc_vehicle = try_spawn_vehicle(world, npc_bp, npc_spawn_point)
             if npc_vehicle:
                 all_vehicles.append(npc_vehicle)
@@ -221,6 +234,9 @@ def main(map="Town01"):
                 print('Spawned NPC %s at %s' % (npc_vehicle.type_id, npc_spawn_point.location))
             else:
                 print('Failed to spawn NPC vehicle at %s' % npc_spawn_point.location)
+                failed_spawn+=1
+                if(failed_spawn >100000):
+                    break
         else:
             print('No suitable spawn points available for NPCs')
 
@@ -287,22 +303,45 @@ def main(map="Town01"):
             if ticks%5 == 0: # 2hz as NuScenes setup
                 print("should save data now!!!")
                 save_unit_data(sensor_data_frame,"./output"+ "/" + formatted_time + "/task0",ticks,lidar_specs,ego_vehicle)
+        print("finished this round!!")
 
 
     except KeyboardInterrupt:
         print('\nSimulation stopped by user.')
+    except Exception as e:
+        print(e)
     finally:
         print('Destroying actors')
-        for actor in world.get_actors():
-            if actor.type_id.startswith('vehicle.'):
-                actor.destroy()
+        for vehicle in all_vehicles:
+            vehicle.destroy()
         for sensor in sensor_list:
             sensor.destroy()
         pygame.quit()
 
+
+def random_weather():
+
+    cloudiness = random.uniform(0, 100)
+    precipitation = random.uniform(0, 100)
+    sun_altitude_angle = random.uniform(-90, 90)
+
+    weather = carla.WeatherParameters(
+        cloudiness=cloudiness,
+        precipitation=precipitation,
+        sun_altitude_angle=sun_altitude_angle
+    )
+
+    return weather
 if __name__ == '__main__':
     Towns = ["Town01_Opt", "Town02_Opt", "Town03_Opt", "Town04_Opt","Town05_Opt"]
-    for i in range(0,100):
+    successful_count = 0
+    for i in range(0,5):
         random_map = random.randint(0, 4)
-        main(Towns[random_map])
+        weather = random_weather()
+        try:
+            main(Towns[random_map],weather)
+            successful_count += 1
+        except Exception as e:
+            print(e)
 
+    print("successful count:{}".format(successful_count))
