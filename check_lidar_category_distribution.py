@@ -2,6 +2,8 @@ import os
 import numpy as np
 from collections import defaultdict
 
+from tqdm import tqdm
+
 from utils.convertSemanticLabel import  convert_carla2nuScenes, mapping
 
 categories = {
@@ -24,13 +26,14 @@ categories = {
     16: "vegetation"
 }
 
+
 def read_ply_file(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
     end_header = next(i for i, line in enumerate(lines) if "end_header" in line)
     data_lines = lines[end_header + 1:]
     data = np.array([list(map(float, line.split())) for line in data_lines])
-    data =  data[:, -1]
+    data = data[:, -1]
     unique_elements, counts = np.unique(data, return_counts=True)
     labels_dict = dict(zip(unique_elements, counts))
     return labels_dict
@@ -38,21 +41,23 @@ def read_ply_file(file_path):
 
 def scan_directory(base_dir):
     category_distribution = defaultdict(int)
+    all_files = []
     for root, dirs, files in os.walk(base_dir):
         if any(lidar in root for lidar in ["lidar_01", "lidar_02", "lidar_03", "lidar_04", "lidar_05"]):
-            for file in files:
-                if file.endswith('.ply'):
-                    file_path = os.path.join(root, file)
-                    labels_dict = read_ply_file(file_path)
-                    for key in labels_dict.keys():
-                        category_distribution[key] += labels_dict[key]
-    category_distribution = convert_carla2nuScenes(category_distribution, mapping)
-    return category_distribution
+            all_files.extend([os.path.join(root, file) for file in files if file.endswith('.ply')])
+
+    for file_path in tqdm(all_files, desc="Processing PLY files"):
+        labels_dict = read_ply_file(file_path)
+        for key, count in labels_dict.items():
+            category_distribution[key] += count
+
+    converted_distribution = convert_carla2nuScenes(category_distribution, mapping)
+    return {categories[k]: v for k, v in converted_distribution.items()}
 
 
 if __name__ == "__main__":
     base_dir = './output'
     distribution = scan_directory(base_dir)
     print(distribution)
-    for k, v in sorted(distribution.items()):
-        print(f"{categories[k]}: {v}")
+    for category, count in sorted(distribution.items()):
+        print(f"{category}: {count}")
