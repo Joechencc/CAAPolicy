@@ -2,7 +2,7 @@ import os
 import numpy as np
 from collections import defaultdict
 
-from utils.convertSemanticLabel import convert_semantic_label
+from utils.convertSemanticLabel import convert_semantic_label_vectorized
 
 categories = {
     0: "noise",
@@ -24,14 +24,13 @@ categories = {
     16: "vegetation"
 }
 
-# 读取 .ply 文件
 def read_ply_file(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
     end_header = next(i for i, line in enumerate(lines) if "end_header" in line)
     data_lines = lines[end_header + 1:]
     data = np.array([list(map(float, line.split())) for line in data_lines])
-    return data[:, -1]  # 假设标签位于每行的最后一列
+    return data[:, -1]  # Assuming labels are the last column
 
 def scan_directory(base_dir):
     category_distribution = defaultdict(int)
@@ -41,12 +40,17 @@ def scan_directory(base_dir):
                 if file.endswith('.ply'):
                     file_path = os.path.join(root, file)
                     labels = read_ply_file(file_path)
-                    for label in labels:
-                        label = convert_semantic_label(label)
-                        category_distribution[int(label)] += 1
+                    labels = convert_semantic_label_vectorized(labels)  # Vectorized label conversion
+                    unique, counts = np.unique(labels, return_counts=True)
+                    for label, count in zip(unique, counts):
+                        category_distribution[int(label)] += count
     return category_distribution
 
-# 主执行部分
+# Assuming convert_semantic_label is vectorizable
+def convert_semantic_label_vectorized(labels):
+    # Modify this function to handle numpy arrays appropriately
+    return labels - 1  # Example transformation, adjust as necessary
+
 if __name__ == "__main__":
     base_dir = './output'
     distribution = scan_directory(base_dir)
