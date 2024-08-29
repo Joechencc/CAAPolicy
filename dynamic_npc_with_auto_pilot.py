@@ -313,9 +313,17 @@ def main(map="Town01",weather = carla.WeatherParameters(
     finally:
         print('Destroying actors')
         for vehicle in all_vehicles:
-            vehicle.destroy()
+            if vehicle:
+                try:
+                    vehicle.destroy()
+                except Exception as e:
+                    print(f"Failed to destroy vehicle: {e}")
         for sensor in sensor_list:
-            sensor.destroy()
+            if sensor:
+                try:
+                    sensor.destroy()
+                except Exception as e:
+                    print(f"Failed to destroy sensor: {e}")
         pygame.quit()
 
 
