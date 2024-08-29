@@ -235,7 +235,7 @@ def main(map="Town01",weather = carla.WeatherParameters(
             else:
                 print('Failed to spawn NPC vehicle at %s' % npc_spawn_point.location)
                 failed_spawn+=1
-                if(failed_spawn >100000):
+                if(failed_spawn >1000):
                     break
         else:
             print('No suitable spawn points available for NPCs')
