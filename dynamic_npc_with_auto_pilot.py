@@ -154,13 +154,12 @@ def try_spawn_vehicle(world, blueprint, spawn_point, retries=5):
             return vehicle
     return None
 
-def main():
+def main(map="Town01"):
     init_pygame()
     ############ setup world  ###############################
-    num_NPC = 10
-    proximity_range = 200
+    num_NPC = 100
+    proximity_range = 300
     min_npc_distance = 0
-    map = "Town05"
     weather = carla.WeatherParameters(
         cloudiness=80.0,  # 云量
         precipitation_deposits =70.0,  # 降水量
@@ -203,7 +202,7 @@ def main():
         nearby_spawn_points = [
             sp for sp in world.get_map().get_spawn_points()
             if sp.location.distance(ego_vehicle.get_location()) <= proximity_range and sp.location.distance(
-                ego_vehicle.get_location()) > 10
+                ego_vehicle.get_location()) > 0
         ]
 
         valid_spawn_points = [
@@ -302,4 +301,8 @@ def main():
         pygame.quit()
 
 if __name__ == '__main__':
-    main()
+    Towns = ["Town01_Opt", "Town02_Opt", "Town03_Opt", "Town04_Opt","Town05_Opt"]
+    for i in range(0,100):
+        random_map = random.randint(0, 4)
+        main(Towns[random_map])
+
