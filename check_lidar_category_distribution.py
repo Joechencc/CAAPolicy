@@ -23,23 +23,18 @@ categories = {
     15: "manmade",
     16: "vegetation"
 }
-def read_ply_file(file_path):
 
+# 读取 .ply 文件
+def read_ply_file(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
     end_header = next(i for i, line in enumerate(lines) if "end_header" in line)
-
-
     data_lines = lines[end_header + 1:]
-
     data = np.array([list(map(float, line.split())) for line in data_lines])
-
-    return data[:, -1]
-
+    return data[:, -1]  # 假设标签位于每行的最后一列
 
 def scan_directory(base_dir):
     category_distribution = defaultdict(int)
-
     for root, dirs, files in os.walk(base_dir):
         if any(lidar in root for lidar in ["lidar_01", "lidar_02", "lidar_03", "lidar_04", "lidar_05"]):
             for file in files:
@@ -49,13 +44,12 @@ def scan_directory(base_dir):
                     for label in labels:
                         label = convert_semantic_label(label)
                         category_distribution[int(label)] += 1
-
     return category_distribution
 
-
-# Base directory containing the 'output' folder
-base_dir = './output'
-distribution = scan_directory(base_dir)
-print(distribution)
-for k, v in sorted(distribution.items()):
-    print(categories[k], v)
+# 主执行部分
+if __name__ == "__main__":
+    base_dir = './output'
+    distribution = scan_directory(base_dir)
+    print(distribution)
+    for k, v in sorted(distribution.items()):
+        print(f"{categories[k]}: {v}")

@@ -1,9 +1,39 @@
 # Dataset Description
-| Description | NuScenes | Ours |
-|-------------|----------|------|
-| Frequency   | 2hz      | 2hz  |
-| Frames      |          |      |
- | Citys|          |      |   
+## Overall Specs
+| Description          | NuScenes                                                                       | Ours                                                                                                         |
+|----------------------|--------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| Frequency            | 2hz                                                                            | 2hz                                                                                                          |
+| Citys                | Boston, Singapore                                                              | 6 towns in Carla                                                                                             |
+| Scenes               | 1000                                                                           | should be 1000, 16mins for each, 10 days on Bosch Machine <br/>If manage to do in parallel, should be 5 days |
+| Length of each frame | 20s                                                                            | 20s                                                                                                          |
+| Semantic classes     | 32->16                                                                         | 28->16                                                                                                       |
+| camera images        | full dataset 1.4M<br/>among them 1000 * 6 * 40 should be consistent with lidar | 1000 * 6 * 40 = 240000                                                                                       |
+| Lidar point cloud    | 40000                                                                          | 1000 * 1 * 40 = 40000                                                                                        | 
+| Annotated Points     | 1.4 billion                                                                    |                                                                                                              |
+
+## Distribution
+| Category                                     | nuScenes cuboids | Cuboid ratio | Lidarseg points | Point ratio |
+|----------------------------------------------|------------------|--------------|-----------------|-------------|
+| human.pedestrian.adult                       | 208,240          | 17.86%       | 2,156,470       | 2.73%       |
+| movable_object.barrier                       | 152,087          | 13.04%       | 9,305,106       | 11.79%      |
+| vehicle.bus.rigid                            | 14,501           | 1.24%        | 4,247,297       | 5.38%       |
+| vehicle.car                                  | 493,322          | 42.30%       | 38,104,219      | 48.27%      |
+| vehicle.construction                         | 14,671           | 1.26%        | 1,514,414       | 1.92%       |
+| vehicle.trailer                              | 24,860           | 2.13%        | 4,907,511       | 6.22%       |
+| vehicle.truck                                | 88,519           | 7.59%        | 15,841,384      | 20.07%      |
+
+| Category                                     | nuScenes cuboids | Cuboid ratio | Lidarseg points | Point ratio |
+|----------------------------------------------|------------------|--------------|-----------------|-------------|
+| flat.driveable_surface                       | -                | -            | 316,958,899     | 28.64%      |
+| flat.sidewalk                                | -                | -            | 70,197,461      | 6.34%       |
+| flat.terrain                                 | -                | -            | 70,289,730      | 6.35%       |
+| static.manmade                               | -                | -            | 178,178,063     | 16.10%      |
+| static.vegetation                            | -                | -            | 122,581,273     | 11.08%      |
+| vehicle.ego                                  | -                | -            | 337,070,621     | 30.46%      |
+
+
+
+
 
 
 
@@ -107,6 +137,22 @@
 | 14    | terrain           |
 | 15    | mannade           |
 | 16    | vegetation        |
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
