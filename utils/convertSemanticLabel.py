@@ -59,7 +59,7 @@ def convert_semantic_label(category_index):
         4: 1,   # Wall -> barrier
         5: 1,   # Fence -> barrier
         6: 1,   # Pole -> barrier
-        7: 18,  # TrafficLight -> barrier
+        7: 1,  # TrafficLight -> barrier
         8: 1,   # TrafficSign -> barrier
         9: 16,  # Vegetation -> vegetation
         10: 14, # Terrain -> terrain
