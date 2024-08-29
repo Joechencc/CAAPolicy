@@ -172,7 +172,10 @@ def main():
     world = client.load_world(map)
     world.set_weather(weather)
     traffic_lights = world.get_actors().filter('traffic.traffic_light')
-
+    settings = world.get_settings()
+    settings.synchronous_mode = True
+    settings.fixed_delta_seconds = 0.1
+    world.apply_settings(settings)
     #################  spawn npc and ego ########
     blueprint_library = world.get_blueprint_library()
 
@@ -225,10 +228,7 @@ def main():
     for v in all_vehicles:
         print("set!")
         v.set_autopilot(True, tm.get_port())
-    settings = world.get_settings()
-    settings.synchronous_mode = True
-    settings.fixed_delta_seconds = 0.1
-    world.apply_settings(settings)
+
 
     # set all traffic lights green
     for traffic_light in traffic_lights:
@@ -274,7 +274,7 @@ def main():
 
             world.tick()
             for i in range(0, len(sensor_list)):
-                s_data = sensor_queue.get(block=True, timeout=1.0)
+                s_data = sensor_queue.get(block=True, timeout=10)
                 sensor_data_frame[s_data[1]] = s_data[0]
             ticks += 1
             print("ticked once!")
