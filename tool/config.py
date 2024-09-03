@@ -32,6 +32,8 @@ class Configuration:
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
 
+    only_3d_perception = None
+
     conet_encoder_in_channel = None
     conet_encoder_out_channel = None
 
@@ -102,6 +104,8 @@ def get_cfg(cfg_yaml: dict):
 
     ####### CONET Config ##########
     cfg.OccNet_cfg = config['OccNet_cfg']
+    cfg.only_3d_perception = config['only_3d_perception']
+
     occ_size, point_cloud_range, lss_downsample = config['occ_size'], config['point_cloud_range'], config['lss_downsample']
     voxel_x = (point_cloud_range[3] - point_cloud_range[0]) / occ_size[0]
     voxel_y = (point_cloud_range[4] - point_cloud_range[1]) / occ_size[1]

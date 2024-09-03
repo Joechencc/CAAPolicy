@@ -85,11 +85,20 @@ class ParkingTrainingModule(pl.LightningModule):
         if self.cfg.feature_encoder == "bev":
             segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":
-            H, W, D = pred_segmentation.shape[-3:]
-            coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-            segmentation_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-            coarse_segmentation_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
-
+            if self.cfg.only_3d_perception == False:
+                H, W, D = pred_segmentation.shape[-3:]
+                coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                segmentation_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+                coarse_segmentation_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+            elif self.cfg.only_3d_perception == True:
+                H, W, D = pred_segmentation.shape[-3:]
+                coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                segmentation_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+                coarse_segmentation_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+                loss_dict.update({
+                    "control_loss": 0
+                })
+            
         loss_dict.update({
             "coarse_segmentation_loss": coarse_segmentation_loss,
             "segmentation_loss": segmentation_loss
@@ -124,10 +133,20 @@ class ParkingTrainingModule(pl.LightningModule):
         if self.cfg.feature_encoder == "bev":
             segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":
-            H,W,D = pred_segmentation.shape[-3:]
-            coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-            segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-            coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+            if self.cfg.only_3d_perception == False:
+                H,W,D = pred_segmentation.shape[-3:]
+                coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+                coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+            elif self.cfg.only_3d_perception == True:
+                H,W,D = pred_segmentation.shape[-3:]
+                coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+                coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+                val_loss_dict.update({
+                    "acc_steer_val_loss": 0,
+                    "reverse_val_loss": 0,
+                })
         val_loss_dict.update({
             "coarse_segmentation_val_loss": coarse_segmentation_val_loss,
             "segmentation_val_loss": segmentation_val_loss

@@ -34,6 +34,11 @@ class Seg3dHead(nn.Module):
             nn.Conv3d(self.out_channel, self.seg_classes, kernel_size=1, padding=0)
         )
 
+        self.conv3d1 = nn.Conv3d(in_channels=192, out_channels=64, kernel_size=(1, 1, 1))
+        self.conv3d2 = nn.Conv3d(in_channels=64, out_channels=32, kernel_size=(1, 1, 1))
+        self.conv3d3 = nn.Conv3d(in_channels=32, out_channels=18, kernel_size=(1, 1, 1))
+
+
     def top_down(self, x):
         p7 = self.relu(self.c5_conv(x))
         p6 = self.relu(self.up_conv5(self.up_sample(p7)))
@@ -45,9 +50,15 @@ class Seg3dHead(nn.Module):
         return p1
 
     def forward(self, fuse_feature):
-        fuse_feature_t = fuse_feature.transpose(1, 2)
-        b, c, s = fuse_feature_t.shape
-        fuse_bev = torch.reshape(fuse_feature_t, (b,c)+tuple(self.seg_dim))
-        fuse_bev = self.top_down(fuse_bev)
-        pred_segmentation = self.segmentation_head(fuse_bev)
-        return pred_segmentation
+        if self.cfg.only_3d_perception:
+            pred_segmentation = F.relu(self.conv3d1(fuse_feature))
+            pred_segmentation = F.relu(self.conv3d2(pred_segmentation))
+            pred_segmentation = self.conv3d3(pred_segmentation)  
+            return pred_segmentation
+        elif self.cfg.only_3d_perception == False:
+            fuse_feature_t = fuse_feature.transpose(1, 2)
+            b, c, s = fuse_feature_t.shape
+            fuse_bev = torch.reshape(fuse_feature_t, (b,c)+tuple(self.seg_dim))
+            fuse_bev = self.top_down(fuse_bev)
+            pred_segmentation = self.segmentation_head(fuse_bev)
+            return pred_segmentation
