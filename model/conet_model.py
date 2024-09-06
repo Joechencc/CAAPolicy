@@ -188,19 +188,19 @@ class OccNet(BEVDepth):
                 pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
                 self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
 
-        # pred_f = None
-        # SSC_metric_fine = None
-        # if output['output_voxels_fine'] is not None:
-        #     if output['output_coords_fine'] is not None:
-        #         fine_pred = output['output_voxels_fine'][0]  # N ncls
-        #         fine_coord = output['output_coords_fine'][0]  # 3 N
-        #         if gt_occ is not None:
-        #             pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-        #         else:
-        #             pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-        #         pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
-        #     else:
-        #         pred_f = output['output_voxels_fine'][0]
+        pred_f = None
+        SSC_metric_fine = None
+        if output['output_voxels_fine'] is not None:
+            if output['output_coords_fine'] is not None:
+                fine_pred = output['output_voxels_fine'][0]  # N ncls
+                fine_coord = output['output_coords_fine'][0]  # 3 N
+                if gt_occ is not None:
+                    pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                else:
+                    pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
+            else:
+                pred_f = output['output_voxels_fine'][0]
 
         #     if visual:
         #         if gt_occ is not None:
@@ -219,7 +219,7 @@ class OccNet(BEVDepth):
                 'SC_metric': SC_metric,
                 'SSC_metric': SSC_metric,
                 'pred_c': pred_c,
-                # 'pred_f': pred_f,
+                'pred_f': pred_f,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
@@ -227,7 +227,7 @@ class OccNet(BEVDepth):
         else:
             test_output = {
                 'pred_c': pred_c,
-                # 'pred_f': pred_f,
+                'pred_f': pred_f,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],

@@ -121,12 +121,10 @@ class ParkingModel(nn.Module):
                 img_metas = self.construct_metas()
                 img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
                 res = self.OccNet(img_metas=img_metas,img_inputs=img) 
-                coarse_semantic, conet_feature, pred_depth = res['pred_c'], res['fine_feature'], res['depth'] 
-                # coarse_semantic (2,18,40,40,5), conet_feature (2,192,160,160,20), pred_depth(12,96,16,16)
-                pred_segmentation = self.seg3D_head(conet_feature)
-                #pred_segmentation (2, 18, 160, 160, 20)
-                #return fuse_feature, coarse_semantic, pred_segmentation, pred_depth, conet_target 
-                return torch.randn(2, 128, 256).to("cuda:0"), coarse_semantic,pred_segmentation,pred_depth,torch.randn(2,1,160,160,20).to("cuda:0")
+                coarse_semantic, fine_semantic, pred_depth = res['pred_c'], res['pred_f'], res['depth']
+                # coarse_semantic (2,18,40,40,5), conet_feature (2,18,160,160,20), pred_depth(12,96,16,16)
+
+                return torch.randn(2, 128, 256).to("cuda:0"), coarse_semantic,fine_semantic,pred_depth,torch.randn(2,1,160,160,20).to("cuda:0")
 
 
     def construct_metas(self):
