@@ -70,9 +70,13 @@ class ParkingTrainingModule(pl.LightningModule):
         val_loss_dict = {}
 
         pred_control, coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
-        self.plot_grid(coarse_segmentation, os.path.join("visual", "inference_pred_fine.png"))
-        self.plot_grid(pred_segmentation, os.path.join("visual", "inference_pred_coarse.png"))
-            
+        #coarse_segmentation(1, 18, 40, 40, 5)
+        #pred_segmentation=fine(1, 18, 160, 160, 20)
+       
+        self.plot_grid(coarse_segmentation, os.path.join("visual", "inference_pred_coarse.png"))
+        self.plot_grid(pred_segmentation, os.path.join("visual", "inference_pred_fine.png"))
+        # torch.save(coarse_segmentation, '/scratch/sy3913/ParkWithUncertainty/e2e_parking/Town04_Opt_Val/2024-08-21_16:27:26/task0/pred_voxel/coarse_{}.pt'.format(batch_idx))
+        # torch.save(pred_segmentation, '/scratch/sy3913/ParkWithUncertainty/e2e_parking/Town04_Opt_Val/2024-08-21_16:27:26/task0/pred_voxel/fine_{}.pt'.format(batch_idx))
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
             "acc_steer_val_loss": acc_steer_val_loss,
@@ -161,11 +165,24 @@ def main():
     data_module.dummmy_setup()
 
     data_loader = data_module.val_dataloader()
+    sum = 0
+    for idx, batch in enumerate(data_loader):
+        sum += 1
+        # print(f"Processing batch {sum}")
+        # initial_mem_allocated = torch.cuda.memory_allocated('cuda:0')
+        # print(f"Memory allocated before batch {sum}: {initial_mem_allocated // (1024 ** 2)} MB")
 
-    for batch in data_loader:
         batch = {k: v.to('cuda:0') if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-        predictions = model.validation_step(batch,0)
-        breakpoint()
+        predictions = model.validation_step(batch, idx)
+        print(sum)
+        # post_mem_allocated = torch.cuda.memory_allocated('cuda:0')
+        # print(f"Memory allocated after batch {sum}: {post_mem_allocated // (1024 ** 2)} MB")
+
+        # torch.cuda.empty_cache()
+        # final_mem_allocated = torch.cuda.memory_allocated('cuda:0')
+        # print(f"Memory allocated after clearing cache for batch {sum}: {final_mem_allocated // (1024 ** 2)} MB")
+
+
 
 if __name__ == '__main__':
     main()

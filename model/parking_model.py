@@ -100,7 +100,6 @@ class ParkingModel(nn.Module):
 
         elif self.cfg.feature_encoder == "conet":
             if self.cfg.only_3d_perception == False:
-                breakpoint()
                 rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
                 img_metas = self.construct_metas()
                 img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
