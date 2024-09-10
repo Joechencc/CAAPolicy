@@ -86,20 +86,11 @@ class ParkingTrainingModule(pl.LightningModule):
         if self.cfg.feature_encoder == "bev":
             segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":
-            if self.cfg.only_3d_perception == False:
-                H,W,D = pred_segmentation.shape[-3:]
-                coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-                segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-                coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
-            elif self.cfg.only_3d_perception == True:
-                H,W,D = pred_segmentation.shape[-3:]
-                coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-                segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-                coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
-                val_loss_dict.update({
-                    "acc_steer_val_loss": 0,
-                    "reverse_val_loss": 0,
-                })
+            H,W,D = pred_segmentation.shape[-3:]
+            coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+            segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+            coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+           
         val_loss_dict.update({
             "coarse_segmentation_val_loss": coarse_segmentation_val_loss,
             "segmentation_val_loss": segmentation_val_loss
@@ -168,15 +159,15 @@ def main():
     sum = 0
     for idx, batch in enumerate(data_loader):
         sum += 1
-        # print(f"Processing batch {sum}")
-        # initial_mem_allocated = torch.cuda.memory_allocated('cuda:0')
-        # print(f"Memory allocated before batch {sum}: {initial_mem_allocated // (1024 ** 2)} MB")
+        print(f"Processing batch {sum}")
+        initial_mem_allocated = torch.cuda.memory_allocated('cuda:0')
+        print(f"Memory allocated before batch {sum}: {initial_mem_allocated // (1024 ** 2)} MB")
 
         batch = {k: v.to('cuda:0') if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
         predictions = model.validation_step(batch, idx)
-        print(sum)
-        # post_mem_allocated = torch.cuda.memory_allocated('cuda:0')
-        # print(f"Memory allocated after batch {sum}: {post_mem_allocated // (1024 ** 2)} MB")
+        # print(sum)
+        post_mem_allocated = torch.cuda.memory_allocated('cuda:0')
+        print(f"Memory allocated after batch {sum}: {post_mem_allocated // (1024 ** 2)} MB")
 
         # torch.cuda.empty_cache()
         # final_mem_allocated = torch.cuda.memory_allocated('cuda:0')

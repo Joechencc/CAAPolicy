@@ -13,8 +13,8 @@ parking_model:
 
   training_map: "Town04_Opt"
   validation_map: "Town04_Opt_Val"
-  future_frame_nums: 0
-  hist_frame_nums: 0
+  future_frame_nums: 4
+  hist_frame_nums: 10
   token_nums: 204
   image_crop: 256
 
@@ -26,10 +26,10 @@ parking_model:
   point_cloud_range: [-16.0, -16.0, -2.0, 16.0, 16.0, 2.0]
   occ_size: [160, 160, 20]
   lss_downsample: [4, 4, 4]  # [128 128 10]
-  
+
   only_3d_perception: False # when this flag set to true, only care about 3d occ, 
                             # no control loss, no target slot, no ego motion fusion 
-    
+  
   OccNet_cfg:
     loss_norm: True
     img_backbone:
@@ -57,7 +57,6 @@ parking_model:
       data_config: 
         cams: ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
                 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT']
-                # ⬆️never used in model
         Ncams: 6
         # input_size: (896, 1600)
         # src_size: (900, 1600)
@@ -135,10 +134,10 @@ parking_model:
   seg_classes: 3
   seg_classes_conet: 18
   seg_vehicle_weights: [1.0, 2.0, 2.0]
-  seg_conet_vehicle_weights: [1.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0, 400.0]
+  seg_conet_vehicle_weights: [1.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
 
   # transformer encoder
-  tf_en_dim: 256
+  tf_en_dim: 258
   tf_en_conet_dim: 258 #516
   tf_en_heads: 6
   tf_en_layers: 4
@@ -148,7 +147,7 @@ parking_model:
   tf_en_motion_length: 3
 
   # transformer decoder
-  tf_de_dim: 256
+  tf_de_dim: 258
   tf_de_conet_dim: 258 #516
 
   tf_de_heads: 6

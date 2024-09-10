@@ -99,41 +99,16 @@ class ParkingModel(nn.Module):
             return fuse_feature, pred_segmentation, pred_depth, bev_target
 
         elif self.cfg.feature_encoder == "conet":
-            if self.cfg.only_3d_perception == False:
-                rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
-                img_metas = self.construct_metas()
-                img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
-                res = self.OccNet(img_metas=img_metas,img_inputs=img) 
-                coarse_semantic, conet_feature, pred_depth = res['pred_c'], res['fine_feature'], res['depth'] 
-                # coarse_semantic (2,18,40,40,5), conet_feature (2,192,160,160,20), pred_depth(12,96,16,16)
-                conet_feature, conet_target = self.add_target_conet(conet_feature, target_point) 
-                # conet_feature (2,193,160,160,20), conet_target(2,1,160,160,20)
-                conet_down_sample = self.conet_encoder(conet_feature)
-                # conet_down_sample(2,512,128)
-                print(conet_down_sample.shape)
-                fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
-                # fuse_feature(2,128,256)
-                print(fuse_feature.shape)
-                pred_segmentation = self.seg3D_head(fuse_feature)
-                print(pred_segmentation.shape)
-                #pred_segmentation (2, 18, 160, 160, 20)
-                return fuse_feature, coarse_semantic, pred_segmentation, pred_depth, conet_target   
-            elif self.cfg.only_3d_perception == True:
-                rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
-                img_metas = self.construct_metas()
-                img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
-                res = self.OccNet(img_metas=img_metas,img_inputs=img) 
-                # coarse_semantic, conet_feature, pred_depth = res['pred_c'], res['fine_feature'], res['depth']
-                # # coarse_semantic (2,18,40,40,5), conet_feature (2,192,160,160,20), pred_depth(12,96,16,16)
-                # pred_segmentation = self.seg3D_head(conet_feature)
-                # #pred_segmentation (2, 18, 160, 160, 20)
-                # #return fuse_feature, coarse_semantic, pred_segmentation, pred_depth, conet_target 
-                # return torch.randn(2, 128, 256).to("cuda:0"), coarse_semantic,pred_segmentation,pred_depth,torch.randn(2,1,160,160,20).to("cuda:0")
-                coarse_semantic, fine_semantic, pred_depth = res['pred_c'], res['pred_f'], res['depth']
-                # coarse_semantic (2,18,40,40,5), conet_feature (2,18,160,160,20), pred_depth(12,96,16,16)
-
-                return torch.randn(2, 128, 256).to("cuda:0"), coarse_semantic,fine_semantic,pred_depth,torch.randn(2,1,160,160,20).to("cuda:0")
-               
+            rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
+            img_metas = self.construct_metas()
+            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
+            res = self.OccNet(img_metas=img_metas,img_inputs=img) #conet_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
+            coarse_semantic, conet_feature, pred_depth = res['pred_c'], res['fine_feature'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
+            conet_feature, conet_target = self.add_target_conet(conet_feature, target_point) #conet_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
+            conet_down_sample = self.conet_encoder(conet_feature)
+            fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
+            pred_segmentation = self.seg3D_head(fuse_feature)
+            return fuse_feature, coarse_semantic, pred_segmentation, pred_depth, conet_target        
 
     def construct_metas(self):
         metas = {}
@@ -167,33 +142,30 @@ class ParkingModel(nn.Module):
         return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
 
     def forward(self, data):
-        
+        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
         if self.cfg.feature_encoder == 'bev':
-            fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
             pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         elif self.cfg.feature_encoder == 'conet':
-            fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
-            self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
-            self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
             pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
-            pred_control = torch.randn(2, 5, 3)
+        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+        self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+        
         return pred_control, coarse_segmentation, fine_segmentation, pred_depth
 
-    # def predict(self, data):
-    #     fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
-    #     breakpoint()
-    #     self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
-    #     self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+    def predict(self, data):
+        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
+        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+        self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
 
-    #     assert()
-    #     pred_multi_controls = data['gt_control'].cuda()
-    #     for i in range(3):
-    #         if self.cfg.feature_encoder == 'bev':
-    #             pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
-    #         elif self.cfg.feature_encoder == 'conet':
-    #             pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
-    #         pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-    #     return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
+        assert()
+        pred_multi_controls = data['gt_control'].cuda()
+        for i in range(3):
+            if self.cfg.feature_encoder == 'bev':
+                pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
+            elif self.cfg.feature_encoder == 'conet':
+                pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
+            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+        return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
 
     def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
         # import pdb; pdb.set_trace()
@@ -204,7 +176,7 @@ class ParkingModel(nn.Module):
         threeD_grid[threeD_grid==4]=1
         threeD_grid[threeD_grid==17]=2
         twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        # twoD_map = twoD_map[::-1,::-1]
+        twoD_map = twoD_map[::-1,::-1]
         # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
 

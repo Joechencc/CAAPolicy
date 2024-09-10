@@ -38,33 +38,22 @@ class ControlCONet(nn.Module):
 
     def decoder(self, encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask):
         encoder_out = encoder_out.transpose(0, 1)
-        print(encoder_out.shape)
         tgt_embedding = tgt_embedding.transpose(0, 1)
-        print(tgt_embedding.shape)
         pred_controls = self.tf_decoder(tgt=tgt_embedding,
                                         memory=encoder_out,
                                         tgt_mask=tgt_mask,
                                         tgt_key_padding_mask=tgt_padding_mask)
         pred_controls = pred_controls.transpose(0, 1)
-        print(pred_controls.shape)
         return pred_controls
 
     def forward(self, encoder_out, tgt):
         tgt = tgt[:, :-1]
         tgt_mask, tgt_padding_mask = self.create_mask(tgt)
-        print(tgt_mask.shape)
-        print(tgt_padding_mask.shape)
 
         tgt_embedding = self.embedding(tgt)
-        print(tgt_embedding.shape)
-        breakpoint()
-
         tgt_embedding = self.pos_drop(tgt_embedding + self.pos_embed)
-        print(tgt_embedding.shape)
-        breakpoint()
 
         pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
-        print(pred_controls.shape)
         pred_controls = self.output(pred_controls)
         return pred_controls
 

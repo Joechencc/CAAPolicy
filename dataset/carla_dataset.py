@@ -8,6 +8,7 @@ import torchvision.transforms
 from PIL import Image
 from loguru import logger
 from data_generation.world import cam_specs_
+import open3d
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -242,7 +243,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.get_data()
 
     def init_camera_config(self):
-        cam_config = {'width': 400, 'height': 300, 'fov': 100}
+        cam_config = {'width': 400, 'height': 300, 'fov': 70}
         cam_specs = cam_specs_
 
         # intrinsic
@@ -266,41 +267,27 @@ class CarlaDataset(torch.utils.data.Dataset):
         )
         self.intrinsic = self.intrinsic.unsqueeze(0).expand(6, 3, 3)
 
-        if self.cfg.feature_encoder == "bev":
         # extrinsic
-            cam2pixel = np.array([
-                [0, 1, 0, 0],
-                [0, 0, -1, 0],
-                [1, 0, 0, 0],
-                [0, 0, 0, 1],
-            ], dtype=float)
-            for cam_id, cam_spec in cam_specs.items():
-                cam2veh = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
-                                        carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
-                                                        roll=cam_spec['roll']))
-                veh2cam = cam2pixel @ np.array(cam2veh.get_inverse_matrix())
-                self.veh2cam_dict[cam_id] = veh2cam
-            front_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front']).float().unsqueeze(0)
-            front_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_left']).float().unsqueeze(0)
-            front_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_right']).float().unsqueeze(0)
-            back_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back']).float().unsqueeze(0)
-            back_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_left']).float().unsqueeze(0)
-            back_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_right']).float().unsqueeze(0)
-            self.extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego, back_to_ego,
-                                        back_left_to_ego, back_right_to_ego], dim=0)
-        elif self.cfg.feature_encoder == "conet":
-            keys = ['rgb_front', 'rgb_front_left', 'rgb_front_right', 'rgb_back', 'rgb_back_left', 'rgb_back_right']
-            sensor2egos = []
-            for key in keys:
-                cam_spec = cam_specs[key]
-                ego2sensor = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
-                                        carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
-                                                        roll=cam_spec['roll']))
-            # sensor2ego = cam2pixel @ np.array(ego2sensor.get_inverse_matrix())
-                sensor2ego = np.array(ego2sensor.get_inverse_matrix())
-                sensor2egos.append(torch.from_numpy(sensor2ego).float().unsqueeze(0))
-            sensor2egos = torch.cat(sensor2egos).unsqueeze(0).repeat(self.cfg.batch_size,1,1,1)
-            self.extrinsic = sensor2egos
+        cam2pixel = np.array([
+            [0, 1, 0, 0],
+            [0, 0, -1, 0],
+            [1, 0, 0, 0],
+            [0, 0, 0, 1],
+        ], dtype=float)
+        for cam_id, cam_spec in cam_specs.items():
+            cam2veh = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
+                                      carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
+                                                     roll=cam_spec['roll']))
+            veh2cam = cam2pixel @ np.array(cam2veh.get_inverse_matrix())
+            self.veh2cam_dict[cam_id] = veh2cam
+        front_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front']).float().unsqueeze(0)
+        front_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_left']).float().unsqueeze(0)
+        front_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_front_right']).float().unsqueeze(0)
+        back_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back']).float().unsqueeze(0)
+        back_left_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_left']).float().unsqueeze(0)
+        back_right_to_ego = torch.from_numpy(self.veh2cam_dict['rgb_back_right']).float().unsqueeze(0)
+        self.extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego, back_to_ego,
+                                    back_left_to_ego, back_right_to_ego], dim=0)
     def get_data(self):
         val_towns = self.cfg.validation_map
         train_towns = self.cfg.training_map
@@ -385,7 +372,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                     parking_goal = [data['x'], data['y'], data['yaw']]
                     parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 elif self.cfg.feature_encoder == "conet":
-                    parking_goal = [data['x'], data['y'], 0, data['yaw']]
+                    parking_goal = [data['x'], data['y'], data['z'], data['yaw']]
                     parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
 
@@ -547,8 +534,7 @@ class ProcessSemantic:
 class ProcessSemantic3D:
     def __init__(self, cfg):
         self.cfg = cfg
-    def indices2coor(self,indices,min,resolution):
-        return np.array(indices)*resolution+np.array(min)
+
     def __call__(self, voxel, target_slot):
         """
         Process original BEV ground truth image; return cropped image with target slot
@@ -564,22 +550,16 @@ class ProcessSemantic3D:
         voxels = np.zeros(grid_size, dtype=int)
         for indices, value in gt_occ.items():
             # GT invert x-axis
-            # indice_0 = int(- np.array(indices)[0])
-
-            tmp_coor = self.indices2coor(indices,min_bound,resolution)
-            if (min_bound[0] < tmp_coor[0] and  tmp_coor[0] < max_bound[0] and
-                min_bound[1] < tmp_coor[1] and  tmp_coor[1]< max_bound[1] and
-                min_bound[2] < tmp_coor[2] and  tmp_coor[2]< max_bound[2]):
-                indices = (indices[0], -indices[1], indices[2])
-
-                voxels[(indices)] = value
+            indice_0 = int(- np.array(indices)[0])
+            indices = (indice_0, indices[1], indices[2])
+            voxels[(indices)] = value
 
         # self.visual_voxel(gt_occ, voxels, grid_size=0.2)
         # import pdb; pdb.set_trace()
         # # crop image
         # cropped_image = scale_and_crop_image(image, scale, crop)
         # draw target slot on BEV semantic
-        #voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
+        voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
         # np.save("visual/voxels.npy",voxels)
         # import pdb; pdb.set_trace()
         

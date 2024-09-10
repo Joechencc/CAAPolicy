@@ -43,7 +43,6 @@ class ControlValLoss(nn.Module):
         return steer
 
     def forward(self, pred, data):
-        return 0,0
         pred_control = pred[:, :-2, :]
         pred_acc_token = pred_control[:, 0::3, :]
         pred_steer_token = pred_control[:, 1::3, :]

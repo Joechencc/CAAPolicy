@@ -37,22 +37,16 @@ class CONetFusion(nn.Module):
         trunc_normal_(self.pos_embed, std=.02)
 
     def forward(self, conet_feature, ego_motion):
-        conet_feature = conet_feature.transpose(1, 2) #([2, 128, 512]) -> ([2, 1024, 256])
-        # print(conet_feature.shape)
+        conet_feature = conet_feature.transpose(1, 2)
 
+        # motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
         motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 2)
-        fuse_feature = torch.cat([conet_feature, motion_feature], dim=2) #([2, 128, 516]) -> ([2, 1024, 258])
-        # print(fuse_feature.shape)
+        fuse_feature = torch.cat([conet_feature, motion_feature], dim=2)
 
-        fuse_feature = self.pos_drop(fuse_feature + self.pos_embed) #([2, 128, 516]) -> ([2, 1024, 258])
-        # print(fuse_feature.shape)
-        # fuse_feature = self.pos_drop(conet_feature + self.pos_embed) # Test #([2, 256, 512]) -> ([2, 1024, 256])
+        fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
 
-        fuse_feature = fuse_feature.transpose(0, 1) #([128, 2, 516]) -> ([1024, 2, 258])
-        # print(fuse_feature.shape)
+        fuse_feature = fuse_feature.transpose(0, 1)
         fuse_feature = self.tf_encoder(fuse_feature)
-        # print(fuse_feature.shape)
-        fuse_feature = fuse_feature.transpose(0, 1) #([2, 128, 516]) -> ([2, 1024, 258])
-        # print(fuse_feature.shape)
+        fuse_feature = fuse_feature.transpose(0, 1)
 
         return fuse_feature

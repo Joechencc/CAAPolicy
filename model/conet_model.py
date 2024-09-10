@@ -198,13 +198,20 @@ class OccNet(BEVDepth):
         #             pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
         #         else:
         #             pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-                
-        #         print(f"fine_pred.shape: {fine_pred.shape}")
-        #         print(f"pred_f.shape: {pred_f.shape}")
-        #         print(f"fine_coord.shape: {fine_coord.shape}")
         #         pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
         #     else:
         #         pred_f = output['output_voxels_fine'][0]
+
+        #     if visual:
+        #         if gt_occ is not None:
+        #             SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
+        #             SSC_metric_fine, SSC_occ_metric_fine = self.evaluation_semantic(pred_f, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+        #         else:
+        #             H, W, D = self.occ_size
+        #             pred_f = F.interpolate(pred_f, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        #             pred_f = torch.argmax(pred_f[0], dim=0).cpu().numpy()
+        #             self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
+        #             # import pdb; pdb.set_trace()
     
         coarse_occ_mask = output['coarse_occ_mask']
         if gt_occ is not None:
