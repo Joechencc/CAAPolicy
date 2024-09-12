@@ -42,14 +42,14 @@ class Seg3dHead(nn.Module):
         )
 
     def top_down(self, x):
-        p7 = self.relu(self.c5_conv(x))
+        p7 = self.relu(self.c5_conv(x)) # torch.Size([2, 192, 16, 16, 2])
         # p6 = self.relu(self.up_conv5(self.up_sample(p7)))
         # p5 = self.relu(self.up_conv4(self.up_sample(p6)))
-        p5 = self.relu(self.up_conv4(self.up_sample(p7)))
-        p4 = self.relu(self.up_conv3(self.up_sample(p5)))
-        p3 = self.relu(self.up_conv2(self.up_sample(p4)))
-        p2 = self.relu(self.up_conv1(self.up_sample(p3)))
-        p1 = F.interpolate(p2, size=tuple(self.occ_size), mode="trilinear", align_corners=False)
+        p5 = self.relu(self.up_conv4(self.up_sample(p7))) # torch.Size([2, 192, 32, 32, 4])
+        p4 = self.relu(self.up_conv3(self.up_sample(p5))) # torch.Size([2, 192, 64, 64, 8])
+        p3 = self.relu(self.up_conv2(self.up_sample(p4))) # torch.Size([2, 192, 128, 128, 16])
+        p2 = self.relu(self.up_conv1(self.up_sample(p3))) # torch.Size([2, 192, 256, 256, 32])
+        p1 = F.interpolate(p2, size=tuple(self.occ_size), mode="trilinear", align_corners=False) # torch.Size([2, 192, 160, 160, 20])
         return p1
 
     def forward(self, fuse_feature):

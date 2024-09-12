@@ -176,7 +176,7 @@ class ParkingModel(nn.Module):
         threeD_grid[threeD_grid==4]=1
         threeD_grid[threeD_grid==17]=2
         twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        twoD_map = twoD_map[::-1,::-1]
+        # twoD_map = twoD_map[::-1,::-1]
         # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
 
