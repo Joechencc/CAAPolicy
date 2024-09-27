@@ -18,7 +18,7 @@ class ConetEncoder(nn.Module):
         # Convert ResNet layers to 3D
         self.layer1 = self._create_layer3d(BasicBlock3D, 64, 64, 2)
         self.layer2 = self._create_layer3d(BasicBlock3D, 64, 128, 2, stride=2)
-        self.layer3 = self._create_layer3d(BasicBlock3D, 128, 256, 2, stride=(2, 2, 4)) # stride=(2, 2, 4) for [16, 16, 2] instead of stride=(2, 2, 4) for [16, 16, 4]
+        self.layer3 = self._create_layer3d(BasicBlock3D, 128, 256, 2, stride=(2, 2, 4)) # stride=(2, 2, 4) for [16, 16, 2] instead of stride=2 for [16, 16, 4]
         # self.layer4 = self._create_layer3d(BasicBlock3D, 256, 512, 2, stride=2)
 
     def _create_layer3d(self, block, in_channels, out_channels, blocks, stride=1):

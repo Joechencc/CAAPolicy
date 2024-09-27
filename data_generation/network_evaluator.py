@@ -150,7 +150,7 @@ class NetworkEvaluator:
         # detect collision
         is_collision = self._world.tick(clock, self._parking_goal_index)
         if is_collision:
-            self.save_sensor_data([0,0])
+            # self.save_sensor_data([0,0])
             print("saved")
             self._collision_nums += 1
             logging.info("parking collision for task %s-%d, collision_num: %d",
@@ -210,7 +210,7 @@ class NetworkEvaluator:
         #self._world.init_single_pergola([290.9, -232.73, 0.3])
 
 
-        self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 180]
+        self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 0, 180]
 
         self._eva_task_idx = 0
         self.clear_metric_rate()
@@ -268,7 +268,7 @@ class NetworkEvaluator:
         self._world.player.set_transform(self._ego_transform)
 
         self._seed += 1
-        self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 180]
+        self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 0, 180]
         self._world.restart(self._seed, self._parking_goal_index, self._ego_transform)
 
         logging.info("***************** Start eva task %s *****************",
@@ -351,14 +351,14 @@ class NetworkEvaluator:
 
         # check success parking
         if self.check_success_slot(closest_goal, t):
-            self.save_sensor_data(closest_goal)
+            # self.save_sensor_data(closest_goal)
             self.start_next_parking()
             return
 
         # check fail parking
         if self.check_fail_slot(closest_goal, t):
-            self.save_sensor_data(closest_goal)
-            print("saved")
+            # self.save_sensor_data(closest_goal)
+            # print("saved")
             self.start_next_parking()
             return
 

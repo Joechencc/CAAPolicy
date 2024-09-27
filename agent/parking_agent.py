@@ -9,7 +9,6 @@ import pygame
 
 import numpy as np
 import matplotlib.pyplot as plt
-import open3d as o3d
 
 from PIL import Image
 from PIL import ImageDraw
@@ -17,14 +16,12 @@ from collections import OrderedDict
 
 from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
-from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic
+from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, convert_slot_coord3D
 from dataset.carla_dataset import detokenize
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
-from collections import Counter
-from copy import deepcopy
-import cv2
+
 
 def show_control_info(window, control, steering_wheel_image, width, height, font):
     histogram_width = 15
@@ -135,20 +132,6 @@ def highlight_grid(image, grid_indexes, grid_size=14):
         a.rectangle([(y * w, x * h), (y * w + w, x * h + h)], fill=None, outline='red', width=2)
     return image
 
-def highlight_grid_3D(image, grid_indexes, grid_size=14):
-    assert(isinstance(grid_size, tuple))
-
-    W, H, D = image.size
-    h = H / grid_size[0]
-    w = W / grid_size[1]
-    d = D / grid_size[1]
-    image = image.copy()
-    for grid_index in grid_indexes:
-        x, y, z = np.unravel_index(grid_index, (grid_size[0], grid_size[1], grid_size[2]))
-        a = ImageDraw.ImageDraw(image)
-        a.rectangle([(y * w, x * h), (y * w + w, x * h + h)], fill=None, outline='red', width=2)
-    return image
-
 
 def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
     if not isinstance(grid_size, tuple):
@@ -161,17 +144,6 @@ def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
     atten_avg = average_att_map[grid_index].reshape(grid_size[0], grid_size[1])
     atten_avg = Image.fromarray(atten_avg.numpy()).resize(image.size)
     return grid_image, atten_avg
-
-def get_atten_avg_map_3D(att_map, grid_index, image, grid_size=16):
-    if not isinstance(grid_size, tuple):
-        grid_size = (grid_size, grid_size)
-
-    # grid_image = highlight_grid_3D(image, [grid_index], grid_size)
-    att_map = att_map.squeeze()
-    average_att_map = att_map.mean(axis=0)
-    atten_avg = average_att_map[grid_index].reshape(grid_size[0], grid_size[1], grid_size[2])
-    atten_avg = Image.fromarray(atten_avg.numpy().sum(-1).astype(np.uint8)).resize(image.size)
-    return image, atten_avg
 
 
 def visualize_grid_to_grid(att_map, grid_index, image, grid_size=16, alpha=0.6):
@@ -258,14 +230,14 @@ class ParkingAgent:
         self.process_frequency = 3  # process sensor data for every 3 steps 0.1s
         self.step = -1
 
-        self.prev_loc_thea = None
+        self.prev_xy_thea = None
 
         self.trans_control = carla.VehicleControl()
         self.gru_control = carla.VehicleControl()
 
         self.save_output = SaveOutput()
         self.hook_handle = None
-        self.load_model(args.model_path)
+        self.load_model(args.model_path, args.model_path_conet)
 
         self.stop_count = 0
         self.boost = False
@@ -283,24 +255,13 @@ class ParkingAgent:
                 logging.exception('Invalid YAML Config file {}', args.config)
         self.cfg = get_cfg(cfg_yaml)
 
-    def load_model(self, parking_pth_path):
+    def load_model(self, parking_pth_path, conet_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
-        # ckpt_conet = torch.load(conet_pth_path, map_location='cuda:0')
-
-        # if self.cfg.feature_encoder == "conet":
-        #     state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-        #     # state_dict = OrderedDict([(k, v) for k, v in state_dict.items() if not (k.startswith('bev_model') or k.startswith('bev_encoder'))])
-        #     # Change later
-        #     # state_dict = OrderedDict([(k.replace('bev_model', 'conet_model').replace('bev_encoder', 'conet_encoder'), v) for k, v in state_dict.items()])
-        #     parts_to_include = ['img_backbone', 'img_neck', 'img_view_transformer', 'occ_encoder', 'occ_encoder_neck']
-        #     state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if any(part in k for part in parts_to_include)})
-        #     # state_dict.update({k: v for k, v in ckpt_conet['state_dict'].items() if k.startswith('img_backbone') or k.startswith('img_neck')})
-        # else:
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
 
-        self.model.load_state_dict(state_dict, strict=True)
+        self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
         if self.cfg.feature_encoder == "conet":
@@ -324,30 +285,12 @@ class ParkingAgent:
         # image_file = pathlib.Path(self.cfg.log_dir) / ('%04d.png' % self.step)
         # Image.fromarray(np.uint8(pred_seg_img), mode='L').save(image_file)
         self.seg_bev = pred_seg_img
-    
-    def save_seg_img_3D(self, pred_segmentation):
-        pred_segmentation = pred_segmentation[0]
-        pred_segmentation = torch.argmax(pred_segmentation, dim=0, keepdim=True)
-        pred_segmentation = pred_segmentation.detach().cpu().numpy()
-        pred_segmentation[(pred_segmentation != 0) & (pred_segmentation != 17)] = 128
-        pred_segmentation[pred_segmentation == 17] = 255
-        pred_seg_img = pred_segmentation[0, :, :, :][::-1]
-        # image_file = pathlib.Path(self.cfg.log_dir) / ('%04d.png' % self.step)
-        # Image.fromarray(np.uint8(pred_seg_img), mode='L').save(image_file)
-        self.seg_bev = pred_seg_img
 
     def save_target_bev_img(self, target_bev):
         target_bev = target_bev[0]
         target_bev = target_bev.detach().cpu().numpy()
         target_bev[target_bev == 1] = 255
         target_bev_img = target_bev[0, :, :][::-1]
-        self.target_bev = target_bev_img
-    
-    def save_target_bev_img_3D(self, target_bev):
-        target_bev = target_bev[0]
-        target_bev = target_bev.detach().cpu().numpy()
-        target_bev[target_bev == 1] = 255
-        target_bev_img = target_bev[0, :, :, :][::-1]
         self.target_bev = target_bev_img
 
     def save_prev_target(self, pred_segmentation):
@@ -452,19 +395,6 @@ class ParkingAgent:
         atten_avg = np.asarray(atten_avg)[::-1, ...]
         return grid_image, atten_avg
 
-    def save_atten_avg_map_conet(self, data):
-        atten = self.save_output.outputs[0].detach().cpu()
-        # visualize_heads(atten)
-
-        seg_feat = data['segmentation']
-        image = Image.fromarray(seg_feat.sum(-1).astype(np.uint8))
-        # bev = bev.convert("RGB")
-        # visualize_grid_to_grid(atten, 136, bev)
-        grid_image, atten_avg = get_atten_avg_map_3D(atten, 100, image, tuple(self.cfg.seg_dim))
-        grid_image = np.asarray(grid_image)[::-1, ...]
-        atten_avg = np.asarray(atten_avg)[::-1, ...]
-        return grid_image, atten_avg
-
     def tick(self):
         if self.net_eva.agent_need_init:
             self.init_agent()
@@ -492,7 +422,8 @@ class ParkingAgent:
             self.model.eval()
             with torch.no_grad():
                 start_time = time.time()
-                pred_controls, coarse_segmentation, pred_segmentation, _, target_bev = self.model.predict(data)
+
+                pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -509,29 +440,19 @@ class ParkingAgent:
                 self.trans_control.reverse = control_signal[3]
 
                 self.speed_limit(data_frame)
-    
+
                 if self.show_eva_imgs:
-                    if self.cfg.feature_encoder == "bev":
-                        self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
-                        self.save_seg_img(pred_segmentation)
-                        self.save_target_bev_img(target_bev)
-                        self.display_imgs()
-                    elif self.cfg.feature_encoder == "conet":
-                        self.grid_image, self.atten_avg = self.save_atten_avg_map_conet(data)
-                        self.save_seg_img_3D(pred_segmentation) # save to self.seg_bev
-                        self.save_target_bev_img_3D(target_bev)
-                        self.display_imgs_3D()
+                    # self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+                    self.save_seg_img(pred_segmentation)
+                    self.save_target_bev_img(target_bev)
+                    self.display_imgs()
 
                 self.save_output.clear()
-            if self.cfg.feature_encoder == "bev":
-                self.prev_loc_thea = [vehicle_transform.location.x,
+
+            self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
-            elif self.cfg.feature_encoder == "conet":
-                self.prev_loc_thea = [vehicle_transform.location.x,
-                                 vehicle_transform.location.y,
-                                 vehicle_transform.location.z,
-                                 imu_data.compass if np.isnan(imu_data.compass) else 0]
+
         self.player.apply_control(self.trans_control)
 
     def speed_limit(self, data_frame):
@@ -569,13 +490,14 @@ class ParkingAgent:
             self.boost = False
 
     def get_model_data(self, data_frame):
+
         vehicle_transform = data_frame['veh_transfrom']
         imu_data = data_frame['imu']
         vehicle_velocity = data_frame['veh_velocity']
 
         data = {}
 
-        target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
+        target_point = convert_slot_coord3D(vehicle_transform, self.net_eva.eva_parking_goal)
 
         front_final, self.rgb_front = self.image_process(data_frame['rgb_front'])
         front_left_final, self.rgb_front_left = self.image_process(data_frame['rgb_front_left'])
@@ -602,108 +524,15 @@ class ParkingAgent:
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
 
         if self.show_eva_imgs:
-            if self.cfg.feature_encoder == "bev":
-                img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
-                img = np.moveaxis(img, 0, 2)
-                img = Image.fromarray(img)
-                seg_gt = self.semantic_process(image=img, scale=0.5, crop=200, target_slot=target_point)
-                seg_gt[seg_gt == 1] = 128
-                seg_gt[seg_gt == 2] = 255
-                data['segmentation'] = Image.fromarray(seg_gt)
-            elif self.cfg.feature_encoder == "conet":
-                data['segmentation'] = self.semantic_process3D(data_frame['lidar'], visual=True)
-                
+            img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
+            img = np.moveaxis(img, 0, 2)
+            img = Image.fromarray(img)
+            seg_gt = self.semantic_process(image=img, scale=0.5, crop=200, target_slot=target_point)
+            seg_gt[seg_gt == 1] = 128
+            seg_gt[seg_gt == 2] = 255
+            data['segmentation'] = Image.fromarray(seg_gt)
+
         return data
-
-    def semantic_process3D(self, lidar, visual=False):
-        data = np.frombuffer(lidar.raw_data, dtype=np.dtype([
-            ('x', np.float32),
-            ('y', np.float32),
-            ('z', np.float32),
-            ('cos_angle', np.float32),
-            ('object_idx', np.uint32),
-            ('object_tag', np.uint32)
-        ]))
-        points = np.stack((data['x'],data['y'],data['z']), axis=-1)
-        points = self.lidar2ego(points,np.array([0,0,1.6]))
-        categories = data['object_tag'].astype(int)
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
-        resolution = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / self.cfg.occ_size[0]
-        min_bound = self.cfg.point_cloud_range[0:3]
-        max_bound = self.cfg.point_cloud_range[3:]
-        voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud_within_bounds(pcd, resolution, min_bound, max_bound)
-        
-        # Map each point to its corresponding voxel and category
-        point_to_voxel_map = {}
-        for point, category in zip(np.asarray(pcd.points), categories):
-            if point[0]<max_bound[0] and point[0]>min_bound[0] and point[1]<max_bound[1] and point[1]>min_bound[1] and point[2]<max_bound[2] and point[2]>min_bound[2]:
-                voxel_index = tuple(voxel_grid.get_voxel(point))
-                if voxel_index in point_to_voxel_map:
-                    point_to_voxel_map[voxel_index].append(category)
-                else:
-                    point_to_voxel_map[voxel_index] = [category]
-        # Determine the majority category for each voxel
-        voxel_categories = {voxel: self.most_common(categories) for voxel, categories in point_to_voxel_map.items()}
-        for key in voxel_categories.keys():
-            value = convert_semantic_label(voxel_categories[key])
-            voxel_categories[key]=value
-        
-        voxel_grids = np.zeros(tuple( self.cfg.occ_size), dtype=np.int)
-        # fill data
-        for key, value in voxel_categories.items():
-            voxel_grids[key] = int(value)
-
-        if visual:
-            NUSC_COLOR_MAP = {  # RGB.
-                # 0: (0, 0, 0),  # Black. noise
-                1: (112, 128, 144),  # Slategrey barrier
-                2: (220, 20, 60),  # Crimson bicycle
-                3: (255, 127, 80),  # Orangered bus
-                4: (255, 158, 0),  # Orange car
-                5: (233, 150, 70),  # Darksalmon construction
-                6: (255, 61, 99),  # Red motorcycle
-                7: (0, 0, 230),  # Blue pedestrian
-                8: (47, 79, 79),  # Darkslategrey trafficcone
-                9: (255, 140, 0),  # Darkorange trailer
-                10: (255, 99, 71),  # Tomato truck
-                11: (0, 207, 191),  # nuTonomy green driveable_surface
-                12: (175, 0, 75),  # flat other
-                13: (75, 0, 75),  # sidewalk
-                14: (112, 180, 60),  # terrain
-                15: (222, 184, 135),  # Burlywood mannade
-                16: (0, 175, 0),  # Green vegetation
-            }
-            boxes = o3d.geometry.TriangleMesh()
-            for coord_inds, values in voxel_categories.items():
-                box = o3d.geometry.TriangleMesh.create_box(1.0, 1.0, 1.0)
-                pose = np.array(coord_inds)
-                pose[0] = 320 - pose[0]
-                pose = np.array(min_bound)+ pose*0.2
-                box.translate(pose)
-                
-                if values not in [11,12,13]:
-                    # import pdb; pdb.set_trace()
-                    # box.paint_uniform_color(np.array([255, 0, 0]) / 255.0)
-                    box.paint_uniform_color(np.array(NUSC_COLOR_MAP[values]) / 255.0)
-                else:
-                    # box.paint_uniform_color((0.0, 0.0, 0.0))
-                    continue
-                boxes += box
-            render_img_high_view([boxes], fname="./visual/voxel.png")
-        # Color mapping normalized to [0, 1]
-        return voxel_grids
-    
-    def lidar2ego(self, points,translation,rotation=None):
-        # input should be (n,3)
-        if(rotation is not None):
-            print("lidar should be at same orientation with vehicle!!!!")
-        translated_points = points + translation
-        return translated_points
-
-    def most_common(self, lst):
-        data = Counter(lst)
-        return data.most_common(1)[0][0]
 
     def draw_waypoints(self, waypoints):
         ego_t = self.world.player.get_transform()
@@ -813,65 +642,6 @@ class ParkingAgent:
         plt.pause(0.1)
         plt.clf()
 
-    def display_imgs_3D(self):
-        plt.subplots_adjust(wspace=0.08, hspace=0.08, left=0.04, bottom=0.0, right=0.95, top=0.97)
-        rows = 2
-        cols = 4
-        ax_ctl = plt.subplot(rows, cols, 4)
-        ax_ctl.axis('off')
-        t_x = 0.2
-        t_y = 0.8
-        throttle_show = int(self.trans_control.throttle * 1000) / 1000
-        steer_show = int(self.trans_control.steer * 1000) / 1000
-        brake_show = int(self.trans_control.brake * 1000) / 1000
-        reverse_show = self.trans_control.reverse
-        ax_ctl.text(t_x, t_y, 'Throttle: ' + str(throttle_show), fontsize=10, color='red')
-        ax_ctl.text(t_x, t_y - 0.2, '    Steer: ' + str(steer_show), fontsize=10, color='red')
-        ax_ctl.text(t_x, t_y - 0.4, '   Brake: ' + str(brake_show), fontsize=10, color='red')
-        ax_ctl.text(t_x, t_y - 0.6, 'Reverse: ' + str(reverse_show), fontsize=10, color='red')
-        
-        ax_front = plt.subplot(rows, cols, 1)
-        ax_front.axis('off')
-        ax_front.set_title('front', fontsize=10)
-        ax_front.imshow(self.rgb_front)
-
-        ax_rear = plt.subplot(rows, cols, 2)
-        ax_rear.axis('off')
-        ax_rear.set_title('back', fontsize=10)
-        ax_rear.imshow(self.rgb_back)
-
-        ax_atten = plt.subplot(rows, cols, 7)
-        ax_atten.axis('off')
-        ax_atten.set_title('atten(output)', fontsize=10)
-        ax_atten.imshow(self.grid_image)
-        if np.max(self.atten_avg) != 0:
-            ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
-        else:
-            ax_atten.imshow(self.atten_avg, alpha=0.6, cmap='rainbow')
-
-        ax_left = plt.subplot(rows, cols, 5)
-        ax_left.axis('off')
-        ax_left.set_title('left', fontsize=10)
-        ax_left.imshow(self.rgb_front_left)
-
-        ax_right = plt.subplot(rows, cols, 6)
-        ax_right.axis('off')
-        ax_right.set_title('right', fontsize=10)
-        ax_right.imshow(self.rgb_front_right)
-
-        ax_bev = plt.subplot(rows, cols, 3)
-        ax_bev.axis('off')
-        ax_bev.set_title('target_bev(input)', fontsize=10)
-        ax_bev.imshow(self.target_bev.sum(-1))
-
-        ax_bev = plt.subplot(rows, cols, 8)
-        ax_bev.axis('off')
-        ax_bev.set_title('seg_bev(output)', fontsize=10)
-        ax_bev.imshow(self.seg_bev.sum(-1))
-
-        plt.pause(0.1)
-        plt.clf()
-
     def get_eva_control(self):
         control = {
             'throttle': self.trans_control.throttle,
@@ -880,136 +650,3 @@ class ParkingAgent:
             'reverse': self.trans_control.reverse,
         }
         return control
-
-
-def render_img(geometries, fname=None, view_point=-100, zoom=0.7, show_wireframe=True, point_size=5):
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(width=1360, height=1080)
-    for g in geometries:
-        vis.add_geometry(g)
-    renderoption = vis.get_render_option()
-    # renderoption.load_from_json('/home/wru1syv/avp/data/renderoption.json')
-    renderoption.mesh_show_wireframe = show_wireframe
-    renderoption.point_size = point_size
-    ctr = vis.get_view_control()
-    ctr.rotate(0.0, view_point)
-    ctr.set_zoom(zoom)
-    vis.poll_events()
-    vis.update_renderer()
-    img = np.asarray(vis.capture_screen_float_buffer())
-    if fname:
-        # import pdb; pdb.set_trace()
-        cv2.imwrite(fname, (img[:, :, ::-1] * 255).astype(np.uint8))
-    vis.destroy_window()
-    return img
-
-def render_img_cam_param(geometries, cam_param, fname=None, show_wireframe=True, point_size=5):
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(width=cam_param.intrinsic.width, height=cam_param.intrinsic.height)
-    for g in geometries:
-        vis.add_geometry(g)
-    renderoption = vis.get_render_option()
-    renderoption.load_from_json('/home/wru1syv/avp/data/renderoption.json')
-    renderoption.mesh_show_wireframe = show_wireframe
-    renderoption.point_size = point_size
-    ctr = vis.get_view_control()
-    ctr.convert_from_pinhole_camera_parameters(cam_param, allow_arbitrary=True)
-    vis.poll_events()
-    vis.update_renderer()
-    img = np.asarray(vis.capture_screen_float_buffer())
-    if fname:
-        cv2.imwrite(fname, (img[:, :, ::-1] * 255).astype(np.uint8))
-    vis.destroy_window()
-    return img
-
-
-def render_img_high_view(geometries, **kwargs):
-    kwargs_default = {'fname': None, 'view_point': -100, 'zoom': 0.7, 'show_wireframe': True, 'point_size': 5}
-    kwargs = {**kwargs_default, **kwargs}
-    # R = geometries[0].get_rotation_matrix_from_zyx((np.pi / 2, 0, 0))
-    # R = np.array([[-1,0,0],[0,1,0],[0,0,1]])
-    R = geometries[0].get_rotation_matrix_from_zyx((-np.pi / 2, 0, 0))
-    # R = R@R_
-
-    # import pdb; pdb.set_trace()
-    geometries_rot = []
-    for g in geometries:
-        dg = deepcopy(g)
-        if type(g) != o3d.geometry.AxisAlignedBoundingBox:
-            dg.rotate(R, center=(0, 0, 0))
-        geometries_rot.append(dg) 
-    img = render_img(geometries_rot, **kwargs)
-    return img
-
-
-# convert from carla to nuscenes
-def convert_semantic_label(category_index):
-    carla_categories = {
-        0: "Unlabeled",
-        1: "Building",
-        2: "Fence",
-        3: "Other",
-        4: "Pedestrian",
-        5: "Pole",
-        6: "RoadLine",
-        7: "Road",
-        8: "SideWalk",
-        9: "Vegetation",
-        10: "Vehicles",
-        11: "Wall",
-        12: "TrafficSign",
-        13: "Sky",
-        14: "Ground",
-        15: "Bridge",
-        16: "RailTrack",
-        17: "GuardRail",
-        18: "TrafficLight",
-        19: "Static",
-        20: "Dynamic",
-        21: "Water",
-        22: "Terrain"
-    }
-    categories = {
-        1: "barrier",
-        2: "bicycle",
-        3: "bus",
-        4: "car",
-        5: "construction_vehicle",
-        6: "motorcycle",
-        7: "pedestrian",
-        8: "traffic_cone",
-        9: "trailer",
-        10: "truck",
-        11: "driveable_surface",
-        12: "other_flat",
-        13: "sidewalk",
-        14: "terrain",
-        15: "manmade",
-        16: "vegetation"
-    }
-    mapping = {
-        0: 1,   # Unlabeled -> barrier
-        1: 15,  # Building -> manmade
-        2: 1,   # Fence -> barrier
-        3: 1,   # Other -> barrier
-        4: 7,   # Pedestrian -> pedestrian
-        5: 1,   # Pole -> barrier
-        6: 12,  # RoadLine -> other_flat
-        7: 11,  # Road -> driveable_surface
-        8: 13,  # SideWalk -> sidewalk
-        9: 16,  # Vegetation -> vegetation
-        10: 4,  # Vehicles -> car
-        11: 1,  # Wall -> barrier
-        12: 1,  # TrafficSign -> barrier
-        13: 12, # Sky -> other_flat
-        14: 12, # Ground -> other_flat
-        15: 12, # Bridge -> other_flat
-        16: 12, # RailTrack -> other_flat
-        17: 1,  # GuardRail -> barrier
-        18: 1,  # TrafficLight -> barrier
-        19: 1,  # Static -> barrier
-        20: 1,  # Dynamic -> barrier
-        21: 14, # Water -> terrain
-        22: 14  # Terrain -> terrain
-    }
-    return mapping.get(category_index, 1) 

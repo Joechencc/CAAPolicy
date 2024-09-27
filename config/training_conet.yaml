@@ -108,8 +108,8 @@ parking_model:
     empty_idx: 0
 
   conet_encoder_in_channel: 192
-  conet_encoder_out_channel: 258 # 256 + 2 # 512 + 4
-  Segdim: [16, 16, 2] #[8, 8, 2]
+  conet_encoder_out_channel: 258 # 256 + 2
+  Segdim: [16, 16, 2] #[16, 16, 4]
   conet_x_bound: [-16.0, 16.0, 0.2]
   conet_y_bound: [-16.0, 16.0, 0.2]
   conet_z_bound: [-2.0, 2.0, 0.2]
@@ -138,17 +138,17 @@ parking_model:
 
   # transformer encoder
   tf_en_dim: 258
-  tf_en_conet_dim: 258 #516
+  tf_en_conet_dim: 258
   tf_en_heads: 6
   tf_en_layers: 4
   tf_en_dropout: 0.05
   tf_en_bev_length: 256
-  tf_en_conet_length: 512 #128
+  tf_en_conet_length: 512 #512 for [16, 16, 2] 1024 for [16, 16, 4]
   tf_en_motion_length: 3
 
   # transformer decoder
   tf_de_dim: 258
-  tf_de_conet_dim: 258 #516
+  tf_de_conet_dim: 258
 
   tf_de_heads: 6
   tf_de_layers: 4

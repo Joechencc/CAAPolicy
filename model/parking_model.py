@@ -66,7 +66,7 @@ class ParkingModel(nn.Module):
         bev_target = torch.zeros((b, 1, h, w, d), dtype=torch.float).to(self.cfg.device, non_blocking=True)
         occ_size = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / h
         x_pixel = (h / 2 + target_point[:, 0] / occ_size).unsqueeze(0).T.int()
-        y_pixel = (w / 2 + target_point[:, 1] / occ_size).unsqueeze(0).T.int()
+        y_pixel = (w / 2 - target_point[:, 1] / occ_size).unsqueeze(0).T.int()
         z_pixel = (d / 2 + target_point[:, 2] / occ_size).unsqueeze(0).T.int()
         target_point = torch.cat([x_pixel, y_pixel, z_pixel], dim=1)
 
