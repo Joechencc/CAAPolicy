@@ -43,15 +43,15 @@ def make_cuda_ext(name,
 if __name__ == '__main__':
     # add_mim_extention()
     setup(
-        name='OpenOccupancy',
+        name='PWU',
         version='0.0',
-        description=("OpenOccupancy: A Large Scale Benchmark for Surrounding Semantic Occupancy Perception"),
-        author='OpenOccupancy Contributors',
-        author_email='wangxiaofeng2020@ia.ac.cn',
+        description=("PWU"),
+        author='ParkingWUncertainty Contributors',
+        author_email='cc7287@nyu.edu',
         keywords='Occupancy Perception',
         packages=find_packages(),
         include_package_data=True,
-        package_data={'projects.occ_plugin.ops': ['*/*.so']},
+        package_data={'model.mmdirs': ['*/*.so']},
         classifiers=[
             "Development Status :: 4 - Beta",
             "License :: OSI Approved :: Apache Software License",
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         ext_modules=[
             make_cuda_ext(
                 name="occ_pool_ext",
-                module="projects.occ_plugin.ops.occ_pooling",
+                module="model.mmdirs",
                 sources=[
                     "src/occ_pool.cpp",
                     "src/occ_pool_cuda.cu",
