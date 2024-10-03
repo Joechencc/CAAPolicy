@@ -21,6 +21,10 @@ def train():
         default='./config/training.yaml',
         type=str,
         help='path to training.yaml (default: ./config/training.yaml)')
+    arg_parser.add_argument(
+        '--model_path',
+        default=None,
+        help='path to model.ckpt')
     args = arg_parser.parse_args()
 
     with open(args.config, 'r') as yaml_file:
@@ -29,6 +33,7 @@ def train():
         except yaml.YAMLError:
             logger.exception("Open {} failed!", args.config)
     cfg = get_cfg(cfg_yaml)
+    cfg.model_path = args.model_path
 
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)

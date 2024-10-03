@@ -45,6 +45,7 @@ class OccNet(BEVDepth):
         self.occ_size = occ_size
         self.maxpool = nn.AdaptiveMaxPool3d((160, 160, 1))
         self.conv1 = nn.Conv2d(in_channels=192, out_channels=64, kernel_size=1)
+        self.conv2 = nn.Conv2d(in_channels=128, out_channels=64, kernel_size=1)
             
     def image_encoder(self, img):
         imgs = img
@@ -163,6 +164,7 @@ class OccNet(BEVDepth):
             transform=transform,
             **kwargs,
         )
+        
         fine_feature = None
 
         B, C, H, W, D = output['output_feature'].shape
@@ -179,18 +181,24 @@ class OccNet(BEVDepth):
                 fine_feature[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred_feature.permute(1, 0)[None]
             else:
                 fine_feature = output['output_voxelsoutput_feature_fine_fine'][0]
-
+        
         pred_c = output['output_voxels'][0]
+        # visual = True
         if visual:
             if gt_occ is not None:
-                SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
-                SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)
+                H, W, D = self.occ_size
+                pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+                pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
+                self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+                self.plot_grid(gt_occ[0][0].unsqueeze(-1), os.path.join("visual", "gt.png"))
+                # SC_metric, _ = self.evaluation_semantic(pred_c, gt_occ, eval_type='SC', visible_mask=visible_mask)
+                # SSC_metric, SSC_occ_metric = self.evaluation_semantic(pred_c, gt_occ, eval_type='SSC', visible_mask=visible_mask)
             else:
                 H, W, D = self.occ_size
                 pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
                 pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
                 self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
-
+        # import pdb; pdb.set_trace()
         # pred_f = None
         # SSC_metric_fine = None
         # if output['output_voxels_fine'] is not None:
@@ -220,12 +228,18 @@ class OccNet(BEVDepth):
         fine_feature = self.maxpool(fine_feature).squeeze(-1)  
         fine_feature = self.conv1(fine_feature)
         fine_feature = F.interpolate(fine_feature, size=(200, 200), mode='bilinear', align_corners=False)
+
+        coarse_feature = self.maxpool(output['output_feature']).squeeze(-1)  
+        coarse_feature = self.conv2(coarse_feature)
+        coarse_feature = F.interpolate(coarse_feature, size=(200, 200), mode='bilinear', align_corners=False)
+
         if gt_occ is not None:
             test_output = {
-                'SC_metric': SC_metric,
-                'SSC_metric': SSC_metric,
+                # 'SC_metric': SC_metric,
+                # 'SSC_metric': SSC_metric,
                 'pred_c': pred_c,
                 # 'pred_f': pred_f,
+                'coarse_feature': coarse_feature,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
@@ -234,6 +248,7 @@ class OccNet(BEVDepth):
             test_output = {
                 'pred_c': pred_c,
                 # 'pred_f': pred_f,
+                'coarse_feature': coarse_feature,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
@@ -265,6 +280,7 @@ class OccNet(BEVDepth):
 
     def evaluation_semantic(self, pred, gt, eval_type, visible_mask=None, coarse=True):
         _, H, W, D = gt.shape
+        # import pdb; pdb.set_trace()
         pred = F.interpolate(pred, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
         pred = torch.argmax(pred[0], dim=0).cpu().numpy()
         gt = gt[0].cpu().numpy()
@@ -276,6 +292,8 @@ class OccNet(BEVDepth):
         if eval_type == 'SC':
             # 0 1 split
             if coarse:
+                self.plot_grid(pred, os.path.join("visual", "pred_side.png"), os.path.join("visual", "pred.png"))
+                import pdb; pdb.set_trace()
                 self.plot_grid(pred, os.path.join("visual", "pred_side.png"), os.path.join("visual", "pred.png"))
             gt[gt != self.empty_idx] = 1
             pred[pred != self.empty_idx] = 1
@@ -295,8 +313,8 @@ class OccNet(BEVDepth):
     def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
         H, W, D = threeD_grid.shape
 
-        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        twoD_map = threeD_grid[:,:,7]
+        twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
 
         if vmax is None:

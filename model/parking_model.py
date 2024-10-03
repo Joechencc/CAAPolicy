@@ -14,7 +14,6 @@ import carla
 import os
 import matplotlib.pyplot as plt
 
-
 class ParkingModel(nn.Module):
     def __init__(self, cfg: Configuration):
         super().__init__()
@@ -63,6 +62,45 @@ class ParkingModel(nn.Module):
 
         return metas
 
+    def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        H, W, D = threeD_grid.shape
+        twoD_map = np.max(threeD_grid, axis=2) # compress 3D-> 2D
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+
+    def plot_grid_2D(self, twoD_map, save_path=None, vmax=None, layer=None):
+        H, W = twoD_map.shape
+
+        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+
     def transform_spec(self, cam_specs, cam2pixel, B, I, img_shape, device):
         keys = ['rgb_front', 'rgb_left', 'rgb_right', 'rgb_rear']
         sensor2egos = []
@@ -97,8 +135,17 @@ class ParkingModel(nn.Module):
         img_metas = self.construct_metas()
         rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
         img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
+        # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
         res = self.OccNet(img_metas=img_metas,img_inputs=img)
-        bev_feature, pred_depth = res['fine_feature'], res['depth'] 
+        bev_feature, pred_depth = res['coarse_feature'], res['depth']
+        #####
+        # H, W, D = self.occ_size
+        # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
+        # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+        # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
+        #####
+
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
 
         bev_down_sample = self.bev_encoder(bev_feature)
@@ -106,6 +153,9 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
+        # pred_c = torch.argmax(pred_segmentation[0], dim=0).cpu().numpy()
+        # self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
+        # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
 
         return fuse_feature, pred_segmentation, pred_depth, bev_target
 

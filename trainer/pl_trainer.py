@@ -9,7 +9,7 @@ from loss.control_loss import ControlLoss, ControlValLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from model.parking_model import ParkingModel
-
+from collections import OrderedDict
 
 def setup_callbacks(cfg):
     callbacks = []
@@ -51,6 +51,11 @@ class ParkingTrainingModule(pl.LightningModule):
         self.depth_loss_func = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
+        if cfg.model_path is not None:
+            ckpt = torch.load(cfg.model_path, map_location='cuda:0')
+            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+            self.parking_model.load_state_dict(state_dict)
+            self.parking_model.to('cuda:0')
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
