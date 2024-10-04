@@ -44,8 +44,8 @@ class OccNet(BEVDepth):
         self.occ_fuser = None
         self.occ_size = occ_size
         self.maxpool = nn.AdaptiveMaxPool3d((160, 160, 1))
-        self.conv1 = nn.Conv2d(in_channels=192, out_channels=64, kernel_size=1)
-        self.conv2 = nn.Conv2d(in_channels=128, out_channels=64, kernel_size=1)
+        self.conv1 = nn.Conv2d(in_channels=192, out_channels=32, kernel_size=1)
+        self.conv2 = nn.Conv2d(in_channels=128, out_channels=32, kernel_size=1)
             
     def image_encoder(self, img):
         imgs = img
@@ -233,13 +233,14 @@ class OccNet(BEVDepth):
         coarse_feature = self.conv2(coarse_feature)
         coarse_feature = F.interpolate(coarse_feature, size=(200, 200), mode='bilinear', align_corners=False)
 
+        fine_feature = torch.cat((coarse_feature, fine_feature), dim=1)
         if gt_occ is not None:
             test_output = {
                 # 'SC_metric': SC_metric,
                 # 'SSC_metric': SSC_metric,
                 'pred_c': pred_c,
                 # 'pred_f': pred_f,
-                'coarse_feature': coarse_feature,
+                # 'coarse_feature': coarse_feature,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
@@ -248,7 +249,7 @@ class OccNet(BEVDepth):
             test_output = {
                 'pred_c': pred_c,
                 # 'pred_f': pred_f,
-                'coarse_feature': coarse_feature,
+                # 'coarse_feature': coarse_feature,
                 'fine_feature': fine_feature,
                 'depth': depth,
                 'coarse_occ_mask': output['coarse_occ_mask'],
