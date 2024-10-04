@@ -16,54 +16,72 @@ parking_vehicle_rotation = [
     carla.Rotation(yaw=180),
     carla.Rotation(yaw=0)
 ]
-
-cam_specs_ = {
-            'rgb_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'depth_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-                'type': 'sensor.camera.depth',
-            },
-        }
-
 cam2pixel_ = np.array([[0, 1, 0, 0],
                     [0, 0, -1, 0],
                     [1, 0, 0, 0],
                     [0, 0, 0, 1]], dtype=float)
+cam_specs_ = {
+    'rgb_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.rgb',
+    },
+    'depth_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.depth',
+    },
+    }
 
 def find_weather_presets():
     presets = [x for x in dir(carla.WeatherParameters) if re.match('[A-Z].+', x)]
@@ -150,12 +168,15 @@ class World(object):
 
         self._need_init_ego_state = True
 
+        #lidar
+        self._lidar_config = {}
+
     def restart(self, seed, target_index, ego_transform):
 
         # spawn static vehicles in the parking lot
         if self._shuffle_static_vhe:
             self.init_static_npc(seed, target_index)
-
+        #self.init_single_bicycle(seed, (280.0, 235.73, 0.3))
         # init the player position
         self._player.set_transform(ego_transform)
         self._player.apply_control(carla.VehicleControl())
@@ -212,7 +233,6 @@ class World(object):
         # spawn npc vehicles
         for index in range(static_vehicle_num):
             spawn_point = parking_points_copy[index]
-
             if spawn_point == target_parking_goal:
                 self._all_parking_goals.append(spawn_point)
                 continue
@@ -224,8 +244,8 @@ class World(object):
                 npc.set_simulate_physics(False)
                 self._actor_list.append(npc)
             else:
-                # logging.info("try_spawn_actor %s at (%.3f, %.3f, %.3f) failed!",
-                #              npc_bp.id, spawn_point.x, spawn_point.y, spawn_point.z)
+                logging.info("try_spawn_actor %s at (%.3f, %.3f, %.3f) failed!",
+                             npc_bp.id, spawn_point.x, spawn_point.y, spawn_point.z)
                 self._all_parking_goals.append(spawn_point)
 
         # set parking goal
@@ -233,6 +253,56 @@ class World(object):
             self._all_parking_goals.append(parking_points_copy[index])
 
         logging.info('set %d parking goal', len(self._all_parking_goals))
+
+    def init_single_pergola(self, spawn_coordinate):
+        logging.info("Generating a pergola at the specified coordinate")
+
+        # 选择Pergola蓝图
+        blueprints = self._world.get_blueprint_library().filter("static.prop.pergola")
+
+        # 设置生成点
+        spawn_point = carla.Location(x=spawn_coordinate[0], y=spawn_coordinate[1], z=spawn_coordinate[2])
+
+        # 生成Pergola
+        pergola_transform = carla.Transform(spawn_point, rotation=random.choice(parking_vehicle_rotation))
+        pergola_bp = random.choice(blueprints)
+        pergola = self._world.try_spawn_actor(pergola_bp, pergola_transform)
+
+        if pergola is not None:
+            # 调整Pergola的尺寸（如果蓝图支持）
+
+            pergola.set_simulate_physics(False)
+            self._actor_list.append(pergola)
+            logging.info("Pergola spawned successfully at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y,
+                         spawn_point.z)
+        else:
+            logging.info("Failed to spawn pergola at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y, spawn_point.z)
+
+    def init_single_bicycle(self, spawn_coordinate):
+
+        logging.info("Generating a static bicycle at the specified coordinate")
+
+        # 选择自行车蓝图
+        blueprints = self._world.get_blueprint_library().filter("vehicle.bh.crossbike")
+
+        # 设置生成点
+        spawn_point = carla.Location(x=spawn_coordinate[0], y=spawn_coordinate[1], z=spawn_coordinate[2])
+
+        # 生成NPC自行车
+        npc_transform = carla.Transform(spawn_point, rotation=random.choice(parking_vehicle_rotation))
+        npc_bp = random.choice(blueprints)
+        npc = self._world.try_spawn_actor(npc_bp, npc_transform)
+
+        if npc is not None:
+            npc.set_simulate_physics(False)
+            self._actor_list.append(npc)
+            logging.info("Bicycle spawned successfully at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y,
+                         spawn_point.z)
+        else:
+            # logging.info("try_spawn_actor %s at (%.3f, %.3f, %.3f) failed!",
+            #              npc_bp.id, spawn_point.x, spawn_point.y, spawn_point.z)
+            self._all_parking_goals.append(spawn_point)
+            logging.info("Failed to spawn bicycle at (%.3f, %.3f, %.3f)", spawn_point.x, spawn_point.y, spawn_point.z)
 
     def init_sensors(self):
         self._collision_sensor = CollisionSensor(self._player, self._hud)
@@ -291,52 +361,30 @@ class World(object):
             'fov': 100,
         }
         self._cam_center = np.array([self._cam_config['width'] / 2.0, self._cam_config['height'] / 2.0])
-        self._cam_specs = {
-            'rgb_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'rgb_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-                'type': 'sensor.camera.rgb',
-            },
-            'depth_front': {
-                'x': 1.5, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_left': {
-                'x': 0.0, 'y': -0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_right': {
-                'x': 0.0, 'y': 0.8, 'z': 1.5,
-                'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-                'type': 'sensor.camera.depth',
-            },
-            'depth_rear': {
-                'x': -2.2, 'y': 0.0, 'z': 1.5,
-                'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-                'type': 'sensor.camera.depth',
-            },
-        }
+
+        self._cam_specs = cam_specs_ 
 
         for key, value in self._cam_specs.items():
             self.spawn_rgb_camera(key, value)
 
+        #lidar
+        self._lidar_config = {
+            'lidar_front': {
+                'x': 0.0, 'y': 0.0, 'z': 1.6,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+                'channels': 32, 'range': 100, 'points_per_second': 1000000,
+                'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
+                'atmosphere_attenuation_rate': 0.1,
+                'horizontal_fov': 360,
+                'upper_fov': 10,
+                'lower_fov': -30,
+            },
+            # Repeat for each lidar configuration
+        }
+
+        # for key, value in self._lidar_config.items():
+        #     #self.spawn_lidar(value)# Pass only the lidar specifications
+        #     self.spawn_semantic_lidar(value)
         # intrinsic
         w = self._cam_config['width']
         h = self._cam_config['height']
@@ -350,18 +398,26 @@ class World(object):
             [0, 0, 1]
         ], dtype=np.float)
 
-        self._cam2pixel = np.array([[0, 1, 0, 0],
-                                    [0, 0, -1, 0],
-                                    [1, 0, 0, 0],
-                                    [0, 0, 0, 1]], dtype=float)
-
+        self._cam2pixel = cam2pixel_
+        mode = "conet"
         for cam_id, cam_spec in self._cam_specs.items():
             if cam_id.startswith('rgb'):
-                cam2veh = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
-                                          carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
-                                                         roll=cam_spec['roll']))
-                veh2cam = self._cam2pixel @ np.array(cam2veh.get_inverse_matrix())
-                self._veh2cam_dict[cam_id] = veh2cam
+                if mode == "bev":
+                    cam2veh = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
+                                            carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
+                                                            roll=cam_spec['roll']))
+                    veh2cam = self._cam2pixel @ np.array(cam2veh.get_inverse_matrix())
+                    self._veh2cam_dict[cam_id] = veh2cam
+                elif mode == "conet":
+                    keys = ['rgb_front', 'rgb_front_left', 'rgb_front_right', 'rgb_back', 'rgb_back_left', 'rgb_back_right']
+                    sensor2egos = []
+                    for key in keys:
+                        cam_spec = self._cam_specs[key]
+                        ego2sensor = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
+                                                carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
+                                                                roll=cam_spec['roll']))
+                        sensor2ego = np.array(ego2sensor.get_inverse_matrix())
+                        self._veh2cam_dict[key] = sensor2ego
 
     def spawn_rgb_camera(self, sensor_id, sensor_spec):
         blueprint_library = self._world.get_blueprint_library()
@@ -402,6 +458,29 @@ class World(object):
         lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
                                        attachment_type=carla.AttachmentType.Rigid)
         lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
+        self._sensor_list.append(lidar)
+
+    def spawn_semantic_lidar(self, lidar_specs):
+
+        blueprint_library = self.world.get_blueprint_library()
+        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
+        lidar_bp.set_attribute('rotation_frequency', str(lidar_specs['rotation_frequency']))
+        lidar_bp.set_attribute('points_per_second', str(lidar_specs['points_per_second']))
+        lidar_bp.set_attribute('channels', str(lidar_specs['channels']))
+        lidar_bp.set_attribute('upper_fov', str(lidar_specs['upper_fov']))
+        lidar_bp.set_attribute('lower_fov', str(lidar_specs['lower_fov']))
+        lidar_bp.set_attribute('range', str(lidar_specs['range']))
+        lidar_bp.set_attribute("horizontal_fov", str(lidar_specs['horizontal_fov']))
+
+        lidar_location = carla.Location(x=lidar_specs['x'], y=lidar_specs['y'], z=lidar_specs['z'])
+        lidar_rotation = carla.Rotation(pitch=lidar_specs['pitch'], roll=lidar_specs['roll'], yaw=lidar_specs['yaw'])
+        lidar_transform = carla.Transform(lidar_location, lidar_rotation)
+
+        lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
+                                       attachment_type=carla.AttachmentType.Rigid)
+
+        lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
+
         self._sensor_list.append(lidar)
 
     def next_weather(self, reverse=False):

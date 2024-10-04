@@ -61,7 +61,7 @@ class ParkingTrainingModule(pl.LightningModule):
         loss_dict = {}
         pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
 
-        control_loss = self.control_loss_func(pred_control, batch)
+        control_loss = 20*self.control_loss_func(pred_control, batch)
         loss_dict.update({
             "control_loss": control_loss
         })

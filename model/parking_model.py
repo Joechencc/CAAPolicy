@@ -102,7 +102,7 @@ class ParkingModel(nn.Module):
         plt.close()
 
     def transform_spec(self, cam_specs, cam2pixel, B, I, img_shape, device):
-        keys = ['rgb_front', 'rgb_left', 'rgb_right', 'rgb_rear']
+        keys = ['rgb_front', 'rgb_front_left', 'rgb_front_right', 'rgb_back', 'rgb_back_left', 'rgb_back_right']
         sensor2egos = []
         for key in keys:
             cam_spec = cam_specs[key]
@@ -137,7 +137,7 @@ class ParkingModel(nn.Module):
         img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
         # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
         res = self.OccNet(img_metas=img_metas,img_inputs=img)
-        bev_feature, pred_depth = res['coarse_feature'], res['depth']
+        bev_feature, pred_depth = res['fine_feature'], res['depth']
         #####
         # H, W, D = self.occ_size
         # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()

@@ -267,7 +267,7 @@ class OccNet(BEVDepth):
         else:
             pass
 
-        image_name_l = ['front', 'left', 'right', 'rear']
+        image_name_l = ['front', 'front_left', 'front_right', 'back', 'back_left', 'back_right']
         img = img[0]
         for i in range(img.size(0)):
             image = img[i].cpu().numpy().transpose(1, 2, 0)  # Convert from (C, H, W) to (H, W, C)
