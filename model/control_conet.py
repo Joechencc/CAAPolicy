@@ -17,7 +17,8 @@ class ControlCONet(nn.Module):
 
         tf_layer = nn.TransformerDecoderLayer(d_model=self.cfg.tf_de_conet_dim, nhead=self.cfg.tf_de_heads)
         self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
-        self.output = nn.Linear(self.cfg.tf_de_conet_dim, self.cfg.token_nums)
+        # self.output = nn.Linear(self.cfg.tf_de_conet_dim, self.cfg.direct_nums)
+        self.output = nn.Linear(self.cfg.tf_de_conet_dim, self.cfg.direct_nums)
 
         self.init_weights()
 
@@ -33,6 +34,7 @@ class ControlCONet(nn.Module):
         # tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.shape[1]).cuda()
         tgt_mask = (torch.triu(torch.ones((tgt.shape[1], tgt.shape[1]), device=self.cfg.device)) == 1).transpose(0, 1)
         tgt_mask = tgt_mask.float().masked_fill(tgt_mask == 0, float('-inf')).masked_fill(tgt_mask == 1, float(0.0))
+        # import pdb; pdb.set_trace()
         tgt_padding_mask = (tgt == self.pad_idx)
         return tgt_mask, tgt_padding_mask
 
@@ -47,14 +49,14 @@ class ControlCONet(nn.Module):
         return pred_controls
 
     def forward(self, encoder_out, tgt):
-        tgt = tgt[:, :-1]
+        tgt = tgt[:, :-10]
         tgt_mask, tgt_padding_mask = self.create_mask(tgt)
 
         tgt_embedding = self.embedding(tgt)
         tgt_embedding = self.pos_drop(tgt_embedding + self.pos_embed)
 
         pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
-        pred_controls = self.output(pred_controls)
+        pred_controls = self.output_regress(pred_controls)
         return pred_controls
 
     def predict(self, encoder_out, tgt):

@@ -147,9 +147,9 @@ class ParkingModel(nn.Module):
             pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         elif self.cfg.feature_encoder == 'conet':
             pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
-        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
-        self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
-        
+        # self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+        # self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+        import pdb; pdb.set_trace()
         return pred_control, coarse_segmentation, fine_segmentation, pred_depth
 
     def predict(self, data):
@@ -157,7 +157,6 @@ class ParkingModel(nn.Module):
         self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
         self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
 
-        assert()
         pred_multi_controls = data['gt_control'].cuda()
         for i in range(3):
             if self.cfg.feature_encoder == 'bev':

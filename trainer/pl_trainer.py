@@ -80,7 +80,8 @@ class ParkingTrainingModule(pl.LightningModule):
         loss_dict.update({
             "control_loss": control_loss
         })
-
+        if batch_idx % 100 == 0:
+            print("control_loss:::",control_loss)
         if self.cfg.feature_encoder == "bev":
             segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         elif self.cfg.feature_encoder == "conet":

@@ -22,6 +22,7 @@ class Configuration:
     future_frame_nums = None
     hist_frame_nums = None
     token_nums = None
+    direct_nums = None
     image_crop = None
 
     feature_encoder = None
@@ -96,6 +97,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.future_frame_nums = config['future_frame_nums']
     cfg.hist_frame_nums = config['hist_frame_nums']
     cfg.token_nums = config['token_nums']
+    cfg.direct_nums = config['direct_nums']
     cfg.image_crop = config['image_crop']
     cfg.feature_encoder = config['feature_encoder']
     cfg.voxel_out_indices = config['voxel_out_indices']
