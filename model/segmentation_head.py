@@ -29,13 +29,14 @@ class SegmentationHead(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(self.out_channel, self.seg_classes, kernel_size=1, padding=0)
         )
+        self.occ_size = (self.cfg.occ_size[0], self.cfg.occ_size[1])
 
     def top_down(self, x):
         p5 = self.relu(self.c5_conv(x))
         p4 = self.relu(self.up_conv5(self.up_sample(p5)))
         p3 = self.relu(self.up_conv4(self.up_sample(p4)))
         p2 = self.relu(self.up_conv3(self.up_sample(p3)))
-        p1 = F.interpolate(p2, size=(200, 200), mode="bilinear", align_corners=False)
+        p1 = F.interpolate(p2, size=self.occ_size, mode="bilinear", align_corners=False)
         return p1
 
     def forward(self, fuse_feature):

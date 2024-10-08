@@ -20,8 +20,8 @@ class ParkingModel(nn.Module):
 
         self.cfg = cfg
 
-        # self.bev_model = BevModel(self.cfg)
-        self.OccNet = OccNet(**self.cfg.OccNet_cfg)
+        self.bev_model = BevModel(self.cfg)
+        # self.OccNet = OccNet(**self.cfg.OccNet_cfg)
 
         self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
 
@@ -129,15 +129,15 @@ class ParkingModel(nn.Module):
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
+        bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
 
-        # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
-        # import pdb; pdb.set_trace()
-        img_metas = self.construct_metas()
-        rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
-        img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
-        # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
-        res = self.OccNet(img_metas=img_metas,img_inputs=img)
-        bev_feature, pred_depth = res['fine_feature'], res['depth']
+        # img_metas = self.construct_metas()
+        # rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
+        # img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
+        # # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
+        # res = self.OccNet(img_metas=img_metas,img_inputs=img)
+        # pred_c, pred_f, pred_depth = res['pred_c'], res['pred_f'], res['depth']
+
         #####
         # H, W, D = self.occ_size
         # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
@@ -145,7 +145,6 @@ class ParkingModel(nn.Module):
         # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
         # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
         #####
-
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
 
         bev_down_sample = self.bev_encoder(bev_feature)
@@ -153,11 +152,13 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
+        return fuse_feature, pred_segmentation, pred_depth, bev_target
+
         # pred_c = torch.argmax(pred_segmentation[0], dim=0).cpu().numpy()
         # self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
         # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
 
-        return fuse_feature, pred_segmentation, pred_depth, bev_target
+        
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)

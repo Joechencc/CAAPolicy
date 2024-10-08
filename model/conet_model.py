@@ -199,20 +199,20 @@ class OccNet(BEVDepth):
                 pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
                 self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
         # import pdb; pdb.set_trace()
-        # pred_f = None
-        # SSC_metric_fine = None
-        # if output['output_voxels_fine'] is not None:
-        #     if output['output_coords_fine'] is not None:
-        #         fine_pred = output['output_voxels_fine'][0]  # N ncls
-        #         fine_coord = output['output_coords_fine'][0]  # 3 N
-        #         if gt_occ is not None:
-        #             pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-        #         else:
-        #             pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
-        #         pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
-        #     else:
-        #         pred_f = output['output_voxels_fine'][0]
-
+        H, W, D = self.occ_size
+        pred_f = None
+        if output['output_voxels_fine'] is not None:
+            if output['output_coords_fine'] is not None:
+                fine_pred = output['output_voxels_fine'][0]  # N ncls
+                fine_coord = output['output_coords_fine'][0]  # 3 N
+                if gt_occ is not None:
+                    pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                else:
+                    pred_f = self.empty_idx * torch.ones((B, H, W, D), device=device)[:, None].repeat(1, fine_pred.shape[1], 1, 1, 1).float()
+                pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
+            else:
+                pred_f = output['output_voxels_fine'][0]
+        # import pdb; pdb.set_trace()
         #     if visual:
         #         if gt_occ is not None:
         #             SC_metric, _ = self.evaluation_semantic(pred_f, gt_occ, eval_type='SC', visible_mask=visible_mask)
@@ -224,22 +224,22 @@ class OccNet(BEVDepth):
         #             self.plot_grid(pred_f, os.path.join("visual", "pred_fine.png"))
         #             # import pdb; pdb.set_trace()
     
-        coarse_occ_mask = output['coarse_occ_mask']
-        fine_feature = self.maxpool(fine_feature).squeeze(-1)  
-        fine_feature = self.conv1(fine_feature)
-        fine_feature = F.interpolate(fine_feature, size=(200, 200), mode='bilinear', align_corners=False)
+        # coarse_occ_mask = output['coarse_occ_mask']
+        # fine_feature = self.maxpool(fine_feature).squeeze(-1)  
+        # fine_feature = self.conv1(fine_feature)
+        # fine_feature = F.interpolate(fine_feature, size=(200, 200), mode='bilinear', align_corners=False)
 
-        coarse_feature = self.maxpool(output['output_feature']).squeeze(-1)  
-        coarse_feature = self.conv2(coarse_feature)
-        coarse_feature = F.interpolate(coarse_feature, size=(200, 200), mode='bilinear', align_corners=False)
+        # coarse_feature = self.maxpool(output['output_feature']).squeeze(-1)  
+        # coarse_feature = self.conv2(coarse_feature)
+        # coarse_feature = F.interpolate(coarse_feature, size=(200, 200), mode='bilinear', align_corners=False)
 
-        fine_feature = torch.cat((coarse_feature, fine_feature), dim=1)
+        # fine_feature = torch.cat((coarse_feature, fine_feature), dim=1)
         if gt_occ is not None:
             test_output = {
                 # 'SC_metric': SC_metric,
                 # 'SSC_metric': SSC_metric,
                 'pred_c': pred_c,
-                # 'pred_f': pred_f,
+                'pred_f': pred_f,
                 # 'coarse_feature': coarse_feature,
                 'fine_feature': fine_feature,
                 'depth': depth,
@@ -248,7 +248,7 @@ class OccNet(BEVDepth):
         else:
             test_output = {
                 'pred_c': pred_c,
-                # 'pred_f': pred_f,
+                'pred_f': pred_f,
                 # 'coarse_feature': coarse_feature,
                 'fine_feature': fine_feature,
                 'depth': depth,

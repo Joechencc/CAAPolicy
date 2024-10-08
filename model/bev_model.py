@@ -103,7 +103,6 @@ class BevModel(nn.Module):
             bev_feature[geom_b[:, 2], geom_b[:, 0], geom_b[:, 1]] = x_b
             tmp_bev_feature = bev_feature.permute((0, 3, 1, 2)).squeeze(0)
             output[b] = tmp_bev_feature
-
         return output
 
     def calc_bev_feature(self, images, intrinsics, extrinsics):

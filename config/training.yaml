@@ -27,8 +27,8 @@ parking_model:
   voxel_out_indices: (0, 1, 2, 3)
 
   # bev model
-  bev_x_bound: [-10.0, 10.0, 0.1]
-  bev_y_bound: [-10.0, 10.0, 0.1]
+  bev_x_bound: [-16.0, 16.0, 0.2]
+  bev_y_bound: [-16.0, 16.0, 0.2]
   bev_z_bound: [-10.0, 10.0, 20.0]
   d_bound: [0.5, 12.5, 0.25]
   final_dim: [256, 256]
@@ -38,7 +38,7 @@ parking_model:
 
   # segmentation
   seg_classes: 3
-  seg_vehicle_weights: [1.0, 2.0, 2.0]
+  seg_vehicle_weights: [1.0, 40.0, 40.0]
 
   # transformer encoder
   tf_en_dim: 258

@@ -8,8 +8,11 @@ from tool.config import Configuration
 from loss.control_loss import ControlLoss, ControlValLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
+from loss.seg_loss_3d import SegmentationLoss3D
 from model.parking_model import ParkingModel
 from collections import OrderedDict
+
+import torch.nn.functional as F
 
 def setup_callbacks(cfg):
     callbacks = []
@@ -44,6 +47,9 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.control_val_loss_func = ControlValLoss(self.cfg)
 
+        # self.segmentation_loss_func_3D = SegmentationLoss3D(
+        #     class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
+        # )
         self.segmentation_loss_func = SegmentationLoss(
             class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
         )
@@ -59,13 +65,19 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
+        # pred_c, pred_f, pred_depth = self.parking_model(batch)
         pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
-
-        control_loss = 20*self.control_loss_func(pred_control, batch)
+        control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
-            "control_loss": control_loss
+            "control_loss": 10*control_loss
         })
 
+        # H, W, D = pred_f.shape[-3:]
+        # pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_c.unsqueeze(1), batch['segmentation'])
+        # loss_dict.update({
+        #     "segmentation_loss_coarse": segmentation_loss_coarse
+        # })
         segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         loss_dict.update({
             "segmentation_loss": segmentation_loss
@@ -96,11 +108,21 @@ class ParkingTrainingModule(pl.LightningModule):
             "acc_steer_val_loss": acc_steer_val_loss,
             "reverse_val_loss": reverse_val_loss
         })
-
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         val_loss_dict.update({
             "segmentation_val_loss": segmentation_val_loss
         })
+        # H, W, D = pred_f.shape[-3:]
+        # pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_c.unsqueeze(1), batch['segmentation'])
+        # val_loss_dict.update({
+        #     "segmentation_loss_coarse": segmentation_loss_coarse
+        # })
+
+        # segmentation_loss_fine = self.segmentation_loss_func_3D(pred_f.unsqueeze(1), batch['segmentation'])
+        # val_loss_dict.update({
+        #     "segmentation_loss_fine": segmentation_loss_fine
+        # })
 
         depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
         val_loss_dict.update({
