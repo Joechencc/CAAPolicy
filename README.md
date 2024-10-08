@@ -14,6 +14,9 @@ chmod +x setup_carla.sh
 Install hybrid A*
 ```Shell
 pip install cython
+pip install open3d
+pip install heapdict
+
 cd agent
 chmod +x quick_setup.sh
 ./quick_setup
