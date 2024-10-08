@@ -330,7 +330,7 @@ class ParkingAgent:
             scale_width=1,
             scale_height=1
         )
-        self.intrinsic_crop = self.intrinsic_crop.unsqueeze(0).expand(4, 3, 3)
+        self.intrinsic_crop = self.intrinsic_crop.unsqueeze(0).expand(6, 3, 3)
 
         veh2cam_dict = self.world.veh2cam_dict
         front_to_ego = torch.from_numpy(veh2cam_dict['rgb_front']).float().unsqueeze(0)
