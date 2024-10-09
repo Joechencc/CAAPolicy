@@ -66,7 +66,8 @@ class ParkingTrainingModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         # pred_c, pred_f, pred_depth = self.parking_model(batch)
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        # pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, pred_segmentation = self.parking_model(batch)
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
             "control_loss": 10*control_loss
@@ -83,10 +84,10 @@ class ParkingTrainingModule(pl.LightningModule):
             "segmentation_loss": segmentation_loss
         })
 
-        depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        loss_dict.update({
-            "depth_loss": depth_loss
-        })
+        # depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
+        # loss_dict.update({
+        #     "depth_loss": depth_loss
+        # })
 
         train_loss = sum(loss_dict.values())
         loss_dict.update({
@@ -101,7 +102,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, pred_segmentation = self.parking_model(batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
@@ -124,10 +125,10 @@ class ParkingTrainingModule(pl.LightningModule):
         #     "segmentation_loss_fine": segmentation_loss_fine
         # })
 
-        depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        val_loss_dict.update({
-            "depth_val_loss": depth_val_loss
-        })
+        # depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
+        # val_loss_dict.update({
+        #     "depth_val_loss": depth_val_loss
+        # })
 
         val_loss = sum(val_loss_dict.values())
         val_loss_dict.update({

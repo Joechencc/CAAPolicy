@@ -13,6 +13,8 @@ import numpy as np
 import carla
 import os
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
+
 
 class ParkingModel(nn.Module):
     def __init__(self, cfg: Configuration):
@@ -30,6 +32,7 @@ class ParkingModel(nn.Module):
         self.control_predict = ControlPredict(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
+        self.fc = nn.Linear(3, 64)
 
     def add_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
@@ -129,8 +132,11 @@ class ParkingModel(nn.Module):
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
-        bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
-
+        # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
+        x = data['segmentation'].squeeze(1)
+        x_one_hot = F.one_hot(x, num_classes=3).float()
+        x_one_hot = self.fc(x_one_hot)
+        bev_feature = x_one_hot.permute(0, 3, 1, 2)
         # img_metas = self.construct_metas()
         # rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
         # img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
@@ -152,7 +158,7 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
-        return fuse_feature, pred_segmentation, pred_depth, bev_target
+        return fuse_feature, pred_segmentation, bev_target
 
         # pred_c = torch.argmax(pred_segmentation[0], dim=0).cpu().numpy()
         # self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
@@ -161,9 +167,9 @@ class ParkingModel(nn.Module):
         
 
     def forward(self, data):
-        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        fuse_feature, pred_segmentation, _ = self.encoder(data)
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        return pred_control, pred_segmentation, pred_depth
+        return pred_control, pred_segmentation
 
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
