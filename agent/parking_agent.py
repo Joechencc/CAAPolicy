@@ -388,8 +388,7 @@ class ParkingAgent:
             self.model.eval()
             with torch.no_grad():
                 start_time = time.time()
-
-                pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_controls, pred_segmentation, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -452,6 +451,73 @@ class ParkingAgent:
             self.boot_step = 0
             self.boost = False
 
+    def indices2coor(self,indices,min,resolution):
+        return np.array(indices)*resolution+np.array(min)
+
+    def convert_slot_coord3D(self, ego_trans, target_point):
+        """
+        Convert target parking slot from world frame into self_veh frame
+        :param ego_trans: veh2world transform
+        :param target_point: target parking slot in world frame [x, y, yaw]
+        :return: target parking slot in veh frame [x, y, yaw]
+        """
+        target_point_self_veh = self.convert_veh_coord3D(target_point[0], target_point[1], target_point[2], ego_trans)
+
+        yaw_diff = target_point[3] - ego_trans.rotation.yaw
+        if yaw_diff > 180:
+            yaw_diff -= 360
+        elif yaw_diff < -180:
+            yaw_diff += 360
+        target_point = [target_point_self_veh[0], target_point_self_veh[1], target_point_self_veh[2], yaw_diff]
+
+        return target_point
+    
+    def convert_veh_coord3D(self, x, y, z, ego_trans):
+        """
+        Convert coordinate (x,y,z) in world frame into self-veh frame
+        :param x:
+        :param y:
+        :param z:
+        :param ego_trans: veh2world transform
+        :return: coordinate in self-veh frame
+        """
+
+        world2veh = np.array(ego_trans.get_inverse_matrix())
+        target_array = np.array([x, y, z, 1.0], dtype=float)
+        target_point_self_veh = world2veh @ target_array
+        return target_point_self_veh
+    
+    def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
+        size_h, size_w, size_d = voxel.shape
+        # convert target slot position into pixels
+        x_pixel = target_slot[0] / resolution
+        y_pixel = target_slot[1] / resolution
+        z_pixel = target_slot[2] / resolution
+        target_point = np.array([size_h / 2 + x_pixel, size_w / 2 - y_pixel, size_d / 2 + z_pixel], dtype=int)
+    
+        # draw the whole parking slot
+        slot_points = []
+        for x in range(-15, 16):
+            for y in range(-9, 10):
+                for z in range(-3, 4):
+                    slot_points.append(np.array([x, y, z, 1], dtype=int))
+    
+        # rotate parking slots points
+    
+        slot_trans = np.array(
+            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[3]))).get_matrix())
+        slot_points = np.vstack(slot_points).T
+        slot_points_ego = (slot_trans @ slot_points)[0:3].astype(int)
+    
+        # get parking slot points on pixel frame
+        slot_points_ego[0] += target_point[0]
+        slot_points_ego[1] += target_point[1]
+        slot_points_ego[2] += target_point[2]
+    
+        voxel[tuple(slot_points_ego)] = 17
+    
+        return voxel
+
     def get_model_data(self, data_frame):
 
         vehicle_transform = data_frame['veh_transfrom']
@@ -464,10 +530,42 @@ class ParkingAgent:
                 all_pcd[key] = convert2numpy(data_frame[key])
             all_points, all_categories = align_pcd_list(all_pcd, self._lidar_config)
             gt_occ_voxel = voxelization(all_points, all_categories)
-            data["gt_occ"] = gt_occ_voxel
-            breakpoint()
 
-        target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
+            gt_occ, resolution, min_bound, max_bound = gt_occ_voxel['gt_occ'], gt_occ_voxel['resolution'], gt_occ_voxel['min_bound'], gt_occ_voxel['max_bound']
+            grid_size = np.ceil((np.array(max_bound) - np.array(min_bound)) / resolution).astype(int)
+
+            parking_goal_3D = [self.net_eva.eva_parking_goal[0], self.net_eva.eva_parking_goal[1], 0, self.net_eva.eva_parking_goal[2]]
+            target_slot = self.convert_slot_coord3D(vehicle_transform, parking_goal_3D)
+
+            voxels = np.zeros(grid_size, dtype=int)
+            for indices, value in gt_occ.items():
+                # GT invert x-axis
+                # indice_0 = int(- np.array(indices)[0])
+
+                tmp_coor = self.indices2coor(indices,min_bound,resolution)
+                if (min_bound[0] < tmp_coor[0] and  tmp_coor[0] < max_bound[0] and
+                    min_bound[1] < tmp_coor[1] and  tmp_coor[1]< max_bound[1] and
+                    min_bound[2] < tmp_coor[2] and  tmp_coor[2]< max_bound[2]):
+                    indices = (indices[0], -indices[1], indices[2])
+
+                    voxels[(indices)] = value
+            voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
+
+            min_index = np.floor((np.array(self.cfg.point_cloud_range[:3]) - np.array(min_bound)) / resolution).astype(int)
+            max_index = np.ceil((np.array(self.cfg.point_cloud_range[3:]) - np.array(max_bound)) / resolution).astype(int)
+            cropped_voxels = voxels[min_index[0]:max_index[0], min_index[1]:max_index[1], min_index[2]:max_index[2]]
+            #Exclude the car itself
+            H, W, D = cropped_voxels.shape
+            cropped_voxels[int(H/2)-12:int(H/2)+12,int(W/2)-12:int(W/2)+12,:] = 0
+            mask = np.isin(cropped_voxels, [11, 12, 13, 14])
+            cropped_voxels[mask] = 0
+
+            map_segmentation = np.zeros_like(cropped_voxels)
+            map_segmentation[(cropped_voxels != 0) & (cropped_voxels != 17)] = 1
+            map_segmentation[cropped_voxels == 17] = 2
+            segmentation = np.max(map_segmentation, axis=2)
+            segmentation = segmentation[:,::-1]
+            data['segmentation'] = torch.tensor(np.array(segmentation)).unsqueeze(0)
 
         front_final, self.rgb_front = self.image_process(data_frame['rgb_front'])
         front_left_final, self.rgb_front_left = self.image_process(data_frame['rgb_front_left'])
@@ -487,9 +585,9 @@ class ParkingAgent:
         data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
-        if self.pre_target_point is not None:
-            target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
-        data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+        # if self.pre_target_point is not None:
+        #     target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
+        data['target_point'] = torch.tensor(target_slot, dtype=torch.float).unsqueeze(0)
 
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         if self.show_eva_imgs:
