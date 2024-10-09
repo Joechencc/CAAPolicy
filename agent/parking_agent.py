@@ -21,6 +21,7 @@ from dataset.carla_dataset import detokenize
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
+from tool.lidar2voxel import convert2numpy, align_pcd_list, voxelization
 
 
 def show_control_info(window, control, steering_wheel_image, width, height, font):
@@ -242,7 +243,9 @@ class ParkingAgent:
         self.stop_count = 0
         self.boost = False
         self.boot_step = 0
-
+        with open('./config/sensor_specs.yaml', 'r') as file:
+            data = yaml.safe_load(file)
+            self._lidar_config = data["lidar_specs"]
         self.init_agent()
 
         plt.ion()
@@ -454,8 +457,15 @@ class ParkingAgent:
         vehicle_transform = data_frame['veh_transfrom']
         imu_data = data_frame['imu']
         vehicle_velocity = data_frame['veh_velocity']
-
         data = {}
+        if self.cfg.use_gt_occ == True:
+            all_pcd = {}
+            for key in self._lidar_config.keys():
+                all_pcd[key] = convert2numpy(data_frame[key])
+            all_points, all_categories = align_pcd_list(all_pcd, self._lidar_config)
+            gt_occ_voxel = voxelization(all_points, all_categories)
+            data["gt_occ"] = gt_occ_voxel
+            breakpoint()
 
         target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
 
@@ -482,7 +492,6 @@ class ParkingAgent:
         data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
 
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
-
         if self.show_eva_imgs:
             img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
             img = np.moveaxis(img, 0, 2)
