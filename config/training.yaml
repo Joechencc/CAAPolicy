@@ -1,4 +1,6 @@
 parking_model:
+  #settings
+  use_gt_occ: true # if true, use gt occ in parking_agent
   # train
   data_dir: './e2e_parking/'
   log_dir: './log/'
