@@ -22,9 +22,10 @@ class ParkingModel(nn.Module):
 
         self.cfg = cfg
 
-        self.bev_model = BevModel(self.cfg)
-        # self.OccNet = OccNet(**self.cfg.OccNet_cfg)
+        # self.bev_model = BevModel(self.cfg)
 
+        self.OccNet = OccNet(**self.cfg.OccNet_cfg)
+        self.OccNet.eval()
         self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
 
         self.feature_fusion = FeatureFusion(self.cfg)
@@ -32,7 +33,9 @@ class ParkingModel(nn.Module):
         self.control_predict = ControlPredict(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
-        self.fc = nn.Linear(3, 64)
+        self.fc = nn.Linear(18, 64)
+        self.adaptive_max_pool = nn.AdaptiveMaxPool1d(1)
+        self.softmax = nn.Softmax(dim=4)
 
     def add_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
@@ -133,24 +136,28 @@ class ParkingModel(nn.Module):
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
         # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
-        x = data['segmentation'].squeeze(1)
-        x_one_hot = F.one_hot(x, num_classes=3).float()
-        x_one_hot = self.fc(x_one_hot)
-        bev_feature = x_one_hot.permute(0, 3, 1, 2)
-        # img_metas = self.construct_metas()
-        # rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
-        # img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
+        # x = data['segmentation'].squeeze(1)
+        # x_one_hot = F.one_hot(x, num_classes=3).float()
+        # x_one_hot = self.fc(x_one_hot)
+        # bev_feature = x_one_hot.permute(0, 3, 1, 2)
+        img_metas = self.construct_metas()
+        rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
+        img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
         # # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
-        # res = self.OccNet(img_metas=img_metas,img_inputs=img)
-        # pred_c, pred_f, pred_depth = res['pred_c'], res['pred_f'], res['depth']
-
-        #####
+        res = self.OccNet(img_metas=img_metas,img_inputs=img)
+        pred_c, pred_f, pred_depth = res['pred_c'], res['pred_f'], res['depth']
+        B, C, H, W, D = pred_f.shape
+        bev_feature = self.adaptive_max_pool(self.softmax(pred_f).view(-1, D)).squeeze(1).view(B, C, H, W)
+        bev_feature = bev_feature.permute(0, 2, 3, 1)
+        bev_feature = self.fc(bev_feature)
+        bev_feature = bev_feature.permute(0, 3, 1, 2)
+        # ####
         # H, W, D = self.occ_size
         # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
         # pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
         # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
         # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
-        #####
+        # ####
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
 
         bev_down_sample = self.bev_encoder(bev_feature)

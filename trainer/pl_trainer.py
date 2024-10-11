@@ -63,6 +63,15 @@ class ParkingTrainingModule(pl.LightningModule):
             self.parking_model.load_state_dict(state_dict)
             self.parking_model.to('cuda:0')
 
+        if cfg.model_path_vision is not None:
+            ckpt = torch.load(cfg.model_path_vision, map_location='cuda:0')
+            state_dict = {k: v for k, v in ckpt['state_dict'].items() if 'OccNet' in k}
+            # parking_model_dict = self.parking_model.state_dict()
+            # parking_model_dict.update(state_dict)
+            self.parking_model.load_state_dict(state_dict, strict=False)
+            self.parking_model.to('cuda:0')
+
+
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         # pred_c, pred_f, pred_depth = self.parking_model(batch)
