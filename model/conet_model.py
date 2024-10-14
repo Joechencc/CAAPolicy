@@ -212,6 +212,9 @@ class OccNet(BEVDepth):
                 pred_f[:, :, fine_coord[0], fine_coord[1], fine_coord[2]] = fine_pred.permute(1, 0)[None]
             else:
                 pred_f = output['output_voxels_fine'][0]
+        else:
+            H, W, D = self.occ_size
+            pred_f = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
         # import pdb; pdb.set_trace()
         #     if visual:
         #         if gt_occ is not None:

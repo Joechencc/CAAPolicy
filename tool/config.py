@@ -21,6 +21,7 @@ class Configuration:
 
     training_map = None
     validation_map = None
+    vision_only = None
     future_frame_nums = None
     hist_frame_nums = None
     token_nums = None
@@ -86,6 +87,7 @@ def get_cfg(cfg_yaml: dict):
 
     cfg.training_map = config['training_map']
     cfg.validation_map = config['validation_map']
+    cfg.vision_only = config['vision_only']
     cfg.future_frame_nums = config['future_frame_nums']
     cfg.hist_frame_nums = config['hist_frame_nums']
     cfg.token_nums = config['token_nums']

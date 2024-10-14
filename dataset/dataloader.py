@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from dataset.carla_dataset import CarlaDataset
+from dataset.carla_dataset_vision import CarlaDatasetVision
 from tool.config import Configuration
 
 
@@ -25,8 +26,12 @@ class ParkingDataModule(pl.LightningDataModule):
 
     def setup(self, stage: str):
         data_root = self.data_dir
-        train_set = CarlaDataset(data_root, 1, self.cfg)
-        val_set = CarlaDataset(data_root, 0, self.cfg)
+        if self.cfg.vision_only:
+            train_set = CarlaDatasetVision(data_root, 1, self.cfg)
+            val_set = CarlaDatasetVision(data_root, 0, self.cfg)
+        else:
+            train_set = CarlaDataset(data_root, 1, self.cfg)
+            val_set = CarlaDataset(data_root, 0, self.cfg)
         self.train_loader = DataLoader(dataset=train_set,
                                        batch_size=self.cfg.batch_size,
                                        shuffle=True,

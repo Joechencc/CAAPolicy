@@ -47,9 +47,9 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.control_val_loss_func = ControlValLoss(self.cfg)
 
-        # self.segmentation_loss_func_3D = SegmentationLoss3D(
-        #     class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
-        # )
+        self.segmentation_loss_func_3D = SegmentationLoss3D(
+            class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
+        )
         self.segmentation_loss_func = SegmentationLoss(
             class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
         )
@@ -76,27 +76,34 @@ class ParkingTrainingModule(pl.LightningModule):
         loss_dict = {}
         # pred_c, pred_f, pred_depth = self.parking_model(batch)
         # pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
-        pred_control, pred_segmentation = self.parking_model(batch)
-        control_loss = self.control_loss_func(pred_control, batch)
-        loss_dict.update({
-            "control_loss": 10*control_loss
-        })
+        if self.cfg.vision_only:
+            pred_c, pred_f, pred_depth = self.parking_model(batch)
+            depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
+            loss_dict.update({
+                "depth_loss": depth_loss
+            })
+            H, W, D = pred_f.shape[-3:]
+            pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+            segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_c.unsqueeze(1), batch['segmentation'])
+            loss_dict.update({
+                "segmentation_loss_coarse": segmentation_loss_coarse
+            })
+            segmentation_loss_fine = self.segmentation_loss_func_3D(pred_f.unsqueeze(1), batch['segmentation'])
+            loss_dict.update({
+                "segmentation_loss_fine": segmentation_loss_fine
+            })
 
-        # H, W, D = pred_f.shape[-3:]
-        # pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-        # segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_c.unsqueeze(1), batch['segmentation'])
-        # loss_dict.update({
-        #     "segmentation_loss_coarse": segmentation_loss_coarse
-        # })
-        segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        loss_dict.update({
-            "segmentation_loss": segmentation_loss
-        })
+        else:
+            pred_control, pred_segmentation = self.parking_model(batch)
+            control_loss = self.control_loss_func(pred_control, batch)
+            loss_dict.update({
+                "control_loss": 10*control_loss
+            })
 
-        # depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        # loss_dict.update({
-        #     "depth_loss": depth_loss
-        # })
+            segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+            loss_dict.update({
+                "segmentation_loss": segmentation_loss
+            })
 
         train_loss = sum(loss_dict.values())
         loss_dict.update({
@@ -111,34 +118,38 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
-        pred_control, pred_segmentation = self.parking_model(batch)
+        if self.cfg.vision_only:
+            pred_c, pred_f, pred_depth = self.parking_model(batch)
+            H, W, D = pred_f.shape[-3:]
+            pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+            segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_c.unsqueeze(1), batch['segmentation'])
+            val_loss_dict.update({
+                "segmentation_loss_coarse": segmentation_loss_coarse
+            })
 
-        acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
-        val_loss_dict.update({
-            "acc_steer_val_loss": acc_steer_val_loss,
-            "reverse_val_loss": reverse_val_loss
-        })
-        segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        val_loss_dict.update({
-            "segmentation_val_loss": segmentation_val_loss
-        })
-        # H, W, D = pred_f.shape[-3:]
-        # pred_c = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-        # segmentation_loss_coarse = self.segmentation_loss_func_3D(pred_c.unsqueeze(1), batch['segmentation'])
-        # val_loss_dict.update({
-        #     "segmentation_loss_coarse": segmentation_loss_coarse
-        # })
+            segmentation_loss_fine = self.segmentation_loss_func_3D(pred_f.unsqueeze(1), batch['segmentation'])
+            val_loss_dict.update({
+                "segmentation_loss_fine": segmentation_loss_fine
+            })
 
-        # segmentation_loss_fine = self.segmentation_loss_func_3D(pred_f.unsqueeze(1), batch['segmentation'])
-        # val_loss_dict.update({
-        #     "segmentation_loss_fine": segmentation_loss_fine
-        # })
+            depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
+            val_loss_dict.update({
+                "depth_val_loss": depth_val_loss
+            })
 
-        # depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        # val_loss_dict.update({
-        #     "depth_val_loss": depth_val_loss
-        # })
+        else:
+            pred_control, pred_segmentation = self.parking_model(batch)
 
+            acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
+            val_loss_dict.update({
+                "acc_steer_val_loss": acc_steer_val_loss,
+                "reverse_val_loss": reverse_val_loss
+            })
+            segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+            val_loss_dict.update({
+                "segmentation_val_loss": segmentation_val_loss
+            })
+        
         val_loss = sum(val_loss_dict.values())
         val_loss_dict.update({
             "val_loss": val_loss

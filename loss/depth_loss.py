@@ -11,9 +11,9 @@ class DepthLoss(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.d_bound = self.cfg.d_bound
-        self.down_sample_factor = self.cfg.bev_down_sample
-        self.depth_channels = int((self.cfg.d_bound[1] - self.cfg.d_bound[0]) / self.cfg.d_bound[2])
+        self.d_bound = self.cfg.conet_d_bound
+        self.down_sample_factor = self.cfg.conet_down_sample
+        self.depth_channels = int((self.cfg.conet_d_bound[1] - self.cfg.conet_d_bound[0]) / self.cfg.conet_d_bound[2])
 
     def forward(self, depth_preds, depth_labels):
         depth_labels = self.get_down_sampled_gt_depth(depth_labels)
@@ -38,7 +38,6 @@ class DepthLoss(nn.Module):
         gt_depths_tmp = torch.where(gt_depths == 0.0, 1e5 * torch.ones_like(gt_depths), gt_depths)
         gt_depths = torch.min(gt_depths_tmp, dim=-1).values
         gt_depths = gt_depths.view(B * N, H // self.down_sample_factor, W // self.down_sample_factor)
-
         gt_depths = (gt_depths - (self.d_bound[0] - self.d_bound[2])) / self.d_bound[2]
         gt_depths = torch.where((gt_depths < self.depth_channels + 1) & (gt_depths >= 0.0),
                                 gt_depths, torch.zeros_like(gt_depths))

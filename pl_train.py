@@ -18,9 +18,9 @@ def train():
     arg_parser = argparse.ArgumentParser(description='ParkingModel')
     arg_parser.add_argument(
         '--config',
-        default='./config/training.yaml',
+        default='./config/training_vision.yaml',
         type=str,
-        help='path to training.yaml (default: ./config/training.yaml)')
+        help='path to training.yaml (default: ./config/training_vision.yaml)')
     arg_parser.add_argument(
         '--model_path',
         default=None,

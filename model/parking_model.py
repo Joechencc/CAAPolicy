@@ -36,6 +36,7 @@ class ParkingModel(nn.Module):
         self.fc = nn.Linear(18, 64)
         self.adaptive_max_pool = nn.AdaptiveMaxPool1d(1)
         self.softmax = nn.Softmax(dim=4)
+        self.vision_only = cfg.vision_only
 
     def add_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
@@ -71,6 +72,8 @@ class ParkingModel(nn.Module):
     def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
         H, W, D = threeD_grid.shape
         twoD_map = np.max(threeD_grid, axis=2) # compress 3D-> 2D
+        # for i in range(1,17):
+        #     twoD_map[twoD_map==i]= 1
         # twoD_map = threeD_grid[:,:,7]
         cmap = plt.cm.viridis # viridis color projection
 
@@ -133,8 +136,11 @@ class ParkingModel(nn.Module):
 
         intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
-        target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
-        ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
+        if self.cfg.vision_only == True:
+            pass
+        else:
+            target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
+            ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
         # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
         # x = data['segmentation'].squeeze(1)
         # x_one_hot = F.one_hot(x, num_classes=3).float()
@@ -146,6 +152,17 @@ class ParkingModel(nn.Module):
         # # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
         res = self.OccNet(img_metas=img_metas,img_inputs=img)
         pred_c, pred_f, pred_depth = res['pred_c'], res['pred_f'], res['depth']
+        ##########
+        # H, W, D = pred_f.shape[-3:]
+        # pred_c_refined = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # pred_c_refined = torch.argmax(pred_c_refined[0], dim=0).cpu().numpy()
+        # pred_f_refined = torch.argmax(pred_f[0], dim=0).cpu().numpy()
+        # self.plot_grid(pred_c_refined, os.path.join("visual", "pred.png"))
+        # self.plot_grid(pred_f_refined, os.path.join("visual", "pred_f.png"))
+        # self.plot_grid(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
+        #########
+        if self.vision_only:
+            return pred_c, pred_f, pred_depth 
         B, C, H, W, D = pred_f.shape
         bev_feature = self.adaptive_max_pool(self.softmax(pred_f).view(-1, D)).squeeze(1).view(B, C, H, W)
         bev_feature = bev_feature.permute(0, 2, 3, 1)
@@ -171,12 +188,14 @@ class ParkingModel(nn.Module):
         # self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
         # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
 
-        
-
     def forward(self, data):
-        fuse_feature, pred_segmentation, _ = self.encoder(data)
-        pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        return pred_control, pred_segmentation
+        if self.vision_only:
+            pred_c, pred_f, pred_depth = self.encoder(data)
+            return pred_c, pred_f, pred_depth 
+        else:
+            fuse_feature, pred_segmentation, _ = self.encoder(data)
+            pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
+            return pred_control, pred_segmentation
 
     def predict(self, data):
         fuse_feature, pred_segmentation, bev_target = self.encoder(data)

@@ -173,7 +173,16 @@ class CONetHead(nn.Module):
         if self.cascade_ratio != 1:
             if self.sample_from_img or self.sample_from_voxel:
                 coarse_occ_mask = coarse_occ.argmax(1) != self.empty_idx
-                
+                if coarse_occ_mask.sum() == 0:
+                    res = {
+                        'output_feature': out_voxel_feats,
+                        'output_feature_fine': None,
+                        'output_voxels': output['occ'],
+                        'output_voxels_fine': None,
+                        'output_coords_fine': None,
+                        'coarse_occ_mask': out_mask,
+                    }
+                    return res
                 assert coarse_occ_mask.sum() > 0, 'no foreground in coarse voxel'
                 B, W, H, D = coarse_occ_mask.shape
                 coarse_coord_x, coarse_coord_y, coarse_coord_z = torch.meshgrid(torch.arange(W).to(coarse_occ.device),
