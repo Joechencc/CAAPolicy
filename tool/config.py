@@ -12,6 +12,8 @@ class Configuration:
     log_every_n_steps = None
     check_val_every_n_epoch = None
 
+    cascade = None
+
     epochs = None
     learning_rate = None
     weight_decay = None
@@ -85,6 +87,8 @@ def get_cfg(cfg_yaml: dict):
     cfg.checkpoint_dir = os.path.join(config['checkpoint_dir'], exp_name)
     cfg.log_every_n_steps = config['log_every_n_steps']
     cfg.check_val_every_n_epoch = config['check_val_every_n_epoch']
+
+    cfg.cascade = config['cascade']
 
     cfg.epochs = config['epochs']
     cfg.learning_rate = config['learning_rate']

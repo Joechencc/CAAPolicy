@@ -21,6 +21,7 @@ from dataset.carla_dataset import detokenize
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
+from tool.lidar2voxel import convert2numpy, align_pcd_list, voxelization
 
 
 def show_control_info(window, control, steering_wheel_image, width, height, font):
@@ -237,11 +238,15 @@ class ParkingAgent:
 
         self.save_output = SaveOutput()
         self.hook_handle = None
-        self.load_model(args.model_path, args.model_path_conet)
+        self.load_model(args.model_path, args.model_path_cascade)
 
         self.stop_count = 0
         self.boost = False
         self.boot_step = 0
+
+        with open('./config/sensor_specs.yaml', 'r') as file:
+            data = yaml.safe_load(file)
+            self._lidar_config = data["lidar_specs"]
 
         self.init_agent()
 
@@ -255,7 +260,7 @@ class ParkingAgent:
                 logging.exception('Invalid YAML Config file {}', args.config)
         self.cfg = get_cfg(cfg_yaml)
 
-    def load_model(self, parking_pth_path, conet_pth_path):
+    def load_model(self, parking_pth_path, cascade_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
@@ -264,14 +269,10 @@ class ParkingAgent:
         self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
-        if self.cfg.feature_encoder == "conet":
-            patch_attention(self.model.conet_fusion.tf_encoder.layers[-1].self_attn)
-            self.hook_handle = self.model.conet_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
-                self.save_output)
-        elif self.cfg.feature_encoder == "bev":
-            patch_attention(self.model.feature_fusion.tf_encoder.layers[-1].self_attn)
-            self.hook_handle = self.model.feature_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
-                self.save_output)
+        
+        patch_attention(self.model.conet_fusion.tf_encoder.layers[-1].self_attn)
+        self.hook_handle = self.model.conet_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
+            self.save_output)
 
         logging.info('Load E2EParkingModel from %s', parking_pth_path)
 
@@ -496,6 +497,15 @@ class ParkingAgent:
         vehicle_velocity = data_frame['veh_velocity']
 
         data = {}
+
+        if self.cfg.cascade == True:
+            all_pcd = {}
+            for key in self._lidar_config.keys():
+                all_pcd[key] = convert2numpy(data_frame[key])
+            all_points, all_categories = align_pcd_list(all_pcd, self._lidar_config)
+            gt_occ_voxel = voxelization(all_points, all_categories)
+            data["gt_occ"] = gt_occ_voxel
+            breakpoint()
 
         target_point = convert_slot_coord3D(vehicle_transform, self.net_eva.eva_parking_goal)
 

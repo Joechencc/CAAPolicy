@@ -37,7 +37,7 @@ class ConetEncoder(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        # torch.Size([2, 193, 160, 160, 20])
+        # torch.Size([2, 193, 160, 160, 20]) / [2, 19, 160, 160, 20]
         x = F.interpolate(x, size=(256, 256, 64), mode="trilinear", align_corners=False)
         x = self.conv1(x) # torch.Size([2, 64, 128, 128, 32])
         x = self.bn1(x)

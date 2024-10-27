@@ -6,6 +6,7 @@ from queue import Queue, Empty
 
 import numpy as np
 import carla
+import yaml
 
 from data_generation.hud import HUD, get_actor_display_name
 from data_generation.sensors import CollisionSensor, CameraManager
@@ -467,23 +468,12 @@ class World(object):
             self.spawn_rgb_camera(key, value)
 
         #lidar
-        self._lidar_config = {
-            'lidar_front': {
-                'x': 0.0, 'y': 0.0, 'z': 1.6,
-                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'channels': 32, 'range': 100, 'points_per_second': 1000000,
-                'rotation_frequency': 100, 'type': 'sensor.lidar.ray_cast',
-                'atmosphere_attenuation_rate': 0.1,
-                'horizontal_fov': 360,
-                'upper_fov': 10,
-                'lower_fov': -30,
-            },
-            # Repeat for each lidar configuration
-        }
-
+        with open('./config/sensor_specs.yaml', 'r') as file:
+            data = yaml.safe_load(file)
+            self._lidar_config = data["lidar_specs"]
         for key, value in self._lidar_config.items():
-            #self.spawn_lidar(value)# Pass only the lidar specifications
-            self.spawn_semantic_lidar(value)
+            self.spawn_semantic_lidar(key,value)
+
         # intrinsic
         w = self._cam_config['width']
         h = self._cam_config['height']
@@ -525,30 +515,7 @@ class World(object):
         cam.listen(lambda data: sensor_callback(data, self._sensor_queue, sensor_id))
         self._sensor_list.append(cam)
 
-    def spawn_lidar(self, lidar_specs):
-        blueprint_library = self.world.get_blueprint_library()
-        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
-        lidar_bp.set_attribute('rotation_frequency', str(lidar_specs['rotation_frequency']))
-        lidar_bp.set_attribute('points_per_second', str(lidar_specs['points_per_second']))
-        lidar_bp.set_attribute('channels', str(lidar_specs['channels']))
-        lidar_bp.set_attribute('upper_fov', str(lidar_specs['upper_fov']))
-        lidar_bp.set_attribute('atmosphere_attenuation_rate', str(lidar_specs['atmosphere_attenuation_rate']))
-        lidar_bp.set_attribute('dropoff_general_rate', str(lidar_specs['dropoff_general_rate']))
-        lidar_bp.set_attribute('dropoff_intensity_limit', str(lidar_specs['dropoff_intensity_limit']))
-        lidar_bp.set_attribute('dropoff_zero_intensity', str(lidar_specs['dropoff_zero_intensity']))
-        lidar_location = carla.Location(x=lidar_specs['x'],
-                                        y=lidar_specs['y'],
-                                        z=lidar_specs['z'])
-        lidar_rotation = carla.Rotation(pitch=lidar_specs['pitch'],
-                                        roll=lidar_specs['roll'],
-                                        yaw=lidar_specs['yaw'])
-        lidar_transform = carla.Transform(lidar_location, lidar_rotation)
-        lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
-                                       attachment_type=carla.AttachmentType.Rigid)
-        lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
-        self._sensor_list.append(lidar)
-
-    def spawn_semantic_lidar(self, lidar_specs):
+    def spawn_semantic_lidar(self, sensor_id, lidar_specs):
 
         blueprint_library = self.world.get_blueprint_library()
         lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
@@ -567,7 +534,7 @@ class World(object):
         lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
                                        attachment_type=carla.AttachmentType.Rigid)
 
-        lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, "lidar"))
+        lidar.listen(lambda data: sensor_callback(data, self._sensor_queue, sensor_id))
 
         self._sensor_list.append(lidar)
 

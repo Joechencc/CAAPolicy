@@ -18,6 +18,7 @@ import numpy as np
 import carla
 import os
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 
 class ParkingModel(nn.Module):
@@ -25,91 +26,13 @@ class ParkingModel(nn.Module):
         super().__init__()
 
         self.cfg = cfg
-        if self.cfg.feature_encoder == "bev":
-            self.bev_model = BevModel(self.cfg)
-            self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
-            self.feature_fusion = FeatureFusion(self.cfg)
-            self.segmentation_head = SegmentationHead(self.cfg)
-            self.control_predict = ControlPredict(self.cfg)
-
-        elif self.cfg.feature_encoder == "conet":
-            self.OccNet = OccNet(**self.cfg.OccNet_cfg)
-            self.conet_encoder = ConetEncoder(self.cfg.conet_encoder_in_channel)
-            self.conet_fusion = CONetFusion(self.cfg)
-            self.seg3D_head = Seg3dHead(self.cfg)
-            self.control_conet = ControlCONet(self.cfg)
+        self.OccNet = OccNet(**self.cfg.OccNet_cfg)
+        self.conet_encoder = ConetEncoder(self.cfg.conet_encoder_in_channel)
+        self.conet_fusion = CONetFusion(self.cfg)
+        self.seg3D_head = Seg3dHead(self.cfg)
+        self.control_conet = ControlCONet(self.cfg)
+        self.cascade = self.cfg.cascade
         
-    def add_target_bev(self, bev_feature, target_point):
-        # Create a batch bev_feature
-        b, c, h, w = bev_feature.shape
-        bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
-
-        x_pixel = (h / 2 + target_point[:, 0] / self.cfg.bev_x_bound[2]).unsqueeze(0).T.int()
-        y_pixel = (w / 2 + target_point[:, 1] / self.cfg.bev_y_bound[2]).unsqueeze(0).T.int()
-        target_point = torch.cat([x_pixel, y_pixel], dim=1)
-
-        noise = (torch.rand_like(target_point, dtype=torch.float) * 10 - 5).int()
-        target_point += noise
-
-        for batch in range(b):
-            bev_target_batch = bev_target[batch][0]
-            target_point_batch = target_point[batch]
-            bev_target_batch[target_point_batch[0] - 4:target_point_batch[0] + 4,
-                             target_point_batch[1] - 4:target_point_batch[1] + 4] = 1.0
-
-        bev_feature = torch.cat([bev_feature, bev_target], dim=1)
-        return bev_feature, bev_target
-
-    def add_target_conet(self, bev_feature, target_point):
-        # Create a batch bev_feature
-        b, c, h, w, d = bev_feature.shape
-        bev_target = torch.zeros((b, 1, h, w, d), dtype=torch.float).to(self.cfg.device, non_blocking=True)
-        occ_size = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / h
-        x_pixel = (h / 2 + target_point[:, 0] / occ_size).unsqueeze(0).T.int()
-        y_pixel = (w / 2 - target_point[:, 1] / occ_size).unsqueeze(0).T.int()
-        z_pixel = (d / 2 + target_point[:, 2] / occ_size).unsqueeze(0).T.int()
-        target_point = torch.cat([x_pixel, y_pixel, z_pixel], dim=1)
-
-        noise = (torch.rand_like(target_point, dtype=torch.float) * 10 - 5).int()
-        target_point += noise
-
-        for batch in range(b):
-            bev_target_batch = bev_target[batch][0]
-            target_point_batch = target_point[batch]
-            bev_target_batch[target_point_batch[0] - 4:target_point_batch[0] + 4,
-                             target_point_batch[1] - 4:target_point_batch[1] + 4,
-                             target_point_batch[2] - 4:target_point_batch[2] + 4] = 1.0
-
-        bev_feature = torch.cat([bev_feature, bev_target], dim=1)
-        return bev_feature, bev_target
-
-    def encoder(self, data):
-        images = data['image'].to(self.cfg.device, non_blocking=True) #[1, 6, 3, 900, 1600]
-        B, I = images.shape[:2]
-        intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
-        extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
-        target_point = data['target_point'].to(self.cfg.device, non_blocking=True) # [1, 3]
-        ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
-        if self.cfg.feature_encoder == "bev":
-            bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics) #bev_feature:[1, 64, 200, 200], pred_depth:[4, 48, 32, 32]
-            bev_feature, bev_target = self.add_target_bev(bev_feature, target_point) #bev_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
-            bev_down_sample = self.bev_encoder(bev_feature)
-            fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
-            pred_segmentation = self.segmentation_head(fuse_feature)
-            return fuse_feature, pred_segmentation, pred_depth, bev_target
-
-        elif self.cfg.feature_encoder == "conet":
-            rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
-            img_metas = self.construct_metas()
-            img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
-            res = self.OccNet(img_metas=img_metas,img_inputs=img) #conet_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
-            coarse_semantic, conet_feature, pred_depth = res['pred_c'], res['fine_feature'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
-            conet_feature, conet_target = self.add_target_conet(conet_feature, target_point) #conet_feature:[1, 65, 200, 200], target_point:[1, 1, 200, 200]
-            conet_down_sample = self.conet_encoder(conet_feature)
-            fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
-            pred_segmentation = self.seg3D_head(fuse_feature)
-            return fuse_feature, coarse_semantic, pred_segmentation, pred_depth, conet_target        
-
     def construct_metas(self):
         metas = {}
         metas['pc_range'] = np.array(self.cfg.point_cloud_range)
@@ -140,32 +63,170 @@ class ParkingModel(nn.Module):
         gt_depths = torch.zeros(1).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
         img_shape = torch.tensor(img_shape[-2:]).to(device).unsqueeze(0).repeat(B,1)
         return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
+    
+    def add_target_conet(self, conet_feature, target_point):
+        # Create a batch conet_feature
+        b, c, h, w, d = conet_feature.shape
+        conet_target = torch.zeros((b, 1, h, w, d), dtype=torch.float).to(self.cfg.device, non_blocking=True)
+        occ_size = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / h
+        x_pixel = (h / 2 + target_point[:, 0] / occ_size).unsqueeze(0).T.int()
+        y_pixel = (w / 2 - target_point[:, 1] / occ_size).unsqueeze(0).T.int()
+        z_pixel = (d / 2 + target_point[:, 2] / occ_size).unsqueeze(0).T.int()
+        target_point = torch.cat([x_pixel, y_pixel, z_pixel], dim=1)
 
-    def forward(self, data):
-        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, _ = self.encoder(data)
-        if self.cfg.feature_encoder == 'bev':
-            pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        elif self.cfg.feature_encoder == 'conet':
-            pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
-        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
-        self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+        noise = (torch.rand_like(target_point, dtype=torch.float) * 10 - 5).int()
+        target_point += noise
+
+        for batch in range(b):
+            conet_target_batch = conet_target[batch][0]
+            target_point_batch = target_point[batch]
+            conet_target_batch[target_point_batch[0] - 4:target_point_batch[0] + 4,
+                             target_point_batch[1] - 4:target_point_batch[1] + 4,
+                             target_point_batch[2] - 4:target_point_batch[2] + 4] = 1.0
+
+        conet_feature = torch.cat([conet_feature, conet_target], dim=1)
+        return conet_feature, conet_target
+
+    def encoder_occ(self, data):
+        images = data['image'].to(self.cfg.device, non_blocking=True) #[1, 6, 3, 900, 1600]
+        B, I = images.shape[:2]
+        intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
+        extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
+        gt_occ = data['segmentation'].to(self.cfg.device, non_blocking=True)
+
+        rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
+        img_metas = self.construct_metas() # fine_feature: [2, 192, 160, 160, 20]
+        img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
+        res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=gt_occ) #conet_feature:[1, 64, 200, 200], pred_depth:[6, 48, 32, 32]
+        coarse_segmentation, fine_segmentation, pred_depth = res['pred_c'], res['pred_f'], res['depth'] #bev_feature:([1, 192, 512, 512, 40]), pred_depth:([6, 112, 16, 16])
         
-        return pred_control, coarse_segmentation, fine_segmentation, pred_depth
+        return coarse_segmentation, fine_segmentation, pred_depth
 
+    def encoder_e2e(self, data, fine_segmentation):
+        target_point = data['target_point'].to(self.cfg.device, non_blocking=True) # [1, 3]
+        ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
+
+        conet_feature, conet_target = self.add_target_conet(fine_segmentation, target_point) # conet_feature: [2, 19, 160, 160, 20]
+        conet_down_sample = self.conet_encoder(conet_feature)
+        fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
+        pred_segmentation = self.seg3D_head(fuse_feature)
+        return fuse_feature, pred_segmentation
+    
+    def forward(self, data):
+        if self.cascade:
+            coarse_segmentation, fine_segmentation, pred_depth = self.encoder_occ(data)
+            self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+            self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+            return coarse_segmentation, fine_segmentation, pred_depth # [2, 18, 40, 40, 5], [2, 18, 160, 160, 20], [12, 96, 16, 16]
+        else:
+            coarse_segmentation, fine_segmentation, pred_depth = self.encoder_occ(data)
+            fuse_feature, pred_segmentation = self.encoder_e2e(data, fine_segmentation) # [2, 512, 258], [2, 18, 160, 160, 20]
+            pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
+            self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+            self.plot_grid(pred_segmentation, os.path.join("visual", "pred_fine.png"))
+            return pred_control, coarse_segmentation, pred_segmentation, pred_depth
+        
     def predict(self, data):
-        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, bev_target = self.encoder(data)
-        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
+        fuse_feature, coarse_segmentation, fine_segmentation, pred_depth, conet_target = self.encoder_occ(data)
         self.plot_grid(coarse_segmentation, os.path.join("visual", "pred_coarse.png"))
+        self.plot_grid(fine_segmentation, os.path.join("visual", "pred_fine.png"))
 
         assert()
         pred_multi_controls = data['gt_control'].cuda()
         for i in range(3):
-            if self.cfg.feature_encoder == 'bev':
-                pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
-            elif self.cfg.feature_encoder == 'conet':
-                pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
+            pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-        return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, bev_target
+        return pred_multi_controls, coarse_segmentation, fine_segmentation, pred_depth, conet_target
+
+    def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        # import pdb; pdb.set_trace()
+        threeD_grid = torch.argmax(threeD_grid[0], dim=0).cpu().numpy()
+        H, W, D = threeD_grid.shape
+
+        threeD_grid[threeD_grid==4]=1
+        threeD_grid[threeD_grid==17]=2
+        twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        # twoD_map = twoD_map[::-1,::-1]
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+
+
+class ParkingModelCombine(nn.Module):
+    def __init__(self, cfg: Configuration):
+        super().__init__()
+
+        self.cfg = cfg
+        self.OccNet = OccNet(**self.cfg.OccNet_cfg)
+        self.conet_encoder = ConetEncoder(self.cfg.conet_encoder_in_channel)
+        self.conet_fusion = CONetFusion(self.cfg)
+        self.seg3D_head = Seg3dHead(self.cfg)
+        self.control_conet = ControlCONet(self.cfg)
+        self.pretrained = ParkingModel(self.cfg)
+        self.cascade = self.cfg.cascade
+
+    def add_target_conet(self, conet_feature, target_point):
+        # Create a batch conet_feature
+        b, c, h, w, d = conet_feature.shape
+        conet_target = torch.zeros((b, 1, h, w, d), dtype=torch.float).to(self.cfg.device, non_blocking=True)
+        occ_size = (self.cfg.point_cloud_range[3] - self.cfg.point_cloud_range[0]) / h
+        x_pixel = (h / 2 + target_point[:, 0] / occ_size).unsqueeze(0).T.int()
+        y_pixel = (w / 2 - target_point[:, 1] / occ_size).unsqueeze(0).T.int()
+        z_pixel = (d / 2 + target_point[:, 2] / occ_size).unsqueeze(0).T.int()
+        target_point = torch.cat([x_pixel, y_pixel, z_pixel], dim=1)
+
+        noise = (torch.rand_like(target_point, dtype=torch.float) * 10 - 5).int()
+        target_point += noise
+
+        for batch in range(b):
+            conet_target_batch = conet_target[batch][0]
+            target_point_batch = target_point[batch]
+            conet_target_batch[target_point_batch[0] - 4:target_point_batch[0] + 4,
+                             target_point_batch[1] - 4:target_point_batch[1] + 4,
+                             target_point_batch[2] - 4:target_point_batch[2] + 4] = 1.0
+
+        conet_feature = torch.cat([conet_feature, conet_target], dim=1)
+        return conet_feature, conet_target
+
+    def encoder_e2e(self, data, fine_segmentation):
+        target_point = data['target_point'].to(self.cfg.device, non_blocking=True) # [1, 3]
+        ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
+
+        conet_feature, conet_target = self.add_target_conet(fine_segmentation, target_point) # conet_feature: [2, 19, 160, 160, 20]
+        conet_down_sample = self.conet_encoder(conet_feature)
+        fuse_feature = self.conet_fusion(conet_down_sample, ego_motion)
+        pred_segmentation = self.seg3D_head(fuse_feature)
+        return fuse_feature, pred_segmentation
+    
+    def forward(self, data, fine_segmentation):
+        fuse_feature, pred_segmentation = self.encoder_e2e(data, fine_segmentation) # [2, 512, 258], [2, 18, 160, 160, 20]
+        pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
+        self.plot_grid(pred_segmentation, os.path.join("visual", "pred_final.png"))
+        return pred_control, pred_segmentation
+        
+    def predict(self, data, fine_segmentation):
+        fuse_feature, pred_segmentation = self.encoder_e2e(data, fine_segmentation) # [2, 512, 258], [2, 18, 160, 160, 20]
+        pred_control = self.control_conet(fuse_feature, data['gt_control'].cuda())
+        self.plot_grid(pred_segmentation, os.path.join("visual", "pred_final.png"))
+
+        assert()
+        pred_multi_controls = data['gt_control'].cuda()
+        for i in range(3):
+            pred_control = self.control_conet.predict(fuse_feature, pred_multi_controls)
+            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+        return pred_multi_controls, pred_segmentation
 
     def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
         # import pdb; pdb.set_trace()

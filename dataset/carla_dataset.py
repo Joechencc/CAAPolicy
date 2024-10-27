@@ -204,10 +204,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.veh2cam_dict = {}
         self.extrinsic = None
         self.image_process = ProcessImage(self.image_crop)
-        if self.cfg.feature_encoder == "bev":
-            self.semantic_process = ProcessSemantic(self.cfg)
-        elif self.cfg.feature_encoder == "conet":
-            self.semantic_process3D = ProcessSemantic3D(self.cfg)
+        self.semantic_process3D = ProcessSemantic3D(self.cfg)
         self.init_camera_config()
 
         # data
@@ -361,12 +358,8 @@ class CarlaDataset(torch.utils.data.Dataset):
                 with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
                     data = json.load(read_file)
                 # import pdb; pdb.set_trace()
-                if self.cfg.feature_encoder == "bev":
-                    parking_goal = [data['x'], data['y'], data['yaw']]
-                    parking_goal = convert_slot_coord(ego_trans, parking_goal)
-                elif self.cfg.feature_encoder == "conet":
-                    parking_goal = [data['x'], data['y'], 0, data['yaw']]
-                    parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
+                parking_goal = [data['x'], data['y'], 0, data['yaw']]
+                parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
 
         self.front = np.array(self.front).astype(np.string_)
@@ -431,12 +424,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        if self.cfg.feature_encoder == "bev":
-            segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
-                                             target_slot=self.target_point[index])
-        elif self.cfg.feature_encoder == "conet":
-            segmentation = self.semantic_process3D(self.voxel[index],
-                                             target_slot=self.target_point[index])
+        segmentation = self.semantic_process3D(self.voxel[index], target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
         # target_point

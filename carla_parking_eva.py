@@ -101,6 +101,10 @@ def main():
         default='./ckpt/camera-based-CONet.pth',
         help='path to model_CONET.pth')
     argparser.add_argument(
+        '--model_path_cascade',
+        default='./ckpt/cascade.ckpt',
+        help='path to model_cascade.ckpt')
+    argparser.add_argument(
         '--model_config_path',
         default='./config/training_conet.yaml',
         help='path to model training_conet.yaml')

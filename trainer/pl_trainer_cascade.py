@@ -9,7 +9,7 @@ from loss.control_loss import ControlLoss, ControlValLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from loss.seg_loss_3d import SegmentationLoss3D
-from model.parking_model import ParkingModel
+from model.parking_model import ParkingModel, ParkingModelCombine
 import torch.nn.functional as F
 from collections import OrderedDict
 
@@ -35,12 +35,13 @@ def setup_callbacks(cfg):
     return callbacks
 
 
-class ParkingTrainingModule(pl.LightningModule):
-    def __init__(self, cfg: Configuration, model_path):
-        super(ParkingTrainingModule, self).__init__()
+class ParkingTrainingModuleCascade(pl.LightningModule):
+    def __init__(self, cfg: Configuration, cfg_cascade: Configuration, model_path):
+        super(ParkingTrainingModuleCascade, self).__init__()
         self.save_hyperparameters()
 
         self.cfg = cfg
+        self.cfg_cascade = cfg_cascade
 
         self.control_loss_func = ControlLoss(self.cfg)
 
@@ -52,7 +53,11 @@ class ParkingTrainingModule(pl.LightningModule):
         self.depth_loss_func = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
+        self.parking_model_cascade = ParkingModel(self.cfg_cascade)
+        self.parking_model_combine = ParkingModelCombine(self.cfg)
         self.load_model(model_path)
+        for param in self.parking_model_cascade.parameters():
+            param.requires_grad = False
     
     def load_model(self, parking_pth_path):
         if parking_pth_path is not None:
@@ -60,7 +65,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
             state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
 
-            self.parking_model.load_state_dict(state_dict, strict=True)
+            self.parking_model_cascade.load_state_dict(state_dict, strict=True)
             print('Load E2EParkingModel from %s', parking_pth_path)
         else:
             print("No pretrain model loadded")
@@ -68,15 +73,13 @@ class ParkingTrainingModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         
-        if not self.cfg.cascade:
-            coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
-        else:
-            pred_control, coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
+        coarse_segmentation, fine_segmentation, pred_depth = self.parking_model_cascade(batch)
+        pred_control, pred_segmentation = self.parking_model_combine(batch, fine_segmentation)
 
-            control_loss = self.control_loss_func(pred_control, batch)
-            loss_dict.update({
-                "control_loss": control_loss
-            })
+        control_loss = self.control_loss_func(pred_control, batch)
+        loss_dict.update({
+            "control_loss": control_loss
+        })
 
         H, W, D = pred_segmentation.shape[-3:]
         coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
@@ -106,16 +109,14 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
 
-        if not self.cfg.cascade:
-            coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
-        else:
-            pred_control, coarse_segmentation, pred_segmentation, pred_depth = self.parking_model(batch)
+        coarse_segmentation, fine_segmentation, pred_depth = self.parking_model_cascade(batch)
+        pred_control, pred_segmentation = self.parking_model_combine(batch, fine_segmentation)
 
-            acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
-            val_loss_dict.update({
-                "acc_steer_val_loss": acc_steer_val_loss,
-                "reverse_val_loss": reverse_val_loss
-            })
+        acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
+        val_loss_dict.update({
+            "acc_steer_val_loss": acc_steer_val_loss,
+            "reverse_val_loss": reverse_val_loss
+        })
 
         H,W,D = pred_segmentation.shape[-3:]
         coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()

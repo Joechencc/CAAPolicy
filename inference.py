@@ -39,16 +39,10 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.control_val_loss_func = ControlValLoss(self.cfg)
 
-        if self.cfg.feature_encoder == "bev":
-            self.segmentation_loss_func = SegmentationLoss(
-                class_weights=torch.Tensor(self.cfg.seg_vehicle_weights)
-            )
-            self.depth_loss_func = DepthLoss(self.cfg)
-        elif self.cfg.feature_encoder == "conet":
-            self.segmentation_loss_func_3D = SegmentationLoss3D(
-                class_weights=torch.Tensor(self.cfg.seg_conet_vehicle_weights)
-            )
-            self.depth_loss_func = DepthLoss(self.cfg)
+        self.segmentation_loss_func_3D = SegmentationLoss3D(
+            class_weights=torch.Tensor(self.cfg.seg_conet_vehicle_weights)
+        )
+        self.depth_loss_func = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
         self.load_model(model_path)
@@ -83,13 +77,10 @@ class ParkingTrainingModule(pl.LightningModule):
             "reverse_val_loss": reverse_val_loss
         })
 
-        if self.cfg.feature_encoder == "bev":
-            segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        elif self.cfg.feature_encoder == "conet":
-            H,W,D = pred_segmentation.shape[-3:]
-            coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-            segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
-            coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
+        H,W,D = pred_segmentation.shape[-3:]
+        coarse_segmentation = F.interpolate(coarse_segmentation, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        segmentation_val_loss = self.segmentation_loss_func_3D(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        coarse_segmentation_val_loss = self.segmentation_loss_func_3D(coarse_segmentation.unsqueeze(1), batch['segmentation'])
            
         val_loss_dict.update({
             "coarse_segmentation_val_loss": coarse_segmentation_val_loss,

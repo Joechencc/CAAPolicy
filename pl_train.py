@@ -6,6 +6,7 @@ import yaml
 from loguru import logger
 from pytorch_lightning import Trainer, seed_everything
 from trainer.pl_trainer import ParkingTrainingModule, setup_callbacks
+from trainer.pl_trainer_cascade import ParkingTrainingModuleCascade, setup_callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from dataset.dataloader import ParkingDataModule
@@ -22,6 +23,15 @@ def train():
         type=str,
         help='path to training_conet.yaml (default: ./config/training_conet.yaml)')
     arg_parser.add_argument(
+        '--config_cascade',
+        default='./config/training_cascade.yaml',
+        type=str,
+        help='path to training_conet.yaml (default: ./config/training_cascade.yaml)')
+    arg_parser.add_argument(
+        '--cascade',
+        default=False,
+        type=bool)
+    arg_parser.add_argument(
         '--model_path',
         default=None,
         help='path to pretrained model.ckpt')
@@ -33,6 +43,14 @@ def train():
         except yaml.YAMLError:
             logger.exception("Open {} failed!", args.config)
     cfg = get_cfg(cfg_yaml)
+
+    if args.cascade:
+        with open(args.config_cascade, 'r') as yaml_file:
+            try:
+                cfg_yaml = yaml.safe_load(yaml_file)
+            except yaml.YAMLError:
+                logger.exception("Open {} failed!", args.config)
+        cfg_cascade = get_cfg(cfg_yaml)
 
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)
@@ -55,7 +73,10 @@ def train():
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
 
-    parking_model = ParkingTrainingModule(cfg, args.model_path)
+    if not args.cascade:
+        parking_model = ParkingTrainingModule(cfg, args.model_path)
+    else:
+        parking_model = ParkingTrainingModuleCascade(cfg, cfg_cascade, args.model_path)
     parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(parking_model, datamodule=parking_datamodule)
 

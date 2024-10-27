@@ -44,7 +44,6 @@ class CONetFusion(nn.Module):
         fuse_feature = torch.cat([conet_feature, motion_feature], dim=2)
 
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
-
         fuse_feature = fuse_feature.transpose(0, 1)
         fuse_feature = self.tf_encoder(fuse_feature)
         fuse_feature = fuse_feature.transpose(0, 1)
