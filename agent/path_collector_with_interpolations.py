@@ -114,6 +114,11 @@ class VehiclePIDController():
             control.throttle = 0.0
             control.brake = min(abs(acceleration), self.max_brake)
 
+        if current_steering>self.past_steering+0.1:
+            current_steering = self.past_steering+0.1
+        elif current_steering<self.past_steering-0.1:
+            current_steering = self.past_steering-0.1
+
         if current_steering >= 0:
             steering = min(self.max_steer, current_steering)
         else:
