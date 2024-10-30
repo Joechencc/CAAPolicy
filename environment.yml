@@ -1,4 +1,4 @@
-name: E2EParking
+name: E2EParking_9_11
 channels:
     - conda-forge
     - pytorch

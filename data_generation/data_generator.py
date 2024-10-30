@@ -173,7 +173,7 @@ class DataGenerator:
         self._ego_transform_generator.update_data_gen_goal_y(self._parking_goal.y)
         ego_transform = self._ego_transform_generator.get_data_gen_ego_transform()
 
-        self._seed += 1
+        self._seed = int(self._seed)+1
         self._world.restart(self._seed, self._parking_goal_index, ego_transform)
 
         logging.info('*****Config environment for task %d done*****', self._task_index)

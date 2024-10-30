@@ -4,14 +4,14 @@
 {
     "distutils": {
         "depends": [
-            "/home/jas0n/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/arrayobject.h",
-            "/home/jas0n/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/arrayscalars.h",
-            "/home/jas0n/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/ndarrayobject.h",
-            "/home/jas0n/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/ndarraytypes.h",
-            "/home/jas0n/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/ufuncobject.h"
+            "/home/guo1syv/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/arrayobject.h",
+            "/home/guo1syv/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/arrayscalars.h",
+            "/home/guo1syv/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/ndarrayobject.h",
+            "/home/guo1syv/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/ndarraytypes.h",
+            "/home/guo1syv/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include/numpy/ufuncobject.h"
         ],
         "include_dirs": [
-            "/home/jas0n/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include"
+            "/home/guo1syv/miniconda3/envs/E2EParking_9_11/lib/python3.7/site-packages/numpy/core/include"
         ],
         "name": "hybrid_A_star",
         "sources": [
