@@ -9,6 +9,8 @@ from PIL import Image
 from loguru import logger
 from data_generation.world import cam_specs_
 import matplotlib.pyplot as plt
+from scipy import stats
+import torch.nn.functional as F
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -481,6 +483,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 for i in range(self.cfg.future_frame_nums):
                     with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
                         data = json.load(read_file)
+                    data["Steer"] = np.clip(data["Steer"], -1, 1)
                     controls.append(
                         tokenize(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
                     add_raw_control(data, throttle_brakes, steers, reverse)
@@ -503,7 +506,10 @@ class CarlaDataset(torch.utils.data.Dataset):
                     data = json.load(read_file)
                 # import pdb; pdb.set_trace()
                 # parking_goal = [data['x'], data['y'], data['yaw']]
-                parking_goal = [data['x'], data['y'], data['z'], data['yaw']]
+                if 'z' in data:
+                    parking_goal = [data['x'], data['y'], data['z'], data['yaw']]
+                else:
+                    parking_goal = [data['x'], data['y'], 0, data['yaw']]
                 #todo fix z
                 parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
@@ -588,7 +594,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         
         # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
         # print("segmentation:::",segmentation.shape)
-        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_3D_temp.png"))
+        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_fine_car.png"))
         # import pdb; pdb.set_trace()             
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
@@ -738,8 +744,43 @@ class ProcessSemantic3D:
         cropped_voxels[mask] = 0
 
         map_segmentation = np.zeros_like(cropped_voxels)
-        map_segmentation[(cropped_voxels != 0) & (cropped_voxels != 17)] = 1
-        map_segmentation[cropped_voxels == 17] = 2
+        map_segmentation[(cropped_voxels != 4) & (cropped_voxels != 6) & (cropped_voxels != 17) & (cropped_voxels != 0)] = 3
+        map_segmentation[(cropped_voxels == 4) | (cropped_voxels == 6)] = 1
+        map_segmentation[(cropped_voxels == 17)] = 2
+        ############### Here #############
+        # segmentation = np.max(map_segmentation, axis=2)
+        # segmentation = segmentation[:,::-1]
+
+        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
+        
+        # interpolated_segmentation = np.max(interpolated_segmentation, axis=2)
+        # interpolated_segmentation = interpolated_segmentation[:,::-1].astype(np.int64)
+        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
+        # self.plot_grid_2D(interpolated_segmentation, os.path.join("visual", "interpolate_gt.png"))
+        # import pdb; pdb.set_trace()
+
+        #####################################
+        downsampled_segmentation = np.zeros((40, 40, 5), dtype=int)
+        for i in range(40):
+            for j in range(40):
+                for k in range(5):
+                    # 获取每个 4x4x4 区域
+                    block = map_segmentation[i*4:(i+1)*4, j*4:(j+1)*4, k*4:(k+1)*4]
+                    # 计算该块的众数并存入 downsampled_segmentation
+                    downsampled_segmentation[i, j, k] = np.max(block)
+        
+        downsampled_segmentation_tensor = torch.tensor(downsampled_segmentation, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        interpolated_segmentation_tensor = F.interpolate(downsampled_segmentation_tensor, size=(160, 160, 20), mode='nearest')
+        interpolated_segmentation = interpolated_segmentation_tensor.squeeze().numpy().astype(np.int64)
+        # map_segmentation = interpolated_segmentation.astype(np.int64)
+        # import pdb; pdb.set_trace()
+        combined_array = np.zeros_like(interpolated_segmentation)
+        combined_array[(map_segmentation == 1) | (map_segmentation == 2)] = map_segmentation[(map_segmentation == 1) | (map_segmentation == 2)]
+        combined_array[(interpolated_segmentation == 3)] = interpolated_segmentation[(interpolated_segmentation == 3)]
+        combined_array[combined_array==3] = 1
+        map_segmentation = combined_array
+        #####################################
+
         segmentation = np.max(map_segmentation, axis=2)
         segmentation = segmentation[:,::-1]
         return segmentation.copy()
