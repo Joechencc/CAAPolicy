@@ -7,6 +7,7 @@ import pathlib
 import yaml
 import numpy as np
 import cv2
+from multiprocessing import Process
 
 from datetime import datetime
 from threading import Thread
@@ -189,10 +190,13 @@ class DataGenerator:
 
         logging.info('*****Restart task %d done*****', self._task_index)
 
+    def worker(self,start, end, cur_save_path, lidar_specs):
+        for i in range(start, end):
+            align_from_path_save(cur_save_path, lidar_specs, i)
     def save_sensor_data(self, parking_goal):
         # create dirs
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
-        cur_save_path.mkdir(parents=True, exist_ok=False)
+        cur_save_path.mkdir(parents=True, exist_ok=True)
         (cur_save_path / 'measurements').mkdir()
         (cur_save_path / 'voxel').mkdir()
         (cur_save_path / 'parking_goal').mkdir()
@@ -235,8 +239,26 @@ class DataGenerator:
         video_path = str(cur_save_path.joinpath("camera_video_purpose"))
         output_file = str(cur_save_path.joinpath("task.mp4"))
         images_to_video(image_folder=video_path,output_video=output_file)
-        for i in range(0,total_frames):
-            align_from_path_save(cur_save_path, self.lidar_specs, i)
+        # for i in range(0,total_frames):
+        #     align_from_path_save(cur_save_path, self.lidar_specs, i)
+
+        process_list = []
+        process_num = thread_num
+        frames_for_process = total_frames // process_num
+        # Create and start processes
+        for p_idx in range(process_num):
+            start = p_idx * frames_for_process
+            if p_idx == process_num - 1:
+                end = total_frames  # Ensure the last process handles any remaining frames
+            else:
+                end = (p_idx + 1) * frames_for_process
+            p = Process(target=self.worker, args=(start, end, cur_save_path, self.lidar_specs))
+            p.start()
+            process_list.append(p)
+
+        # Wait for all processes to complete
+        for process in process_list:
+            process.join()
         logging.info('saved sensor data for task %d in %s', self._task_index, str(cur_save_path))
 
     def save_unit_data(self, start, end, cur_save_path):

@@ -520,9 +520,15 @@ class Path_collector:
                     plt.title('Visulize the planned path in world coordinate for 2 seconds')
                     plt.show()
                     plt.pause(2)
-                    #TODO: save trajactory
                     
-                    plt.savefig(self.exp_name+".png")
+                    #save waypoint picture
+                    file_path = self.net_eva._save_path / ("task" + str(self.net_eva._task_index)) / (
+                                self.exp_name + ".png")
+
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    plt.savefig(file_path)
+
                     plt.close()  
 
                     self.mul_pos = []
@@ -581,7 +587,8 @@ class Path_collector:
                         if reach_goal: ###  
                             print('\n\nIt takes {} seconds to finish one experiment'.format(time.time()-self.start_time), ' simulation time: ', self.step/30)
                             # #### trigger a new task
-                            # self.net_eva.start_next_parking()
+                            if self.step/30 > 50:
+                                self.net_eva.restart()
                             self.my_control.brake = 1.0
                             self.my_control.throttle = 0.0
                             self.my_control.steer = 0.0
