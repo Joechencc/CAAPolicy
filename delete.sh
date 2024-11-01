@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Navigate to the new directory path
-cd /e2e_parking/Town04_Opt/{put your fir here}
+cd ./e2e_parking/Town04_Opt/10_30_00_35_13
 
 
 # Loop through task directories from task0 to task15
