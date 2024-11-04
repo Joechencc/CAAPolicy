@@ -54,22 +54,22 @@ def convert_semantic_label_9_11(category_index):
         3: 1,   # Other -> barrier
         4: 7,   # Pedestrian -> pedestrian
         5: 1,   # Pole -> barrier
-        6: 12,  # RoadLine -> other_flat
+        6: 11,  # RoadLine -> driveable_surface
         7: 11,  # Road -> driveable_surface
         8: 13,  # SideWalk -> sidewalk
         9: 16,  # Vegetation -> vegetation
         10: 4,  # Vehicles -> car
-        11: 1,  # Wall -> barrier
+        11: 15,  # Wall -> manmade
         12: 1,  # TrafficSign -> barrier
-        #13: 12, # Sky -> other_flat #should only exist in semantic camera
-        14: 12, # Ground -> other_flat
-        15: 12, # Bridge -> other_flat
-        16: 12, # RailTrack -> other_flat
+        13: 0, # Sky -> other_flat #should only exist in semantic camera
+        14: 14, # Ground -> terrian
+        15: 15, # Bridge -> manmade
+        16: 1, # RailTrack -> barrier
         17: 1,  # GuardRail -> barrier
         18: 1,  # TrafficLight -> barrier
         19: 1,  # Static -> barrier
         20: 1,  # Dynamic -> barrier
-        21: 14, # Water -> terrain
+        21: 12, # Water -> other_flat
         22: 14  # Terrain -> terrain
     }
     return mapping.get(category_index, 1)  # Default to 'barrier' if not found
