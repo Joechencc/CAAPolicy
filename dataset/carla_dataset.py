@@ -9,6 +9,7 @@ from PIL import Image
 from loguru import logger
 from data_generation.world import cam_specs_
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from scipy import stats
 import torch.nn.functional as F
 
@@ -743,46 +744,54 @@ class ProcessSemantic3D:
         mask = np.isin(cropped_voxels, [11, 12, 13, 14])
         cropped_voxels[mask] = 0
 
-        map_segmentation = np.zeros_like(cropped_voxels)
-        map_segmentation[(cropped_voxels != 4) & (cropped_voxels != 6) & (cropped_voxels != 17) & (cropped_voxels != 0)] = 3
-        map_segmentation[(cropped_voxels == 4) | (cropped_voxels == 6)] = 1
-        map_segmentation[(cropped_voxels == 17)] = 2
-        ############### Here #############
-        # segmentation = np.max(map_segmentation, axis=2)
-        # segmentation = segmentation[:,::-1]
+        if self.cfg.seg_classes == 3:
+            map_segmentation = np.zeros_like(cropped_voxels)
+            map_segmentation[(cropped_voxels != 4) & (cropped_voxels != 6) & (cropped_voxels != 17) & (cropped_voxels != 0)] = 3
+            map_segmentation[(cropped_voxels == 4) | (cropped_voxels == 6)] = 1
+            map_segmentation[(cropped_voxels == 17)] = 2
 
-        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
-        
-        # interpolated_segmentation = np.max(interpolated_segmentation, axis=2)
-        # interpolated_segmentation = interpolated_segmentation[:,::-1].astype(np.int64)
-        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
-        # self.plot_grid_2D(interpolated_segmentation, os.path.join("visual", "interpolate_gt.png"))
-        # import pdb; pdb.set_trace()
+            ############## Here #############
+            # segmentation = np.max(map_segmentation, axis=2)
+            # segmentation = segmentation[:,::-1]
 
+            # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_test.png"))
+            
+            # interpolated_segmentation = np.max(interpolated_segmentation, axis=2)
+            # interpolated_segmentation = interpolated_segmentation[:,::-1].astype(np.int64)
+            # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_nods.png"))
+            # self.plot_grid_2D(interpolated_segmentation, os.path.join("visual", "interpolate_gt.png"))
+            # import pdb; pdb.set_trace()
+
+            ####################################
+            downsampled_segmentation = np.zeros((40, 40, 5), dtype=int)
+            for i in range(40):
+                for j in range(40):
+                    for k in range(5):
+                        # 获取每个 4x4x4 区域
+                        block = map_segmentation[i*4:(i+1)*4, j*4:(j+1)*4, k*4:(k+1)*4]
+                        # 计算该块的众数并存入 downsampled_segmentation
+                        downsampled_segmentation[i, j, k] = np.max(block)
+            
+            downsampled_segmentation_tensor = torch.tensor(downsampled_segmentation, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            interpolated_segmentation_tensor = F.interpolate(downsampled_segmentation_tensor, size=(160, 160, 20), mode='nearest')
+            interpolated_segmentation = interpolated_segmentation_tensor.squeeze().numpy().astype(np.int64)
+            # map_segmentation = interpolated_segmentation.astype(np.int64)
+
+            combined_array = np.zeros_like(interpolated_segmentation)
+            combined_array[(map_segmentation == 1) | (map_segmentation == 2)] = map_segmentation[(map_segmentation == 1) | (map_segmentation == 2)]
+            combined_array[(interpolated_segmentation == 3)] = interpolated_segmentation[(interpolated_segmentation == 3)]
+            combined_array[combined_array==3] = 1
+            map_segmentation = combined_array
         #####################################
-        downsampled_segmentation = np.zeros((40, 40, 5), dtype=int)
-        for i in range(40):
-            for j in range(40):
-                for k in range(5):
-                    # 获取每个 4x4x4 区域
-                    block = map_segmentation[i*4:(i+1)*4, j*4:(j+1)*4, k*4:(k+1)*4]
-                    # 计算该块的众数并存入 downsampled_segmentation
-                    downsampled_segmentation[i, j, k] = np.max(block)
-        
-        downsampled_segmentation_tensor = torch.tensor(downsampled_segmentation, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-        interpolated_segmentation_tensor = F.interpolate(downsampled_segmentation_tensor, size=(160, 160, 20), mode='nearest')
-        interpolated_segmentation = interpolated_segmentation_tensor.squeeze().numpy().astype(np.int64)
-        # map_segmentation = interpolated_segmentation.astype(np.int64)
-        # import pdb; pdb.set_trace()
-        combined_array = np.zeros_like(interpolated_segmentation)
-        combined_array[(map_segmentation == 1) | (map_segmentation == 2)] = map_segmentation[(map_segmentation == 1) | (map_segmentation == 2)]
-        combined_array[(interpolated_segmentation == 3)] = interpolated_segmentation[(interpolated_segmentation == 3)]
-        combined_array[combined_array==3] = 1
-        map_segmentation = combined_array
-        #####################################
+
+        elif self.cfg.seg_classes == 18:
+            map_segmentation = cropped_voxels.copy()
 
         segmentation = np.max(map_segmentation, axis=2)
         segmentation = segmentation[:,::-1]
+
+        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_test.png"))
+
         return segmentation.copy()
 
     def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
@@ -817,18 +826,52 @@ class ProcessSemantic3D:
         return voxel
     
     def plot_grid_2D(self, twoD_map, save_path=None, vmax=None, layer=None):
-        H, W = twoD_map.shape
+        if self.cfg.seg_classes == 3:
+            H, W = twoD_map.shape
 
-        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        # twoD_map = threeD_grid[:,:,7]
-        cmap = plt.cm.viridis # viridis color projection
+            # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+            # twoD_map = threeD_grid[:,:,7]
+            cmap = plt.cm.viridis # viridis color projection
 
-        if vmax is None:
-            vmax=np.max(twoD_map)*1.2
-        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+            if vmax is None:
+                vmax=np.max(twoD_map)*1.2
+            plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
 
-        color_legend = plt.colorbar()
-        color_legend.set_label('Color Legend') # legend
+            color_legend = plt.colorbar()
+            color_legend.set_label('Color Legend') # legend
+
+        elif self.cfg.seg_classes == 18:
+            NUSC_COLOR_MAP = {
+                1: (112, 128, 144),  # Slategrey barrier
+                2: (220, 20, 60),    # Crimson bicycle
+                3: (255, 127, 80),   # Orangered bus
+                4: (255, 158, 0),    # Orange car
+                5: (233, 150, 70),   # Darksalmon construction
+                6: (255, 61, 99),    # Red motorcycle
+                7: (0, 0, 230),      # Blue pedestrian
+                8: (47, 79, 79),     # Darkslategrey trafficcone
+                9: (255, 140, 0),    # Darkorange trailer
+                10: (255, 99, 71),   # Tomato truck
+                11: (0, 207, 191),   # nuTonomy green driveable_surface
+                12: (175, 0, 75),    # flat other
+                13: (75, 0, 75),     # sidewalk
+                14: (112, 180, 60),  # terrain
+                15: (222, 184, 135), # Burlywood mannade
+                16: (0, 175, 0),     # Green vegetation
+                17: (128, 128, 128)  # target point
+            }
+        
+            # Normalize RGB values to [0, 1]
+            color_list = [(0, 0, 0)] + [(r / 255, g / 255, b / 255) for r, g, b in NUSC_COLOR_MAP.values()]
+            cmap = ListedColormap(color_list)
+
+            # Plot using the custom color map
+            plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=0, vmax=len(color_list) - 1)
+            
+            # Add color bar with specific ticks for each label
+            color_legend = plt.colorbar(ticks=range(len(color_list)))
+            color_legend.set_label('Semantic Labels')
+            color_legend.ax.set_yticklabels(['0'] + list(NUSC_COLOR_MAP.keys()))
 
         if save_path:
             plt.savefig(save_path)

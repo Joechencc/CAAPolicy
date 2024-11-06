@@ -13,6 +13,7 @@ import numpy as np
 import carla
 import os
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 import torch.nn.functional as F
 
 
@@ -32,7 +33,8 @@ class ParkingModel(nn.Module):
         self.control_predict = ControlPredict(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
-        self.fc = nn.Linear(3, 64)
+
+        self.fc = nn.Linear(self.cfg.seg_classes, 64)
 
     def add_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
@@ -85,18 +87,52 @@ class ParkingModel(nn.Module):
         plt.close()
 
     def plot_grid_2D(self, twoD_map, save_path=None, vmax=None, layer=None):
-        H, W = twoD_map.shape
+        if self.cfg.seg_classes == 3:
+            H, W = twoD_map.shape
 
-        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        # twoD_map = threeD_grid[:,:,7]
-        cmap = plt.cm.viridis # viridis color projection
+            # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+            # twoD_map = threeD_grid[:,:,7]
+            cmap = plt.cm.viridis # viridis color projection
 
-        if vmax is None:
-            vmax=np.max(twoD_map)*1.2
-        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+            if vmax is None:
+                vmax=np.max(twoD_map)*1.2
+            plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
 
-        color_legend = plt.colorbar()
-        color_legend.set_label('Color Legend') # legend
+            color_legend = plt.colorbar()
+            color_legend.set_label('Color Legend') # legend
+
+        elif self.cfg.seg_classes == 18:
+            NUSC_COLOR_MAP = {
+                1: (112, 128, 144),  # Slategrey barrier
+                2: (220, 20, 60),    # Crimson bicycle
+                3: (255, 127, 80),   # Orangered bus
+                4: (255, 158, 0),    # Orange car
+                5: (233, 150, 70),   # Darksalmon construction
+                6: (255, 61, 99),    # Red motorcycle
+                7: (0, 0, 230),      # Blue pedestrian
+                8: (47, 79, 79),     # Darkslategrey trafficcone
+                9: (255, 140, 0),    # Darkorange trailer
+                10: (255, 99, 71),   # Tomato truck
+                11: (0, 207, 191),   # nuTonomy green driveable_surface
+                12: (175, 0, 75),    # flat other
+                13: (75, 0, 75),     # sidewalk
+                14: (112, 180, 60),  # terrain
+                15: (222, 184, 135), # Burlywood mannade
+                16: (0, 175, 0),     # Green vegetation
+                17: (128, 128, 128)  # target point
+            }
+        
+            # Normalize RGB values to [0, 1]
+            color_list = [(0, 0, 0)] + [(r / 255, g / 255, b / 255) for r, g, b in NUSC_COLOR_MAP.values()]
+            cmap = ListedColormap(color_list)
+
+            # Plot using the custom color map
+            plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=0, vmax=len(color_list) - 1)
+            
+            # Add color bar with specific ticks for each label
+            color_legend = plt.colorbar(ticks=range(len(color_list)))
+            color_legend.set_label('Semantic Labels')
+            color_legend.ax.set_yticklabels(['0'] + list(NUSC_COLOR_MAP.keys()))
 
         if save_path:
             plt.savefig(save_path)
@@ -134,9 +170,9 @@ class ParkingModel(nn.Module):
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
         # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
         x = data['segmentation'].to(self.cfg.device, non_blocking=True).squeeze(1)
-        x_one_hot = F.one_hot(x, num_classes=3).float()
+        x_one_hot = F.one_hot(x, num_classes=self.cfg.seg_classes).float()
         x_one_hot = self.fc(x_one_hot)
-        bev_feature = x_one_hot.permute(0, 3, 1, 2)
+        bev_feature = x_one_hot.permute(0, 3, 1, 2) # (0, 3, 1, 2)
         # img_metas = self.construct_metas()
         # rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
         # img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
@@ -158,13 +194,13 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
+        # return fuse_feature, pred_segmentation, bev_target
+
+        pred_c = torch.argmax(pred_segmentation[0], dim=0).cpu().numpy()
+        self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
+        self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
         return fuse_feature, pred_segmentation, bev_target
-
-        # pred_c = torch.argmax(pred_segmentation[0], dim=0).cpu().numpy()
-        # self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
-        # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
-
-        
+    
 
     def forward(self, data):
         fuse_feature, pred_segmentation, _ = self.encoder(data)
