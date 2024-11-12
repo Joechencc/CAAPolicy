@@ -18,10 +18,12 @@ class Configuration:
     learning_rate = None
     weight_decay = None
     batch_size = None
+    extent_pixel = None
 
     training_map = None
     validation_map = None
     future_frame_nums = None
+    future_frame_traj_num = None 
     hist_frame_nums = None
     token_nums = None
     image_crop = None
@@ -83,10 +85,12 @@ def get_cfg(cfg_yaml: dict):
     cfg.learning_rate = config['learning_rate']
     cfg.weight_decay = config['weight_decay']
     cfg.batch_size = config['batch_size']
+    cfg.extent_pixel = config['extent_pixel']
 
     cfg.training_map = config['training_map']
     cfg.validation_map = config['validation_map']
     cfg.future_frame_nums = config['future_frame_nums']
+    cfg.future_frame_traj_num= config['future_frame_traj_num']
     cfg.hist_frame_nums = config['hist_frame_nums']
     cfg.token_nums = config['token_nums']
     cfg.image_crop = config['image_crop']

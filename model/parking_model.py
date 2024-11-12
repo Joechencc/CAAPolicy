@@ -134,6 +134,8 @@ class ParkingModel(nn.Module):
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
         # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
         x = data['segmentation'].to(self.cfg.device, non_blocking=True).squeeze(1)
+        # future_poses = data['next_poses'].to(self.cfg.device, non_blocking=True)
+        
         x_one_hot = F.one_hot(x, num_classes=3).float()
         x_one_hot = self.fc(x_one_hot)
         bev_feature = x_one_hot.permute(0, 3, 1, 2)
@@ -145,10 +147,12 @@ class ParkingModel(nn.Module):
         # pred_c, pred_f, pred_depth = res['pred_c'], res['pred_f'], res['depth']
 
         #####
-        # H, W, D = self.occ_size
-        # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
-        # pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
-        # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+        # H, W = bev_feature.shape[-2:]
+        # # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # # # pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
+        # import pdb; pdb.set_trace()
+        # self.plot_grid_2D(x[0].cpu().numpy(), os.path.join("visual", "pred.png"))
+        # import pdb; pdb.set_trace()
         # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
         #####
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)

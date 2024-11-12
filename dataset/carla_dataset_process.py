@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import torch.nn.functional as F
 from tqdm import tqdm
-from torchvision import transforms
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -246,6 +245,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.get_data()
 
+
     def init_camera_config(self):
         cam_config = {'width': 400, 'height': 300, 'fov': 100}
         cam_specs = cam_specs_
@@ -323,7 +323,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         for task_path in all_tasks:
             total_frames = len(os.listdir(task_path + "/measurements/"))
-            for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+            for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_traj_num):
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
@@ -440,55 +440,53 @@ class CarlaDataset(torch.utils.data.Dataset):
         all_frameno = []
         next_poses = []
         segmentations = []
-
         if self.is_train == 1:
             if not os.path.exists("e2e_parking_process"):
                 os.makedirs("e2e_parking_process")
             modified_town_dir = town_dir.replace('e2e_parking', 'e2e_parking_process')
             if not os.path.exists(town_dir):
                 os.makedirs(town_dir)   
-            
+
         for root_dir in root_dirs:
             root_path = os.path.join(town_dir, root_dir)
             if self.is_train == 1:
                 modified_root_path = os.path.join(modified_town_dir, root_dir)
-                if not os.path.exists(modified_root_path) and self.is_train == 1:
+                if not os.path.exists(modified_root_path):
                     os.makedirs(modified_root_path)   
             for task_dir in os.listdir(root_path):
                 task_path = os.path.join(root_path, task_dir)
                 if self.is_train == 1:
                     modified_task_path = os.path.join(modified_root_path, task_dir)
-                if self.is_train == 1 and not os.path.exists(modified_task_path):
-                    os.makedirs(modified_task_path)  
-                    os.makedirs(modified_task_path + "/voxel/")   
+                    if not os.path.exists(modified_task_path):
+                        os.makedirs(modified_task_path)  
+                        os.makedirs(modified_task_path + "/voxel/")   
                 all_tasks.append(task_path)
-                if self.is_train == 1:
-                    modified_all_tasks.append(modified_task_path)
+                modified_all_tasks.append(modified_task_path)
 
         for task_path in all_tasks:
             total_frames = len(os.listdir(task_path + "/measurements/"))
-            for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+            for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_traj_num):
                 all_frameno.append(frame)
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
-                self.front.append(task_path + "/camera_front/" + filename)
-                self.front_left.append(task_path + "/camera_front_left/" + filename)
-                self.front_right.append(task_path + "/camera_front_right/" + filename)
-                self.back.append(task_path + "/camera_back/" + filename)
-                self.back_left.append(task_path + "/camera_back_left/" + filename)
-                self.back_right.append(task_path + "/camera_back_right/" + filename)
+                # self.front.append(task_path + "/camera_front/" + filename)
+                # self.front_left.append(task_path + "/camera_front_left/" + filename)
+                # self.front_right.append(task_path + "/camera_front_right/" + filename)
+                # self.back.append(task_path + "/camera_back/" + filename)
+                # self.back_left.append(task_path + "/camera_back_left/" + filename)
+                # self.back_right.append(task_path + "/camera_back_right/" + filename)
 
                 # depth
-                self.front_depth.append(task_path + "/depth_front/" + filename)
-                self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
-                self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
-                self.back_depth.append(task_path + "/depth_back/" + filename)
-                self.back_left_depth.append(task_path + "/depth_back/" + filename)
-                self.back_right_depth.append(task_path + "/depth_back/" + filename)
+                # self.front_depth.append(task_path + "/depth_front/" + filename)
+                # self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
+                # self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
+                # self.back_depth.append(task_path + "/depth_back/" + filename)
+                # self.back_left_depth.append(task_path + "/depth_back/" + filename)
+                # self.back_right_depth.append(task_path + "/depth_back/" + filename)
 
                 # BEV Semantic
-                self.topdown.append(task_path + "/topdown/encoded_" + filename)
+                # self.topdown.append(task_path + "/topdown/encoded_" + filename)
                 self.voxel.append(task_path + "/voxel/" + filename.split(".")[0]+"_info.npy")
                 # import pdb; pdb.set_trace()
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
@@ -499,34 +497,33 @@ class CarlaDataset(torch.utils.data.Dataset):
                                             carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
 
                 all_poses.append([data['x'], data['y'], data['z'], data['yaw'], data['pitch'], data['roll']])
-
                 # motion
-                self.velocity.append(data['speed'])
-                self.acc_x.append(data['acc_x'])
-                self.acc_y.append(data['acc_y'])
+                # self.velocity.append(data['speed'])
+                # self.acc_x.append(data['acc_x'])
+                # self.acc_y.append(data['acc_y'])
 
                 # control
-                controls = []
-                throttle_brakes = []
-                steers = []
-                reverse = []
-                for i in range(self.cfg.future_frame_nums):
-                    with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
-                        data = json.load(read_file)
-                    data["Steer"] = np.clip(data["Steer"], -1, 1)
-                    controls.append(
-                        tokenize(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
-                    add_raw_control(data, throttle_brakes, steers, reverse)
+                # controls = []
+                # throttle_brakes = []
+                # steers = []
+                # reverse = []
+                # for i in range(self.cfg.future_frame_nums):
+                #     with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
+                #         data = json.load(read_file)
+                #     data["Steer"] = np.clip(data["Steer"], -1, 1)
+                #     controls.append(
+                #         tokenize(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                #     add_raw_control(data, throttle_brakes, steers, reverse)
 
-                controls = [item for sublist in controls for item in sublist]
-                controls.insert(0, self.BOS_token)
-                controls.append(self.EOS_token)
-                controls.append(self.PAD_token)
-                self.control.append(controls)
+                # controls = [item for sublist in controls for item in sublist]
+                # controls.insert(0, self.BOS_token)
+                # controls.append(self.EOS_token)
+                # controls.append(self.PAD_token)
+                # self.control.append(controls)
 
-                self.throttle_brake.append(throttle_brakes)
-                self.steer.append(steers)
-                self.reverse.append(reverse)
+                # self.throttle_brake.append(throttle_brakes)
+                # self.steer.append(steers)
+                # self.reverse.append(reverse)
 
                 # target point
                 # if self.cfg.only_3d_perception == True:
@@ -543,33 +540,33 @@ class CarlaDataset(torch.utils.data.Dataset):
                 #todo fix z
                 parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
+        
+        # self.front = np.array(self.front).astype(np.string_)
+        # self.front_left = np.array(self.front_left).astype(np.string_)
+        # self.front_right = np.array(self.front_right).astype(np.string_)
+        # self.back = np.array(self.back).astype(np.string_)
+        # self.back_left = np.array(self.back_left).astype(np.string_)
+        # self.back_right = np.array(self.back_right).astype(np.string_)
 
-        self.front = np.array(self.front).astype(np.string_)
-        self.front_left = np.array(self.front_left).astype(np.string_)
-        self.front_right = np.array(self.front_right).astype(np.string_)
-        self.back = np.array(self.back).astype(np.string_)
-        self.back_left = np.array(self.back_left).astype(np.string_)
-        self.back_right = np.array(self.back_right).astype(np.string_)
+        # self.front_depth = np.array(self.front_depth).astype(np.string_)
+        # self.front_left_depth = np.array(self.front_left_depth).astype(np.string_)
+        # self.front_right_depth = np.array(self.front_right_depth).astype(np.string_)
+        # self.back_depth = np.array(self.back_depth).astype(np.string_)
+        # self.back_left_depth = np.array(self.back_left_depth).astype(np.string_)
+        # self.back_right_depth = np.array(self.back_right_depth).astype(np.string_)
 
-        self.front_depth = np.array(self.front_depth).astype(np.string_)
-        self.front_left_depth = np.array(self.front_left_depth).astype(np.string_)
-        self.front_right_depth = np.array(self.front_right_depth).astype(np.string_)
-        self.back_depth = np.array(self.back_depth).astype(np.string_)
-        self.back_left_depth = np.array(self.back_left_depth).astype(np.string_)
-        self.back_right_depth = np.array(self.back_right_depth).astype(np.string_)
-
-        self.topdown = np.array(self.topdown).astype(np.string_)
+        # self.topdown = np.array(self.topdown).astype(np.string_)
         self.voxel = np.array(self.voxel).astype(np.string_)
 
-        self.velocity = np.array(self.velocity).astype(np.float32)
-        self.acc_x = np.array(self.acc_x).astype(np.float32)
-        self.acc_y = np.array(self.acc_y).astype(np.float32)
+        # self.velocity = np.array(self.velocity).astype(np.float32)
+        # self.acc_x = np.array(self.acc_x).astype(np.float32)
+        # self.acc_y = np.array(self.acc_y).astype(np.float32)
 
-        self.control = np.array(self.control).astype(np.int64)
+        # self.control = np.array(self.control).astype(np.int64)
 
-        self.throttle_brake = np.array(self.throttle_brake).astype(np.float32)
-        self.steer = np.array(self.steer).astype(np.float32)
-        self.reverse = np.array(self.reverse).astype(np.int64)
+        # self.throttle_brake = np.array(self.throttle_brake).astype(np.float32)
+        # self.steer = np.array(self.steer).astype(np.float32)
+        # self.reverse = np.array(self.reverse).astype(np.int64)
 
         self.target_point = np.array(self.target_point).astype(np.float32)
         self.all_poses = np.array(all_poses).astype(np.float32)
@@ -577,55 +574,51 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         if self.is_train == 1:
             modified_task_path = all_tasks[0].replace('e2e_parking', 'e2e_parking_process')
+            filename = f"{str(0).zfill(4)}.png"
+            one_file_path = modified_task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
+            
             index = -1
             for task_path in tqdm(all_tasks, desc="Processing tasks"):
                 total_frames = len(os.listdir(task_path + "/measurements/"))
                 modified_task_path = task_path.replace('e2e_parking', 'e2e_parking_process')
-                for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+                for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_traj_num):
                     filename = f"{str(frame).zfill(4)}.png"
                     filename = modified_task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
                     index += 1
                     
+                    # next_poses.append(self.all_poses[frame_no])
+
                     if not os.path.isfile(filename):
+                        frame_no = all_frameno[index:index+self.cfg.future_frame_traj_num].copy()
+                        frame_no = self.ensure_incremental(frame_no, self.cfg.future_frame_traj_num)
+                        frame_no = np.array(frame_no) - frame_no[0] + index
                         segmentation = self.semantic_process3D(self.voxel[index],
-                                                            target_slot=self.target_point[index])
-                        occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
-                        resolution = (max_bound[0] - min_bound[0])/occ_size[0]
-                        segmentation = self.draw_target_slot3D(segmentation, self.target_point[index], min_bound, max_bound, resolution)
-                        segmentation = np.max(segmentation, axis=2)
-                        segmentation = segmentation[:,::-1]
+                                                            target_slot=self.target_point[index], traj=torch.from_numpy(self.all_poses[frame_no]))
                         np.save(filename, segmentation.astype(np.int64))
                     else:
+                        continue
+                        frame_no = all_frameno[index:index+self.cfg.future_frame_traj_num].copy()
+                        frame_no = self.ensure_incremental(frame_no, self.cfg.future_frame_traj_num)
+                        frame_no = np.array(frame_no) - frame_no[0] + index
                         segmentation = np.load(filename).astype(np.int64)
-                        occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
-                        resolution = (max_bound[0] - min_bound[0])/occ_size[0]
-                        if len(segmentation.shape) != 3:
-                            segmentation = self.semantic_process3D(self.voxel[index],
-                                                        target_slot=self.target_point[index])
-                        segmentation = self.draw_target_slot3D(segmentation, self.target_point[index], min_bound, max_bound, resolution)
-                        segmentation = np.max(segmentation, axis=2)
-                        segmentation = segmentation[:,::-1]
-                        segmentations.append(segmentation)
-        else:
-            index = -1
-            for task_path in tqdm(all_tasks, desc="Processing tasks"):
-                total_frames = len(os.listdir(task_path + "/measurements/"))
-                for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
-                    index += 1
-                    segmentation = self.semantic_process3D(self.voxel[index],
-                                                        target_slot=self.target_point[index])
-                    occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
-                    resolution = (max_bound[0] - min_bound[0])/occ_size[0]
-                    segmentation = self.draw_target_slot3D(segmentation, self.target_point[index], min_bound, max_bound, resolution)
-                    segmentation = np.max(segmentation, axis=2)
-                    segmentation = segmentation[:,::-1]
-                    segmentations.append(segmentation)
-
+                    segmentation_2D = np.max(segmentation, axis=2)
+                    segmentation_2D = segmentation[:,::-1]
+                    segmentations.append(segmentation.astype(np.int64))
+        assert()
+        self.next_poses = np.array(next_poses).astype(np.float32)
         self.segmentation = np.array(segmentations).astype(np.int64)
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
     def __len__(self):
         return len(self.front)
+
+    def ensure_incremental(self, numbers, traj_num):
+        for i in range(1, len(numbers)):
+            if numbers[i] != numbers[i - 1]+1:
+                numbers[i] = numbers[i - 1]
+        while len(numbers) < traj_num:
+            numbers = np.append(numbers, numbers[-1])
+        return numbers
 
     def __getitem__(self, index):
         data = {}
@@ -667,7 +660,15 @@ class CarlaDataset(torch.utils.data.Dataset):
         # segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
         #                                     target_slot=self.target_point[index])
         # elif self.cfg.feature_encoder == "conet":
-        segmentation = self.segmentation[index]
+        frame_no = self.all_frameno[index:index+self.cfg.future_frame_traj_num].copy()
+        frame_no = self.ensure_incremental(frame_no, self.cfg.future_frame_traj_num)
+        frame_no = frame_no - frame_no[0].copy() + index
+        data['next_poses'] = torch.from_numpy(self.all_poses[frame_no])
+    
+        segmentation = self.semantic_process3D(self.voxel[index],
+                                            target_slot=self.target_point[index], traj=data['next_poses'])
+        
+        
         # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
         # print("segmentation:::",segmentation.shape)
         # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_3D_temp.png"))
@@ -688,38 +689,9 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['gt_acc'] = torch.from_numpy(self.throttle_brake[index])
         data['gt_steer'] = torch.from_numpy(self.steer[index])
         data['gt_reverse'] = torch.from_numpy(self.reverse[index])
+        
         return data
 
-    def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
-        size_h, size_w, size_d = voxel.shape
-        # convert target slot position into pixels
-        x_pixel = target_slot[0] / resolution
-        y_pixel = target_slot[1] / resolution
-        z_pixel = target_slot[2] / resolution
-        target_point = np.array([size_h / 2 + x_pixel, size_w / 2 - y_pixel, size_d / 2 + z_pixel], dtype=int)
-    
-        # draw the whole parking slot
-        slot_points = []
-        for x in range(-15, 16):
-            for y in range(-9, 10):
-                for z in range(-3, 4):
-                    slot_points.append(np.array([x, y, z, 1], dtype=int))
-    
-        # rotate parking slots points
-    
-        slot_trans = np.array(
-            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[3]))).get_matrix())
-        slot_points = np.vstack(slot_points).T
-        slot_points_ego = (slot_trans @ slot_points)[0:3].astype(int)
-    
-        # get parking slot points on pixel frame
-        slot_points_ego[0] += target_point[0]
-        slot_points_ego[1] += target_point[1]
-        slot_points_ego[2] += target_point[2]
-    
-        voxel[tuple(slot_points_ego)] = 2
-    
-        return voxel
 
 class ProcessSemantic:
     def __init__(self, cfg):
@@ -813,7 +785,7 @@ class ProcessSemantic3D:
         self.cfg = cfg
     def indices2coor(self,indices,min,resolution):
         return np.array(indices)*resolution+np.array(min)
-    def __call__(self, voxel, target_slot):
+    def __call__(self, voxel, target_slot, traj=None):
         """
         Process original BEV ground truth image; return cropped image with target slot
         :param voxel:
@@ -837,6 +809,7 @@ class ProcessSemantic3D:
                 indices = (indices[0], -indices[1], indices[2])
 
                 voxels[(indices)] = value
+
         voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
 
         min_index = np.floor((np.array(self.cfg.point_cloud_range[:3]) - np.array(min_bound)) / resolution).astype(int)
@@ -876,12 +849,64 @@ class ProcessSemantic3D:
         downsampled_segmentation_tensor = torch.tensor(downsampled_segmentation, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         interpolated_segmentation_tensor = F.interpolate(downsampled_segmentation_tensor, size=(160, 160, 20), mode='nearest')
         interpolated_segmentation = interpolated_segmentation_tensor.squeeze().numpy()
-        map_segmentation = interpolated_segmentation.astype(np.int64)
+
+        if traj is not None:
+            W, H, D = interpolated_segmentation.shape
+            traj_mask = self.create_waypoint_mask(traj, self.cfg.point_cloud_range, (W, H, D), extent_pixel=self.cfg.extent_pixel) # traj_mask: (B,W,H,D)
+            traj_segmentation = np.where(traj_mask, map_segmentation, interpolated_segmentation)
+            # out_mask = traj_mask.clone()
+            # coarse_occ_mask = coarse_occ_mask & traj_mask
+        # map_segmentation = interpolated_segmentation.astype(np.int64)
         #####################################
 
-        # segmentation = np.max(map_segmentation, axis=2)
-        # segmentation = segmentation[:,::-1]
-        return map_segmentation.copy()
+        
+        return traj_segmentation.copy()
+
+    def create_waypoint_mask(self, trajectory_waypoints, pc_range, occ_size, extent_pixel=4):
+        grid_size = (pc_range[3] - pc_range[0]) / occ_size[1] 
+        W, H, D = occ_size
+        try:
+            trajectory_waypoints -= trajectory_waypoints[0].clone().unsqueeze(0)
+        except:
+            import pdb; pdb.set_trace()
+        trajectory_waypoints = trajectory_waypoints[:,:3]
+        
+        # for waypoint in trajectory_waypoints:
+        x_idx, y_idx, z_idx = self.point_to_grid_index(trajectory_waypoints, pc_range, grid_size)
+        coords = np.array(list(zip(x_idx, y_idx, z_idx)))   
+        unique_coords = np.unique(coords, axis=0)
+        x_idx, y_idx, z_idx = unique_coords[:, 0], unique_coords[:, 1], unique_coords[:, 2]
+        x_idx -= int(W / 2)
+        y_idx -= int(H / 2)
+            
+        # Generate w_mask and h_mask using numpy
+        w_mask = (np.arange(W).reshape(1, -1) >= (int(W/2-extent_pixel) + x_idx).reshape(-1, 1)) & \
+                (np.arange(W).reshape(1, -1) < (int(W/2+extent_pixel) + x_idx).reshape(-1, 1))
+        
+        h_mask = (np.arange(H).reshape(1, -1) >= (int(H/2-extent_pixel) + y_idx).reshape(-1, 1)) & \
+                (np.arange(H).reshape(1, -1) < (int(H/2+extent_pixel) + y_idx).reshape(-1, 1))
+        
+        B = w_mask.shape[0]
+        # Adjust dimensions of w_mask and h_mask
+        w_mask = w_mask.reshape(B, W, 1, 1)  # Shape (B, W, 1, 1)
+        h_mask = h_mask.reshape(B, 1, H, 1)  # Shape (B, 1, H, 1)
+        
+        # Combine w_mask and h_mask
+        w_h_mask = np.logical_and(w_mask, h_mask)
+        
+        # Expand w_h_mask to match the dimensions of waypoint_mask
+        waypoint_mask = np.broadcast_to(w_h_mask, (B, W, H, D))
+        waypoint_mask = np.any(waypoint_mask, axis=0)
+        return waypoint_mask
+
+    def point_to_grid_index(self, point, pc_range, grid_size=0.8):
+        """
+        points to voxel grid
+        """
+        x_idx = (point[:,0].cpu().numpy() - pc_range[0]) / grid_size
+        y_idx = (point[:,1].cpu().numpy() - pc_range[1]) / grid_size
+        z_idx = (point[:,2].cpu().numpy() - pc_range[2]) / grid_size
+        return x_idx.astype(int), y_idx.astype(int), z_idx.astype(int)
 
     def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
         size_h, size_w, size_d = voxel.shape
