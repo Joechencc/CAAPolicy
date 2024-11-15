@@ -6,14 +6,14 @@ parking_model:
   log_dir: './log/'
   checkpoint_dir: './ckpt'
   log_every_n_steps: 10
-  check_val_every_n_epoch: 3
+  check_val_every_n_epoch: 1
 
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 20
+  batch_size: 40
 
-  training_map: "Town04_Opt"
+  training_map: "Town_Opt_128"
   validation_map: "Town04_Opt_Val"
   future_frame_nums: 4
   hist_frame_nums: 10

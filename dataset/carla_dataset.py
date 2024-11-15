@@ -11,6 +11,8 @@ from data_generation.world import cam_specs_
 import matplotlib.pyplot as plt
 from scipy import stats
 import torch.nn.functional as F
+from tqdm import tqdm
+from torchvision import transforms
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -432,15 +434,41 @@ class CarlaDataset(torch.utils.data.Dataset):
         # collect all parking data tasks
         root_dirs = os.listdir(town_dir)
         all_tasks = []
+        modified_all_tasks = []
+
+        all_poses = []
+        all_frameno = []
+        next_poses = []
+        segmentations = []
+
+        if self.is_train == 1:
+            if not os.path.exists("e2e_parking_process"):
+                os.makedirs("e2e_parking_process")
+            modified_town_dir = town_dir.replace('e2e_parking', 'e2e_parking_process')
+            if not os.path.exists(town_dir):
+                os.makedirs(town_dir)   
+            
         for root_dir in root_dirs:
             root_path = os.path.join(town_dir, root_dir)
+            if self.is_train == 1:
+                modified_root_path = os.path.join(modified_town_dir, root_dir)
+                if not os.path.exists(modified_root_path) and self.is_train == 1:
+                    os.makedirs(modified_root_path)   
             for task_dir in os.listdir(root_path):
                 task_path = os.path.join(root_path, task_dir)
+                if self.is_train == 1:
+                    modified_task_path = os.path.join(modified_root_path, task_dir)
+                if self.is_train == 1 and not os.path.exists(modified_task_path):
+                    os.makedirs(modified_task_path)  
+                    os.makedirs(modified_task_path + "/voxel/")   
                 all_tasks.append(task_path)
+                if self.is_train == 1:
+                    modified_all_tasks.append(modified_task_path)
 
         for task_path in all_tasks:
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+                all_frameno.append(frame)
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
@@ -469,6 +497,8 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # ego position
                 ego_trans = carla.Transform(carla.Location(x=data['x'], y=data['y'], z=data['z']),
                                             carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
+
+                all_poses.append([data['x'], data['y'], data['z'], data['yaw'], data['pitch'], data['roll']])
 
                 # motion
                 self.velocity.append(data['speed'])
@@ -542,7 +572,53 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.reverse = np.array(self.reverse).astype(np.int64)
 
         self.target_point = np.array(self.target_point).astype(np.float32)
+        self.all_poses = np.array(all_poses).astype(np.float32)
+        self.all_frameno = np.array(all_frameno).astype(np.int64)
 
+        if self.is_train == 1:
+            modified_task_path = all_tasks[0].replace('e2e_parking', 'e2e_parking_process')
+            index = -1
+            for task_path in tqdm(all_tasks, desc="Processing tasks"):
+                total_frames = len(os.listdir(task_path + "/measurements/"))
+                modified_task_path = task_path.replace('e2e_parking', 'e2e_parking_process')
+                for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+                    filename = f"{str(frame).zfill(4)}.png"
+                    filename = modified_task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
+                    index += 1
+                    
+                    if not os.path.isfile(filename):
+                        segmentation = self.semantic_process3D(self.voxel[index],
+                                                            target_slot=self.target_point[index])
+                        occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
+                        resolution = (max_bound[0] - min_bound[0])/occ_size[0]
+                        segmentation = self.draw_target_slot3D(segmentation, self.target_point[index], min_bound, max_bound, resolution)
+                        segmentation = np.max(segmentation, axis=2)
+                        segmentation = segmentation[:,::-1]
+                        np.save(filename, segmentation.astype(np.int64))
+                    else:
+                        segmentation = np.load(filename).astype(np.int64)
+                        occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
+                        resolution = (max_bound[0] - min_bound[0])/occ_size[0]
+                        segmentation = self.draw_target_slot3D(segmentation, self.target_point[index], min_bound, max_bound, resolution)
+                        segmentation = np.max(segmentation, axis=2)
+                        segmentation = segmentation[:,::-1]
+                        segmentations.append(segmentation)
+        else:
+            index = -1
+            for task_path in tqdm(all_tasks, desc="Processing tasks"):
+                total_frames = len(os.listdir(task_path + "/measurements/"))
+                for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+                    index += 1
+                    segmentation = self.semantic_process3D(self.voxel[index],
+                                                        target_slot=self.target_point[index])
+                    occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
+                    resolution = (max_bound[0] - min_bound[0])/occ_size[0]
+                    segmentation = self.draw_target_slot3D(segmentation, self.target_point[index], min_bound, max_bound, resolution)
+                    segmentation = np.max(segmentation, axis=2)
+                    segmentation = segmentation[:,::-1]
+                    segmentations.append(segmentation)
+
+        self.segmentation = np.array(segmentations).astype(np.int64)
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
     def __len__(self):
@@ -588,13 +664,10 @@ class CarlaDataset(torch.utils.data.Dataset):
         # segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
         #                                     target_slot=self.target_point[index])
         # elif self.cfg.feature_encoder == "conet":
-        segmentation = self.semantic_process3D(self.voxel[index],
-                                            target_slot=self.target_point[index])
-        
-        
+        segmentation = self.segmentation[index]
         # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
         # print("segmentation:::",segmentation.shape)
-        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_fine_car.png"))
+        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt_3D_temp.png"))
         # import pdb; pdb.set_trace()             
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
@@ -614,6 +687,36 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['gt_reverse'] = torch.from_numpy(self.reverse[index])
         return data
 
+    def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
+        size_h, size_w, size_d = voxel.shape
+        # convert target slot position into pixels
+        x_pixel = target_slot[0] / resolution
+        y_pixel = target_slot[1] / resolution
+        z_pixel = target_slot[2] / resolution
+        target_point = np.array([size_h / 2 + x_pixel, size_w / 2 - y_pixel, size_d / 2 + z_pixel], dtype=int)
+    
+        # draw the whole parking slot
+        slot_points = []
+        for x in range(-15, 16):
+            for y in range(-9, 10):
+                for z in range(-3, 4):
+                    slot_points.append(np.array([x, y, z, 1], dtype=int))
+    
+        # rotate parking slots points
+    
+        slot_trans = np.array(
+            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[3]))).get_matrix())
+        slot_points = np.vstack(slot_points).T
+        slot_points_ego = (slot_trans @ slot_points)[0:3].astype(int)
+    
+        # get parking slot points on pixel frame
+        slot_points_ego[0] += target_point[0]
+        slot_points_ego[1] += target_point[1]
+        slot_points_ego[2] += target_point[2]
+    
+        voxel[tuple(slot_points_ego)] = 2
+    
+        return voxel
 
 class ProcessSemantic:
     def __init__(self, cfg):
@@ -731,7 +834,6 @@ class ProcessSemantic3D:
                 indices = (indices[0], -indices[1], indices[2])
 
                 voxels[(indices)] = value
-
         voxels = self.draw_target_slot3D(voxels, target_slot, min_bound, max_bound, resolution)
 
         min_index = np.floor((np.array(self.cfg.point_cloud_range[:3]) - np.array(min_bound)) / resolution).astype(int)
@@ -744,9 +846,9 @@ class ProcessSemantic3D:
         cropped_voxels[mask] = 0
 
         map_segmentation = np.zeros_like(cropped_voxels)
-        map_segmentation[(cropped_voxels != 4) & (cropped_voxels != 6) & (cropped_voxels != 17) & (cropped_voxels != 0)] = 3
-        map_segmentation[(cropped_voxels == 4) | (cropped_voxels == 6)] = 1
-        map_segmentation[(cropped_voxels == 17)] = 2
+        map_segmentation[(cropped_voxels != 0) & (cropped_voxels != 17)] = 1
+        map_segmentation[cropped_voxels == 17] = 2
+
         ############### Here #############
         # segmentation = np.max(map_segmentation, axis=2)
         # segmentation = segmentation[:,::-1]
@@ -759,7 +861,6 @@ class ProcessSemantic3D:
         # self.plot_grid_2D(interpolated_segmentation, os.path.join("visual", "interpolate_gt.png"))
         # import pdb; pdb.set_trace()
 
-        #####################################
         downsampled_segmentation = np.zeros((40, 40, 5), dtype=int)
         for i in range(40):
             for j in range(40):
@@ -771,19 +872,13 @@ class ProcessSemantic3D:
         
         downsampled_segmentation_tensor = torch.tensor(downsampled_segmentation, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         interpolated_segmentation_tensor = F.interpolate(downsampled_segmentation_tensor, size=(160, 160, 20), mode='nearest')
-        interpolated_segmentation = interpolated_segmentation_tensor.squeeze().numpy().astype(np.int64)
-        # map_segmentation = interpolated_segmentation.astype(np.int64)
-        # import pdb; pdb.set_trace()
-        combined_array = np.zeros_like(interpolated_segmentation)
-        combined_array[(map_segmentation == 1) | (map_segmentation == 2)] = map_segmentation[(map_segmentation == 1) | (map_segmentation == 2)]
-        combined_array[(interpolated_segmentation == 3)] = interpolated_segmentation[(interpolated_segmentation == 3)]
-        combined_array[combined_array==3] = 1
-        map_segmentation = combined_array
+        interpolated_segmentation = interpolated_segmentation_tensor.squeeze().numpy()
+        map_segmentation = interpolated_segmentation.astype(np.int64)
         #####################################
 
-        segmentation = np.max(map_segmentation, axis=2)
-        segmentation = segmentation[:,::-1]
-        return segmentation.copy()
+        # segmentation = np.max(map_segmentation, axis=2)
+        # segmentation = segmentation[:,::-1]
+        return map_segmentation.copy()
 
     def draw_target_slot3D(self, voxel, target_slot, min_bound, max_bound, resolution):
         size_h, size_w, size_d = voxel.shape
