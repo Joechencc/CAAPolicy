@@ -9,6 +9,7 @@ from PIL import Image
 from loguru import logger
 from data_generation.world import cam_specs_
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from scipy import stats
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -853,13 +854,9 @@ class ProcessSemantic3D:
         # segmentation = np.max(map_segmentation, axis=2)
         # segmentation = segmentation[:,::-1]
 
-        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
-        
-        # interpolated_segmentation = np.max(interpolated_segmentation, axis=2)
-        # interpolated_segmentation = interpolated_segmentation[:,::-1].astype(np.int64)
-        # self.plot_grid_2D(segmentation, os.path.join("visual", "gt.png"))
-        # self.plot_grid_2D(interpolated_segmentation, os.path.join("visual", "interpolate_gt.png"))
-        # import pdb; pdb.set_trace()
+            ############## Here #############
+            # segmentation = np.max(map_segmentation, axis=2)
+            # segmentation = segmentation[:,::-1]
 
         downsampled_segmentation = np.zeros((40, 40, 5), dtype=int)
         for i in range(40):
@@ -912,18 +909,52 @@ class ProcessSemantic3D:
         return voxel
     
     def plot_grid_2D(self, twoD_map, save_path=None, vmax=None, layer=None):
-        H, W = twoD_map.shape
+        if self.cfg.seg_classes == 3:
+            H, W = twoD_map.shape
 
-        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
-        # twoD_map = threeD_grid[:,:,7]
-        cmap = plt.cm.viridis # viridis color projection
+            # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+            # twoD_map = threeD_grid[:,:,7]
+            cmap = plt.cm.viridis # viridis color projection
 
-        if vmax is None:
-            vmax=np.max(twoD_map)*1.2
-        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+            if vmax is None:
+                vmax=np.max(twoD_map)*1.2
+            plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
 
-        color_legend = plt.colorbar()
-        color_legend.set_label('Color Legend') # legend
+            color_legend = plt.colorbar()
+            color_legend.set_label('Color Legend') # legend
+
+        elif self.cfg.seg_classes == 18:
+            NUSC_COLOR_MAP = {
+                1: (112, 128, 144),  # Slategrey barrier
+                2: (220, 20, 60),    # Crimson bicycle
+                3: (255, 127, 80),   # Orangered bus
+                4: (255, 158, 0),    # Orange car
+                5: (233, 150, 70),   # Darksalmon construction
+                6: (255, 61, 99),    # Red motorcycle
+                7: (0, 0, 230),      # Blue pedestrian
+                8: (47, 79, 79),     # Darkslategrey trafficcone
+                9: (255, 140, 0),    # Darkorange trailer
+                10: (255, 99, 71),   # Tomato truck
+                11: (0, 207, 191),   # nuTonomy green driveable_surface
+                12: (175, 0, 75),    # flat other
+                13: (75, 0, 75),     # sidewalk
+                14: (112, 180, 60),  # terrain
+                15: (222, 184, 135), # Burlywood mannade
+                16: (0, 175, 0),     # Green vegetation
+                17: (128, 128, 128)  # target point
+            }
+        
+            # Normalize RGB values to [0, 1]
+            color_list = [(0, 0, 0)] + [(r / 255, g / 255, b / 255) for r, g, b in NUSC_COLOR_MAP.values()]
+            cmap = ListedColormap(color_list)
+
+            # Plot using the custom color map
+            plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=0, vmax=len(color_list) - 1)
+            
+            # Add color bar with specific ticks for each label
+            color_legend = plt.colorbar(ticks=range(len(color_list)))
+            color_legend.set_label('Semantic Labels')
+            color_legend.ax.set_yticklabels(['0'] + list(NUSC_COLOR_MAP.keys()))
 
         if save_path:
             plt.savefig(save_path)

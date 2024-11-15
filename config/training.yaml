@@ -39,8 +39,8 @@ parking_model:
   backbone: "efficientnet-b4"
 
   # segmentation
-  seg_classes: 3
-  seg_vehicle_weights: [1.0, 40.0, 40.0]
+  seg_classes: 18 # 3
+  seg_vehicle_weights: [1.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0] # [1.0, 40.0, 40.0]
 
   # transformer encoder
   tf_en_dim: 258
