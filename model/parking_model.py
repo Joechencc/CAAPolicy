@@ -1,0 +1,206 @@
+import torch
+from torch import nn
+
+from tool.config import Configuration
+from model.bev_model import BevModel
+from model.conet_model import OccNet
+from model.bev_encoder import BevEncoder
+from model.feature_fusion import FeatureFusion
+from model.control_predict import ControlPredict
+from model.segmentation_head import SegmentationHead
+from data_generation.world import cam_specs_, cam2pixel_
+import numpy as np
+import carla
+import os
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
+
+
+class ParkingModel(nn.Module):
+    def __init__(self, cfg: Configuration):
+        super().__init__()
+
+        self.cfg = cfg
+
+        # self.bev_model = BevModel(self.cfg)
+
+        self.OccNet = OccNet(**self.cfg.OccNet_cfg)
+        self.OccNet.eval()
+        self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
+
+        self.feature_fusion = FeatureFusion(self.cfg)
+
+        self.control_predict = ControlPredict(self.cfg)
+
+        self.segmentation_head = SegmentationHead(self.cfg)
+        self.fc = nn.Linear(18, 64)
+        self.adaptive_max_pool = nn.AdaptiveMaxPool1d(1)
+        self.softmax = nn.Softmax(dim=4)
+        self.vision_only = cfg.vision_only
+
+    def add_target_bev(self, bev_feature, target_point):
+        b, c, h, w = bev_feature.shape
+        bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
+
+        x_pixel = (h / 2 + target_point[:, 0] / self.cfg.bev_x_bound[2]).unsqueeze(0).T.int()
+        y_pixel = (w / 2 + target_point[:, 1] / self.cfg.bev_y_bound[2]).unsqueeze(0).T.int()
+        target_point = torch.cat([x_pixel, y_pixel], dim=1)
+
+        noise = (torch.rand_like(target_point, dtype=torch.float) * 10 - 5).int()
+        target_point += noise
+
+        for batch in range(b):
+            bev_target_batch = bev_target[batch][0]
+            target_point_batch = target_point[batch]
+            bev_target_batch[target_point_batch[0] - 4:target_point_batch[0] + 4,
+                             target_point_batch[1] - 4:target_point_batch[1] + 4] = 1.0
+
+        bev_feature = torch.cat([bev_feature, bev_target], dim=1)
+        return bev_feature, bev_target
+
+    def construct_metas(self):
+        metas = {}
+        metas['pc_range'] = np.array(self.cfg.point_cloud_range)
+        metas['occ_size'] = np.array(self.cfg.occ_size)
+        metas['scene_token'] = ''
+        metas['lidar_token'] = ''
+        metas['prev_idx'] = ''
+        metas['next_idx'] = ''
+
+        return metas
+
+    def plot_grid(self, threeD_grid, save_path=None, vmax=None, layer=None):
+        H, W, D = threeD_grid.shape
+        twoD_map = np.max(threeD_grid, axis=2) # compress 3D-> 2D
+        # for i in range(1,17):
+        #     twoD_map[twoD_map==i]= 1
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+
+    def plot_grid_2D(self, twoD_map, save_path=None, vmax=None, layer=None):
+        H, W = twoD_map.shape
+
+        # twoD_map = np.sum(threeD_grid, axis=2) # compress 3D-> 2D
+        # twoD_map = threeD_grid[:,:,7]
+        cmap = plt.cm.viridis # viridis color projection
+
+        if vmax is None:
+            vmax=np.max(twoD_map)*1.2
+        plt.imshow(twoD_map, cmap=cmap, origin='upper', vmin=np.min(twoD_map), vmax=vmax) # plot 2D
+
+        color_legend = plt.colorbar()
+        color_legend.set_label('Color Legend') # legend
+
+        if save_path:
+            plt.savefig(save_path)
+        else:
+            plt.show()
+        plt.close()
+
+    def transform_spec(self, cam_specs, cam2pixel, B, I, img_shape, device):
+        keys = ['rgb_front', 'rgb_front_left', 'rgb_front_right', 'rgb_back', 'rgb_back_left', 'rgb_back_right']
+        sensor2egos = []
+        for key in keys:
+            cam_spec = cam_specs[key]
+            ego2sensor = carla.Transform(carla.Location(x=cam_spec['x'], y=cam_spec['y'], z=cam_spec['z']),
+                                        carla.Rotation(yaw=cam_spec['yaw'], pitch=cam_spec['pitch'],
+                                                        roll=cam_spec['roll']))
+            # sensor2ego = cam2pixel @ np.array(ego2sensor.get_inverse_matrix())
+            sensor2ego = np.array(ego2sensor.get_inverse_matrix())
+            sensor2egos.append(torch.from_numpy(sensor2ego).float().unsqueeze(0))
+        sensor2egos = torch.cat(sensor2egos).unsqueeze(0).repeat(B,1,1,1).to(device)
+        rot, trans = sensor2egos[:,:,:3,:3], sensor2egos[:,:,:3,3]
+        post_rots = torch.eye(3).unsqueeze(0).unsqueeze(0).repeat(B, I, 1, 1).to(device)
+        post_trans = torch.tensor([0.,-4.,0.]).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
+        bda_rot = torch.eye(3).unsqueeze(0).repeat(B, 1, 1).to(device)
+        gt_depths = torch.zeros(1).unsqueeze(0).unsqueeze(0).repeat(B, I, 1).to(device)
+        img_shape = torch.tensor(img_shape[-2:]).to(device).unsqueeze(0).repeat(B,1)
+        return rot, trans, sensor2egos, post_rots, post_trans, bda_rot, img_shape, gt_depths
+
+    def encoder(self, data):
+        images = data['image'].to(self.cfg.device, non_blocking=True)
+        B, I = images.shape[:2]
+
+        intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
+        extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
+        if self.cfg.vision_only == True:
+            pass
+        else:
+            target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
+            ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
+        # bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
+        # x = data['segmentation'].squeeze(1)
+        # x_one_hot = F.one_hot(x, num_classes=3).float()
+        # x_one_hot = self.fc(x_one_hot)
+        # bev_feature = x_one_hot.permute(0, 3, 1, 2)
+        img_metas = self.construct_metas()
+        rot, trans, cam2ego, post_rots, post_trans, bda_rot, img_shape, gt_depths = self.transform_spec(cam_specs_, cam2pixel_, B, I, images.shape, images.device)
+        img = [images, rot, trans, intrinsics, post_rots, post_trans, bda_rot, img_shape, gt_depths, cam2ego]
+        # # res = self.OccNet(img_metas=img_metas,img_inputs=img,gt_occ=data['segmentation'])
+        res = self.OccNet(img_metas=img_metas,img_inputs=img)
+        pred_c, pred_f, pred_depth = res['pred_c'], res['pred_f'], res['depth']
+        ##########
+        # H, W, D = pred_f.shape[-3:]
+        # pred_c_refined = F.interpolate(pred_c, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # pred_c_refined = torch.argmax(pred_c_refined[0], dim=0).cpu().numpy()
+        # pred_f_refined = torch.argmax(pred_f[0], dim=0).cpu().numpy()
+        # self.plot_grid(pred_c_refined, os.path.join("visual", "pred.png"))
+        # self.plot_grid(pred_f_refined, os.path.join("visual", "pred_f.png"))
+        # self.plot_grid(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
+        #########
+        if self.vision_only:
+            return pred_c, pred_f, pred_depth 
+        B, C, H, W, D = pred_f.shape
+        bev_feature = self.adaptive_max_pool(self.softmax(pred_f).view(-1, D)).squeeze(1).view(B, C, H, W)
+        bev_feature = bev_feature.permute(0, 2, 3, 1)
+        bev_feature = self.fc(bev_feature)
+        bev_feature = bev_feature.permute(0, 3, 1, 2)
+        # ####
+        # H, W, D = self.occ_size
+        # pred_f = F.interpolate(bev_feature, size=[H, W, D], mode='trilinear', align_corners=False).contiguous()
+        # pred_c = torch.argmax(pred_c[0], dim=0).cpu().numpy()
+        # self.plot_grid(pred_c, os.path.join("visual", "pred.png"))
+        # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
+        # ####
+        bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
+
+        bev_down_sample = self.bev_encoder(bev_feature)
+
+        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion)
+
+        pred_segmentation = self.segmentation_head(fuse_feature)
+        return fuse_feature, pred_segmentation, bev_target
+
+        # pred_c = torch.argmax(pred_segmentation[0], dim=0).cpu().numpy()
+        # self.plot_grid_2D(pred_c, os.path.join("visual", "pred.png"))
+        # self.plot_grid_2D(data['segmentation'][0][0].cpu().numpy(), os.path.join("visual", "gt.png"))
+
+    def forward(self, data):
+        if self.vision_only:
+            pred_c, pred_f, pred_depth = self.encoder(data)
+            return pred_c, pred_f, pred_depth 
+        else:
+            fuse_feature, pred_segmentation, _ = self.encoder(data)
+            pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
+            return pred_control, pred_segmentation
+
+    def predict(self, data):
+        fuse_feature, pred_segmentation, bev_target = self.encoder(data)
+        pred_multi_controls = data['gt_control'].cuda()
+        for i in range(3):
+            pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
+            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+        return pred_multi_controls, pred_segmentation, bev_target
