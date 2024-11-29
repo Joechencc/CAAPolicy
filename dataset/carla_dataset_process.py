@@ -878,7 +878,7 @@ class ProcessSemantic3D:
                 boundary_mask |= dilated_label & (interpolated_segmentation == next_label)
 
         boundary_coords = np.argwhere(boundary_mask)
-        map_segmentation_bound = replace_labels(interpolated_segmentation, map_segmentation, boundary_coords, radius=1)
+        map_segmentation_bound = replace_labels(interpolated_segmentation, map_segmentation, boundary_coords, radius=2)
 
         # segmentation = np.max(map_segmentation, axis=2)
         # segmentation = segmentation[:,::-1]

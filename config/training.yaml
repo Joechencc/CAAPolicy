@@ -6,7 +6,7 @@ parking_model:
   log_dir: './log/'
   checkpoint_dir: './ckpt'
   log_every_n_steps: 10
-  check_val_every_n_epoch: 1
+  check_val_every_n_epoch: 5
 
   epochs: 155
   learning_rate: 0.0001
@@ -14,7 +14,7 @@ parking_model:
   batch_size: 40
 
   training_map: "Town_Opt_128"
-  validation_map: "Town04_Opt_Val"
+  validation_map: "Town_Opt_128"
   future_frame_nums: 4
   hist_frame_nums: 10
   token_nums: 204
@@ -39,8 +39,8 @@ parking_model:
   backbone: "efficientnet-b4"
 
   # segmentation
-  seg_classes: 18 # 3
-  seg_vehicle_weights: [1.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0] # [1.0, 40.0, 40.0]
+  seg_classes: 3
+  seg_vehicle_weights: [1.0, 40.0, 40.0]
 
   # transformer encoder
   tf_en_dim: 258
