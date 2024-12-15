@@ -2,10 +2,15 @@ import argparse
 import logging
 import carla
 import pygame
+import os
+import subprocess
+import atexit
+import time
+import signal
 
 from data_generation.data_generator import DataGenerator
 from data_generation.keyboard_control import KeyboardControl
-from agent.path_collector_with_interpolations import Path_collector
+from agent.path_collector_TF_Dec_13 import Path_collector
 
 def game_loop(args):
     pygame.init()
@@ -13,8 +18,14 @@ def game_loop(args):
     data_generator = None
 
     try:
+        carla_path = '/home/yh/Documents/ParkWithUncertainty/carla'
+        cmd1 = f"__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia {os.path.join(carla_path, 'CarlaUE4.sh')} -nosound -ResX=680 -ResY=680 -carla-rpc-port={args.port}"
+        server = subprocess.Popen(cmd1, shell=True, preexec_fn=os.setsid)
+        atexit.register(os.killpg, server.pid, signal.SIGKILL)
+        time.sleep(20)
+
         client = carla.Client(args.host, args.port)
-        client.set_timeout(5.0)
+        client.set_timeout(20.0)
         logging.info('Load Map %s', args.map)
         carla_world = client.load_world(args.map)
         carla_world.unload_map_layer(carla.MapLayer.ParkedVehicles)

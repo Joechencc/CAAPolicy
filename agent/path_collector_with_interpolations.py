@@ -14,11 +14,9 @@ import cv2
 import time, sys
 print('\n\n\n\nRemember to update your path of carla folder....\n\n')
 time.sleep(1)
-sys.path.append('/home/taf1syv/Desktop/e2e-parking-carla')
-sys.path.append('/home/taf1syv/Desktop/e2e-parking-carla/carla/PythonAPI')
-sys.path.append('/home/taf1syv/Desktop/e2e-parking-carla/carla/PythonAPI/carla')
-
-
+sys.path.append('/home/yh/Documents/ParkWithUncertainty')
+sys.path.append('/home/yh/Documents/ParkWithUncertainty/carla/PythonAPI')
+sys.path.append('/home/yh/Documents/ParkWithUncertainty/carla/PythonAPI/carla')
 
 import math
 import agent.hybrid_A_star as hybrid_a_star
@@ -26,7 +24,6 @@ import matplotlib.pyplot as plt
 
 import open3d as o3d #### for lidar point clouds
 from matplotlib import cm
-
 
 
 
@@ -70,7 +67,7 @@ class VehiclePIDController():
     (lateral and longitudinal) to perform the
     low level control a vehicle from client side
     """
-    def __init__(self, vehicle, args_lateral, args_longitudinal, offset=0, max_throttle=0.75, max_brake=0.3,
+    def __init__(self, vehicle, args_lateral, args_longitudinal, offset=0, max_throttle=0.6, max_brake=0.3,
                  max_steering=0.8):
         """
         Constructor method.
@@ -100,8 +97,8 @@ class VehiclePIDController():
         self.past_steering = self._vehicle.get_control().steer
         self._lon_controller = PIDLongitudinalController(self._vehicle, **args_longitudinal)
         self._lat_controller = PIDLateralController(self._vehicle, offset, **args_lateral)
-
-
+    '''
+    ### Tao Feng's original code
     def run_step(self, target_speed, waypoint, direction = 1): ### add a direction to enable reverse tracking
         """
         Execute one step of control invoking both lateral and longitudinal
@@ -137,6 +134,70 @@ class VehiclePIDController():
             steering = min(self.max_steer, current_steering)
         else:
             steering = max(-self.max_steer, current_steering)  
+
+        control.steer = steering
+        control.hand_brake = False
+        control.manual_gear_shift = False
+        self.past_steering = steering
+
+        return control
+    '''
+    
+    def run_step(self, target_speed, waypoint, direction=1):
+        """
+        Execute one step of control invoking both lateral and longitudinal
+        PID controllers to reach a target waypoint at a given target_speed.
+        """
+  
+        SPEED_LIMIT = 5.4
+
+        current_speed = get_speed(self._vehicle)
+
+        current_steering = self._lat_controller.run_step(waypoint, direction)
+        
+        steer_angle = abs(current_steering)
+        steering_multiplier = 1.0 - 0.3 * steer_angle  # Reduce speed up to 70% when turning
+        
+        # Apply direction-based speed reduction
+        # if direction != 1:  # If reversing
+        #     steering_multiplier *= 0.4  # Additional 60% reduction for reverse
+        
+        # Calculate modified target speed based on steering and direction
+        modified_target_speed = min(target_speed * steering_multiplier, SPEED_LIMIT)
+        
+        # If we're close to speed limit, reduce target speed further
+        if current_speed > SPEED_LIMIT * 0.9:  # Within 90% of speed limit
+            modified_target_speed = min(modified_target_speed, current_speed)
+        
+        # Longitudinal control with modified target speed
+        acceleration = self._lon_controller.run_step(modified_target_speed)
+
+        control = carla.VehicleControl()
+
+        # Adjust throttle based on acceleration and speed
+        if acceleration >= 0.0:
+            acc = min(acceleration, self.max_throt)  
+            acc = (np.tanh(acc) + 1) / 2  
+            control.throttle = acc if current_speed <= SPEED_LIMIT else 0.0
+            control.brake = 0.0
+        else:
+            control.throttle = 0.0  
+            control.brake = min(abs(acceleration), self.max_brake)  
+
+        ##### Steering regulation: changes cannot happen abruptly, can't steer too much.
+        steer_offset = 0.15
+        if current_steering > self.past_steering + steer_offset:
+            current_steering = self.past_steering + steer_offset
+        elif current_steering < self.past_steering - steer_offset:
+            current_steering = self.past_steering - steer_offset    
+        #print("This is current_steering before second ifelse:",current_steering)
+
+        if current_steering >= 0:
+            steering = min(self.max_steer, current_steering)
+        else:
+            steering = max(-self.max_steer, current_steering) 
+        #print("This is current_steering after second ifelse:",current_steering) 
+        #print("This is max_steer:", max_steering)
 
         control.steer = steering
         control.hand_brake = False
@@ -325,12 +386,12 @@ class PIDLateralController():
 
  
 
-lat_p = 1.0  
-lat_i = 0.08  
-lat_d = 0.001  
+lat_p = 1 
+lat_i = 0.01  
+lat_d = 0.002  
 
 lateral_par = {'K_P': lat_p, 'K_D': lat_d, 'K_I': lat_i, 'dt': 0.03}
-longitudinal_par = {'K_P': 1.0, 'K_D': 0.1, 'K_I': 0.2, 'dt':0.03}
+longitudinal_par = {'K_P': 1.0, 'K_D': 0.03, 'K_I': 0.01, 'dt':0.03}
 max_steering =  0.75 
 
 class Real_control:
@@ -406,7 +467,7 @@ class Path_collector:
 
     
     def init_agent(self):
-        self.pid_controller = VehiclePIDController(self.player, lateral_par, longitudinal_par, max_throttle=1.0, max_steering=max_steering)
+        self.pid_controller = VehiclePIDController(self.player, lateral_par, longitudinal_par, max_throttle=0.6, max_steering=max_steering)
 
         self.step = -1
    
@@ -521,14 +582,6 @@ class Path_collector:
                     plt.show()
                     plt.pause(2)
                     
-                    #save waypoint picture
-                    file_path = self.net_eva._save_path / ("task" + str(self.net_eva._task_index)) / (
-                                self.exp_name + ".png")
-
-                    file_path.parent.mkdir(parents=True, exist_ok=True)
-
-                    plt.savefig(file_path)
-
                     plt.close()  
 
                     self.mul_pos = []
@@ -552,7 +605,7 @@ class Path_collector:
                     else:
                         diff_yaw = (-90 - self.player.get_transform().rotation.yaw+180)%360 - 180 
                     value_filter = np.clip(diff_yaw*0.1, -1.0, 1.0)       
-                    self.player.apply_control(carla.VehicleControl(throttle=1, steer= value_filter))
+                    self.player.apply_control(carla.VehicleControl(throttle=0.3, steer= value_filter))
                 return    
             else:
                 ego_center_current_x = self.player.get_transform().location.x ##np.round(,1)
@@ -580,8 +633,8 @@ class Path_collector:
                     if self.path_stage == len(self.mul_pos)-1:
                         print('We completed all paths') 
                          
-                        reach_goal = abs(self.player.get_transform().location.x-self.net_eva._parking_goal.x) < 0.5 and abs(self.player.get_transform().location.y-self.net_eva._parking_goal.y) < 0.5
-                        reach_goal = reach_goal and min(abs(self.player.get_transform().rotation.yaw), 180-abs(self.player.get_transform().rotation.yaw)) < 0.4
+                        reach_goal = np.hypot(self.player.get_transform().location.x-self.net_eva._parking_goal.x, self.player.get_transform().location.y-self.net_eva._parking_goal.y) < 0.5
+                        reach_goal = reach_goal and min(abs(self.player.get_transform().rotation.yaw), 180-abs(self.player.get_transform().rotation.yaw)) < 0.5
 
                         print('Task done? ', reach_goal)
                         if reach_goal: ###  
@@ -595,6 +648,7 @@ class Path_collector:
                             self.my_control.reverse = True #### the evaluator uses reverse as one of its conditions to check if goal is reached or not
                             self.player.apply_control(self.my_control)
                             return
+                        # #######Remove fine tuning
                         else:
                             self.finetuning = True ### requires to finetune the current position though already finishing tracking
                             ### save the ego trajectory
@@ -603,21 +657,22 @@ class Path_collector:
                             self.ego_traject.append([rear_x_ego, rear_y_ego])
                             #### assign new segement to track
                             diff_yaw = (self.target_yaw - self.player.get_transform().rotation.yaw+180)%360 - 180
-                            if abs(diff_yaw) > 0.2: ### 5 degrees
+                            if abs(diff_yaw) > 0.5: ### 5 degrees
                                 print('finetuning by moving forward to adjust the heading angle')
                                 value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
-                                self.player.apply_control(carla.VehicleControl(throttle=0.8, steer=value_filter))
+                                self.player.apply_control(carla.VehicleControl(throttle=0.4, steer=value_filter))
                                 return
                             else: ### backwards for 
                                 print('backwards...')
-                                self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=0.0, reverse=True))
+                                self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=-np.clip(diff_yaw*0.05, -1.0, 1.0), reverse=True))
                                 return 
+                    
  
                     else: 
                         self.path_stage = min(self.path_stage+1, len(self.mul_pos)-1) ###may not need
                         self.hist_use = 10000
                         ### reinitilize the controll buffer ### which is used in I and D sections
-                        self.pid_controller = VehiclePIDController(self.player, lateral_par, longitudinal_par, max_throttle=1.0, max_steering=max_steering)  
+                        self.pid_controller = VehiclePIDController(self.player, lateral_par, longitudinal_par, max_throttle=0.6, max_steering=max_steering)  
                                  
                 else:
                     self.hist_use = dist    
@@ -673,6 +728,30 @@ class Path_collector:
 
                 #print(dist, waypoint_index, self.segment_len, self.my_control.throttle, self.my_control.steer, self.my_control.brake)
         self.player.apply_control(self.my_control)  
+
+        rear_x_ego = self.player.get_transform().location.x - 1.37*math.cos(np.deg2rad(self.player.get_transform().rotation.yaw)) #np.round(,1)
+        rear_y_ego = self.player.get_transform().location.y - 1.37*math.sin(np.deg2rad(self.player.get_transform().rotation.yaw)) #np.round(,1)
+        self.ego_traject.append([rear_x_ego, rear_y_ego])
+
+        np_vec = np.array(self.positions) ##[::2]
+        np_ego = np.array(self.ego_traject)
+        plt.cla()
+        plt.scatter(np_ego[-1,1], np_ego[-1,0], label='ego rear')
+        plt.scatter(np_vec[:,1], np_vec[:,0], label='planned path') ##scatter/plot
+        plt.scatter(self.target_y, self.target_x, label='target rear')
+        # plt.scatter(np.array(self.mul_pos[self.path_stage])[index_f,1], np.array(self.mul_pos[self.path_stage])[index_f,0], label='nearest point')
+        try:
+            plt.scatter(self.r_trajectory.cy[waypoint_index], self.r_trajectory.cx[waypoint_index], label='current target') 
+        except:
+            pass    
+        plt.plot(np_ego[:,1], np_ego[:,0], label='ego path')
+        plt.axes().set_xticks(np.arange(int(min(np.round(np_vec[:,1]))), int(max(np.round(np_vec[:,1]))), 0.1), minor=True)
+        plt.axes().set_yticks(np.arange(int(min(np.round(np_vec[:,0]))), int(max(np.round(np_vec[:,0]))), 0.1), minor=True)
+        plt.grid()
+        plt.grid(which='minor', alpha=0.3)
+        plt.title('p-{} i-{} d-{}-max-steer-{}'.format(lat_p, lat_i, lat_d, max_steering))
+        plt.legend()
+        plt.pause(0.001)
 
     #################################################################################################
     def hybrid_A_star_solution(self, semantic_img, voxels=None):

@@ -25,7 +25,7 @@ class DataGenerator:
 
         self._world = World(carla_world, args)
 
-        self._parking_goal_index = 17  # 2-2; index 15+2=17
+        self._parking_goal_index = 26  # 2-2; index 15+2=17
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator = parking_position.EgoPosTown04()
 
@@ -42,7 +42,7 @@ class DataGenerator:
         self._distance_diff_to_goal = 10000
         self._rotation_diff_to_goal = 10000
         self._goal_reach_distance_diff = 0.5  # meter
-        self._goal_reach_rotation_diff = 0.5  # degree
+        self._goal_reach_rotation_diff = 1.0  # degree
 
         # number of frames needs to get into the parking goal in order to consider task completed
         self._num_frames_goal_needed = 2 * 30  # 2s * 30Hz
@@ -139,7 +139,7 @@ class DataGenerator:
                 closest_goal[2] = r.yaw
 
         # find rotation difference
-        self._rotation_diff_to_goal = math.sqrt(min(abs(r.yaw), 180 - abs(r.yaw)) ** 2 + r.roll ** 2 + r.pitch ** 2)
+        self._rotation_diff_to_goal = math.sqrt(min(abs(r.yaw), 180 - abs(r.yaw)) ** 2) # + r.roll ** 2 + r.pitch ** 2)
 
         # check if goal is reached
         if self._distance_diff_to_goal < self._goal_reach_distance_diff and \
