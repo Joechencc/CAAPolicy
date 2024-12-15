@@ -33,7 +33,7 @@ In a separate terminal, use the script below for generating training data:
 ./data_collect.sh
 ```
 
-Run the following files to generate new data:
+Run the following files to visualize new data:
 ```Shell
 python carla_data_gen.py
 ```
