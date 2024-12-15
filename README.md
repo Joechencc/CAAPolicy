@@ -33,3 +33,10 @@ In a separate terminal, use the script below for generating training data:
 ./data_collect.sh
 ```
 
+Run the following files to generate new data:
+```Shell
+python carla_data_gen.py
+```
+Main changes are within path_pollector_TF_Dec13.py, hybrid_A_star_TF_Dec13.pyx, data_generator.py, and carla_data_gen.py. Please make sure these files are updated, as well as the direcotries used in those files.
+
+**Note**: The updated files should be able to generate good movements based on our tests. However, there might be small chances that the code may encounter fine_tunning. If the code enters the fine_tunning conditions, please don't save such specific data. Skip saving and generate the new one. 
