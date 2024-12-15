@@ -23,16 +23,6 @@ chmod +x quick_setup.sh
 ```
 CUDA 11.7 is used as default. We also validate the compatibility of CUDA 10.2 and 11.3.
 
-The first step is to launch a CARLA server:
-
-```Shell
-./carla/CarlaUE4.sh -opengl -RenderOffScreen
-```
-In a separate terminal, use the script below for generating training data:
-```Shell
-./data_collect.sh
-```
-
 Run the following files to visualize new data:
 ```Shell
 python carla_data_gen.py
