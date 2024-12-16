@@ -763,13 +763,13 @@ class Path_collector:
                 kappa = calculate_curvature([self.r_trajectory.cx[waypoint_index-2], self.r_trajectory.cy[waypoint_index-2]], [self.r_trajectory.cx[waypoint_index-1], self.r_trajectory.cy[waypoint_index-1]], [self.r_trajectory.cx[waypoint_index], self.r_trajectory.cy[waypoint_index]])
                 #print('angle diff: ', abs(self.r_trajectory.cyaw[waypoint_index]-self.player.get_transform().rotation.yaw), ' curvature: ', kappa)
                 #if abs(self.r_trajectory.cyaw[waypoint_index]-self.player.get_transform().rotation.yaw)<2: #kappa < 0.05: #self.path_stage == 0 or self.path_stage == 2: 
-                print('this is kappa',kappa)
+                #print('this is kappa',kappa)
                 if abs(kappa) <= 0.01:
                     lateral_par_new = {'K_P': 0.01, 'K_D': 0.01, 'K_I': 0.00, 'dt': 0.03}
                     self.pid_controller = VehiclePIDController(self.player, lateral_par_new, longitudinal_par, max_throttle=1.0, max_steering=max_steering)
-                    print('straight lane control')
+                    #print('straight lane control')
                 else: ### works for curvatures
-                    print('curvature control')
+                    #print('curvature control')
                     self.pid_controller = VehiclePIDController(self.player, lateral_par, longitudinal_par, max_throttle = 0.3, max_steering=max_steering)    
 
                 
@@ -807,23 +807,26 @@ class Path_collector:
 
         np_vec = np.array(self.positions) ##[::2]
         np_ego = np.array(self.ego_traject)
-        plt.cla()
-        plt.scatter(np_ego[-1,1], np_ego[-1,0], label='ego rear')
-        plt.scatter(np_vec[:,1], np_vec[:,0], label='planned path') ##scatter/plot
-        plt.scatter(self.target_y, self.target_x, label='target rear')
-        # plt.scatter(np.array(self.mul_pos[self.path_stage])[index_f,1], np.array(self.mul_pos[self.path_stage])[index_f,0], label='nearest point')
-        try:
-            plt.scatter(self.r_trajectory.cy[waypoint_index], self.r_trajectory.cx[waypoint_index], label='current target') 
-        except:
-            pass    
-        plt.plot(np_ego[:,1], np_ego[:,0], label='ego path')
-        plt.axes().set_xticks(np.arange(int(min(np.round(np_vec[:,1]))), int(max(np.round(np_vec[:,1]))), 0.1), minor=True)
-        plt.axes().set_yticks(np.arange(int(min(np.round(np_vec[:,0]))), int(max(np.round(np_vec[:,0]))), 0.1), minor=True)
-        plt.grid()
-        plt.grid(which='minor', alpha=0.3)
-        plt.title('p-{} i-{} d-{}-max-steer-{}'.format(lat_p, lat_i, lat_d, max_steering))
-        plt.legend()
-        plt.pause(0.001)
+      
+        do_plot = False  # Set to True if you want to enable plotting
+        if do_plot:
+            plt.cla()
+            plt.scatter(np_ego[:, -1], np_ego[:, 0], label='ego rear')
+            plt.scatter(np_vec[:, 1], np_vec[:, 0], label='planned path')
+            plt.scatter(self.target_y, self.target_x, label='target rear')
+            try:
+                plt.scatter(self.r_trajectory.cy[waypoint_index], self.r_trajectory.cx[waypoint_index], label='current target')
+            except:
+                pass
+            plt.plot(np_ego[:, 1], np_ego[:, 0], label='ego path')
+            plt.axes().set_xticks(np.arange(int(min(np.round(np_vec[:, 1]))), int(max(np.round(np_vec[:, 1]))), 0.1), minor=True)
+            plt.axes().set_yticks(np.arange(int(min(np.round(np_vec[:, 0]))), int(max(np.round(np_vec[:, 0]))), 0.1), minor=True)
+            plt.grid()
+            plt.grid(which='minor', alpha=0.3)
+            plt.title('p-{} i-{} d-{}-max-steer-{}'.format(lat_p, lat_i, lat_d, max_steering))
+            plt.legend()
+            plt.pause(0.001)
+
 
 
     #################################################################################################
