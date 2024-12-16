@@ -18,7 +18,7 @@ def game_loop(args):
     data_generator = None
 
     try:
-        carla_path = '/home/yh/Documents/ParkWithUncertainty/carla'
+        carla_path = './carla'
         cmd1 = f"__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia {os.path.join(carla_path, 'CarlaUE4.sh')} -nosound -ResX=680 -ResY=680 -carla-rpc-port={args.port}"
         server = subprocess.Popen(cmd1, shell=True, preexec_fn=os.setsid)
         atexit.register(os.killpg, server.pid, signal.SIGKILL)
