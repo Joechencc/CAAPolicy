@@ -47,7 +47,7 @@ class DataGenerator:
         # number of frames needs to get into the parking goal in order to consider task completed
         self._num_frames_goal_needed = 2 * 30  # 2s * 30Hz
         self._num_frames_in_goal = 0
-
+        self.skip_saving = False # If the car enters moving forward fine tuning, this flag will be Ture.
         # collected sensor data to output in disk at last
         self._batch_data_frames = []
         with open('./config/sensor_setup.yaml', 'r') as file:
@@ -194,6 +194,12 @@ class DataGenerator:
         for i in range(start, end):
             align_from_path_save(cur_save_path, lidar_specs, i)
     def save_sensor_data(self, parking_goal):
+        
+        if self.skip_saving:
+            logging.info('Skipping save for trial in fine-tuning process.')
+            self.skip_saving = False  # Reset the flag for the next trial
+            return
+        
         # create dirs
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
         cur_save_path.mkdir(parents=True, exist_ok=True)
