@@ -14,9 +14,9 @@ import cv2
 import time, sys
 print('\n\n\n\nRemember to update your path of carla folder....\n\n\n')
 time.sleep(1)
-sys.path.append('/home/yh/Documents/ParkWithUncertainty')
-sys.path.append('/home/yh/Documents/ParkWithUncertainty/carla/PythonAPI')
-sys.path.append('/home/yh/Documents/ParkWithUncertainty/carla/PythonAPI/carla')
+sys.path.append('.')
+sys.path.append('./carla/PythonAPI')
+sys.path.append('./carla/PythonAPI/carla')
 
 
 import math
@@ -713,14 +713,14 @@ class Path_collector:
                             diff_yaw = (self.target_yaw - self.player.get_transform().rotation.yaw+180)%360 - 180
                             if abs(diff_yaw) > 5: #0.5: ### 5 degrees
                                 print('finetuning by moving forward to adjust the heading angle')
-                                value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
+                                self.net_eva.skip_saving = Truev
+                                alue_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
                                 self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=value_filter))
-                               
                                 return
                             else: ### backwards for 
                                 print('backwards...')
+                                self.net_eva.skip_saving = False  # Allow saving
                                 self.player.apply_control(carla.VehicleControl(throttle=0.1, steer=-np.clip(diff_yaw*0.2, -1.0, 1.0) , reverse=True))
-                              
                                 return 
  
                     else: 
