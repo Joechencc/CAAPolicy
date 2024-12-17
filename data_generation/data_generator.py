@@ -41,8 +41,8 @@ class DataGenerator:
 
         self._distance_diff_to_goal = 10000
         self._rotation_diff_to_goal = 10000
-        self._goal_reach_distance_diff = 0.5  # meter
-        self._goal_reach_rotation_diff = 1.0  # degree
+        self._goal_reach_distance_diff = 0.53  # meter
+        self._goal_reach_rotation_diff = 1.1  # degree, loose both saving data conditions a little to consider the momentum of the car
 
         # number of frames needs to get into the parking goal in order to consider task completed
         self._num_frames_goal_needed = 2 * 30  # 2s * 30Hz
