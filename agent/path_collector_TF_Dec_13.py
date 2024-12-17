@@ -713,7 +713,7 @@ class Path_collector:
                             diff_yaw = (self.target_yaw - self.player.get_transform().rotation.yaw+180)%360 - 180
                             if abs(diff_yaw) > 5: #0.5: ### 5 degrees
                                 print('finetuning by moving forward to adjust the heading angle')
-                                self.net_eva.skip_saving = Truev
+                                self.net_eva.skip_saving = True
                                 alue_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
                                 self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=value_filter))
                                 return
