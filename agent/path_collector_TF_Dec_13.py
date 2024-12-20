@@ -2,7 +2,7 @@ import carla
 import math
 import torch
 import time
-import os
+  
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,8 +45,6 @@ WD = 0.7 * W
 WB = 2.9
 TR = 0.4
 TW = 0.8
-
-
 
 from data_generation import parking_position
 from collections import deque
@@ -140,7 +138,7 @@ class VehiclePIDController():
         self._vehicle = vehicle
         self._world = self._vehicle.get_world()
         self.past_steering = self._vehicle.get_control().steer
-        self._lon_controller = PIDLongitudinalController(self._vehicle, offset, **args_longitudinal)
+        self._lon_controller = PIDLongitudinalController(self._vehicle, **args_longitudinal)
         self._lat_controller = PIDLateralController(self._vehicle, offset, **args_lateral)
 
     def run_step(self, target_speed, waypoint, direction = 1): ### add a direction to enable reverse tracking
@@ -152,7 +150,7 @@ class VehiclePIDController():
         current_steering = self._lat_controller.run_step(waypoint, direction)
         
         steer_angle = abs(current_steering)
-        steering_multiplier = 1.0 - 0.3 * steer_angle  # Reduce speed up to 70% when turning
+        steering_multiplier = 1.0 - 0.3 * steer_angle  # Reduce speed up to 30% when turning
         
         # Apply direction-based speed reduction
         # if direction != 1:  # If reversing
@@ -166,7 +164,7 @@ class VehiclePIDController():
             modified_target_speed = min(modified_target_speed, current_speed)
         
         # Longitudinal control with modified target speed
-        acceleration = self._lon_controller.run_step(modified_target_speed, direction, waypoint)
+        acceleration = self._lon_controller.run_step(modified_target_speed)
 
         control = carla.VehicleControl()
         if acceleration >= 0.0:
@@ -203,7 +201,7 @@ class PIDLongitudinalController():
     """
     PIDLongitudinalController implements longitudinal control using a PID.
     """
-    def __init__(self, vehicle, offset = 0, K_P=1.0, K_D=0.0, K_I=0.0, dt=0.03):
+    def __init__(self, vehicle, K_P=1.0, K_D=0.0, K_I=0.0, dt=0.03):
         """
         Constructor method.
 
@@ -219,9 +217,8 @@ class PIDLongitudinalController():
         self._k_i = K_I
         self._dt = dt
         self._error_buffer = deque(maxlen=10)
-        self._offset = offset
 
-    def run_step(self, target_speed, direction, waypoint, debug=False):
+    def run_step(self, target_speed, debug=False):
         """
         Execute one step of longitudinal control to reach a given target speed.
 
@@ -233,36 +230,6 @@ class PIDLongitudinalController():
 
         if debug:
             print('Current speed = {}'.format(current_speed))
-        if direction == 1:
-            target_speed = 8
-        if direction == -1:
-            vehicle_transform = self._vehicle.get_transform() 
-            # Get the ego's location and forward vector
-            ego_loc = vehicle_transform.location
-            v_vec = vehicle_transform.get_forward_vector()
-            v_vec = np.array([np.round(v_vec.x,1), np.round(v_vec.y,1), 0.0])
-
-            # Get the vector vehicle-target_wp
-            if self._offset != 0:
-                # Displace the wp to the side
-                w_tran = waypoint.transform
-                r_vec = w_tran.get_right_vector()
-                w_loc = w_tran.location + carla.Location(x=self._offset*r_vec.x,
-                                                            y=self._offset*r_vec.y)
-            else:
-                w_loc = waypoint.location ##transform.
-
-            w_vec = np.array([np.round(w_loc.x,1) - np.round(ego_loc.x,1), np.round(w_loc.y,1) - np.round(ego_loc.y,1), 0.0])
-
-            # Calculate the angle difference between w_vec and v_loc 
-            self.diff = np.degrees(np.arccos((-1) * np.dot(v_vec, w_vec) / (np.linalg.norm(v_vec) * np.linalg.norm(w_vec)))) # -1 * v_vec = ego's backward vector
-            print(f"Angle difference (radians): {self.diff}")
-
-            # Limit target speed when diff > threshold, threshold is according to observation  in experience
-            if self.diff > 6:
-                target_speed = 2.5
-            if self.diff > 8:
-                target_speed = 1
 
         return self._pid_control(target_speed, current_speed)
 
@@ -274,7 +241,6 @@ class PIDLongitudinalController():
             :param current_speed: current speed of the vehicle in Km/h
             :return: throttle/brake control
         """
-
 
         error = target_speed - current_speed
         self._error_buffer.append(error)
@@ -391,7 +357,7 @@ class PIDLateralController():
             _cross = np.cross(v_vec, w_vec)  ### check if the angle difference is left or right? u_1*v_2 -u_2*v1
             if _cross[2] < 0: #### means the ego needs to rotate right to catch the target 
                 _dot *= -1.0
-            
+
             self._e_buffer.append(_dot)  ##let's try negative to see if it works
 
             if len(self._e_buffer) >= 2:
@@ -547,7 +513,6 @@ class Path_collector:
         self.segment_len = 0
         self.path_stage = None 
         self.current_stage = None
-        self.task_idx = -1
 
     
 
@@ -572,7 +537,6 @@ class Path_collector:
             self.world._need_init_ego_state = False
             self.finetuning = False
             self.my_control = carla.VehicleControl()
-            self.task_idx += 1
 
 
         self.step += 1
@@ -696,9 +660,7 @@ class Path_collector:
                     value_filter = np.clip(diff_yaw*0.1, -1.0, 1.0)       
                     self.player.apply_control(carla.VehicleControl(throttle=self.soft_start_thre, steer= value_filter))
                     self.soft_start_thre *= 0.95
-                    if self.soft_start_thre == 0:
-                        self.soft_start_thre = 0.5
-
+                    self.soft_start_thre = max(self.soft_start_thre, 0.2)
                 return    
             else:
                 ego_center_current_x = self.player.get_transform().location.x ##np.round(,1)
@@ -724,34 +686,8 @@ class Path_collector:
                     
         
                     if self.path_stage == len(self.mul_pos)-1:
-                        print('We completed all paths')
-                        
-                        #plot trajectory for record
-                        traj_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'e2e_parking', 'trajectories')
-                        file_path = os.path.join(traj_path, f'task_{self.task_idx}_goal {self.net_eva._parking_goal_index}.png')
-                        if not os.path.exists(traj_path):
-                            os.makedirs(traj_path) #make directory
-                        if not os.path.exists(file_path):
-                            np_vec = np.array(self.positions) ##[::2]
-                            np_ego = np.array(self.ego_traject)
-                            plt.cla()
-                            plt.scatter(np_ego[:, -1], np_ego[:, 0], label='ego rear')
-                            plt.scatter(np_vec[:, 1], np_vec[:, 0], label='planned path')
-                            plt.scatter(self.target_y, self.target_x, label='target rear')
-                            try:
-                                plt.scatter(self.r_trajectory.cy[waypoint_index], self.r_trajectory.cx[waypoint_index], label='current target')
-                            except:
-                                pass
-                            plt.plot(np_ego[:, 1], np_ego[:, 0], label='ego path')
-                            plt.axes().set_xticks(np.arange(int(min(np.round(np_vec[:, 1]))), int(max(np.round(np_vec[:, 1]))), 0.1), minor=True)
-                            plt.axes().set_yticks(np.arange(int(min(np.round(np_vec[:, 0]))), int(max(np.round(np_vec[:, 0]))), 0.1), minor=True)
-                            plt.grid()
-                            plt.grid(which='minor', alpha=0.3)
-                            plt.title('p-{} i-{} d-{}-max-steer-{}'.format(lat_p, lat_i, lat_d, max_steering))
-                            plt.legend()
-                            plt.pause(0.001)
-                            
-                            plt.savefig(file_path)
+                        print('We completed all paths') 
+
                         
                         ##reach_goal = abs(self.player.get_transform().location.x-self.net_eva._parking_goal.x) < 0.4 and abs(self.player.get_transform().location.y-self.net_eva._parking_goal.y) < 0.4
                         reach_goal = np.hypot(self.player.get_transform().location.x-self.net_eva._parking_goal.x, self.player.get_transform().location.y-self.net_eva._parking_goal.y) < 0.5
@@ -777,18 +713,13 @@ class Path_collector:
                             #### assign new segement to track
                             diff_yaw = (self.target_yaw - self.player.get_transform().rotation.yaw+180)%360 - 180
                             if abs(diff_yaw) > 5: #0.5: ### 5 degrees
-
                                 print('finetuning by moving forward to adjust the heading angle')
                                 self.net_eva.skip_saving = True
-                                value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0)
-                                self.my_control.brake = 1.0
-                                self.my_control.throttle = 0.0
-                                self.my_control.steer = 0.0 
-                                self.player.apply_control(self.my_control)
+                                value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
+                                self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=value_filter))
                                 return
                             else: ### backwards for 
                                 print('backwards...')
-                                self.net_eva.skip_saving = False  # Allow saving
                                 self.player.apply_control(carla.VehicleControl(throttle=0.1, steer=-np.clip(diff_yaw*0.2, -1.0, 1.0) , reverse=True))
                                 return 
  
@@ -876,8 +807,8 @@ class Path_collector:
 
         np_vec = np.array(self.positions) ##[::2]
         np_ego = np.array(self.ego_traject)
-
-        do_plot = False # Set to True if you want to enable plotting
+      
+        do_plot = False  # Set to True if you want to enable plotting
         if do_plot:
             plt.cla()
             plt.scatter(np_ego[:, -1], np_ego[:, 0], label='ego rear')
