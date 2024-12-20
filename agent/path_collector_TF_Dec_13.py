@@ -572,6 +572,7 @@ class Path_collector:
             self.world._need_init_ego_state = False
             self.finetuning = False
             self.my_control = carla.VehicleControl()
+            self.task_idx += 1
 
 
         self.step += 1
@@ -684,8 +685,6 @@ class Path_collector:
                             tmp.append(self.positions[i])  
                     self.mul_pos.append(tmp) 
                     print('\nIt should only contain two segments', len(self.mul_pos))
-                    
-                    self.task_idx += 1
 
 
                 else:
@@ -697,6 +696,9 @@ class Path_collector:
                     value_filter = np.clip(diff_yaw*0.1, -1.0, 1.0)       
                     self.player.apply_control(carla.VehicleControl(throttle=self.soft_start_thre, steer= value_filter))
                     self.soft_start_thre *= 0.95
+                    if self.soft_start_thre == 0:
+                        self.soft_start_thre = 0.5
+
                 return    
             else:
                 ego_center_current_x = self.player.get_transform().location.x ##np.round(,1)

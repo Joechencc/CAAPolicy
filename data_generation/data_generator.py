@@ -348,6 +348,7 @@ class DataGenerator:
             bev_view1 = self._world.render_BEV_from_state(data_frame['bev_state'])
             img1 = encode_npy_to_pil(np.asarray(bev_view1.squeeze().cpu()))
             save_img(img1, keyword)
+            
     def delete_data(self):
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index)) # path of folder
         if cur_save_path.exists():
