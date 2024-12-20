@@ -754,6 +754,7 @@ class Path_collector:
                     self.player.apply_control(self.my_control)
                     self.current_stage = None
                     self.r_trajectory = None
+                    self.net_eva.skip_saving = True
                     return    
                      
                 waypoint_index = self.r_trajectory.nearest_index(ego_rear_x, ego_rear_y)   #We add extra steps in the nearest_index function
