@@ -775,10 +775,14 @@ class Path_collector:
                             #### assign new segement to track
                             diff_yaw = (self.target_yaw - self.player.get_transform().rotation.yaw+180)%360 - 180
                             if abs(diff_yaw) > 5: #0.5: ### 5 degrees
+
                                 print('finetuning by moving forward to adjust the heading angle')
                                 self.net_eva.skip_saving = True
-                                value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
-                                self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=value_filter))
+                                value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0)
+                                self.my_control.brake = 1.0
+                                self.my_control.throttle = 0.0
+                                self.my_control.steer = 0.0 
+                                self.player.apply_control(self.my_control)
                                 return
                             else: ### backwards for 
                                 print('backwards...')

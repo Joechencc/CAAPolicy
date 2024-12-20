@@ -7,6 +7,7 @@ import pathlib
 import yaml
 import numpy as np
 import cv2
+import shutil
 from multiprocessing import Process
 
 from datetime import datetime
@@ -87,6 +88,9 @@ class DataGenerator:
 
         self._world.next_weather()
 
+        # Count to skip saving when timeout
+        self.skip_saving_counter = 0
+
         logging.info('*****Init environment for task %d done*****', self._task_index)
 
     def destroy(self):
@@ -147,6 +151,19 @@ class DataGenerator:
             self._num_frames_in_goal += 1
         else:
             self._num_frames_in_goal = 0
+        
+        # check if finetune needed (distance fulfilled but rotation diff not fulfilled)
+        if self._distance_diff_to_goal < self._goal_reach_distance_diff and \
+                self._rotation_diff_to_goal >= self._goal_reach_rotation_diff:
+            self.skip_saving_counter += 1
+
+        # restart if fine_tune is needed
+        if self.skip_saving_counter > 600: # 20s * 30Hz = 600, timeout condition: stuck for longer than 20 seconds
+            if self._task_index >= self._num_tasks:
+                logging.info('completed all tasks; Thank you!')
+                exit(0)
+            self.delete_data()
+            self.restart()
 
         if self._num_frames_in_goal > self._num_frames_goal_needed:
             logging.info('task %d goal reached; ready to save sensor data', self._task_index)
@@ -331,3 +348,12 @@ class DataGenerator:
             bev_view1 = self._world.render_BEV_from_state(data_frame['bev_state'])
             img1 = encode_npy_to_pil(np.asarray(bev_view1.squeeze().cpu()))
             save_img(img1, keyword)
+    def delete_data(self):
+        cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index)) # path of folder
+        if cur_save_path.exists():
+            try:
+                shutil.rmtree(cur_save_path)
+                print(f"We need clean data, so directory: {cur_save_path} is deleted")
+            except Exception as e:
+                print(f"Error deleting directory: {e}")
+
