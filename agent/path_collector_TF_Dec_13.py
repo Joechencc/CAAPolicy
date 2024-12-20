@@ -2,7 +2,7 @@ import carla
 import math
 import torch
 import time
-  
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,6 +45,8 @@ WD = 0.7 * W
 WB = 2.9
 TR = 0.4
 TW = 0.8
+
+
 
 from data_generation import parking_position
 from collections import deque
@@ -545,6 +547,7 @@ class Path_collector:
         self.segment_len = 0
         self.path_stage = None 
         self.current_stage = None
+        self.task_idx = -1
 
     
 
@@ -681,6 +684,8 @@ class Path_collector:
                             tmp.append(self.positions[i])  
                     self.mul_pos.append(tmp) 
                     print('\nIt should only contain two segments', len(self.mul_pos))
+                    
+                    self.task_idx += 1
 
 
                 else:
@@ -717,8 +722,34 @@ class Path_collector:
                     
         
                     if self.path_stage == len(self.mul_pos)-1:
-                        print('We completed all paths') 
-
+                        print('We completed all paths')
+                        
+                        #plot trajectory for record
+                        traj_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'e2e_parking', 'trajectories')
+                        file_path = os.path.join(traj_path, f'task_{self.task_idx}_goal {self.net_eva._parking_goal_index}.png')
+                        if not os.path.exists(traj_path):
+                            os.makedirs(traj_path) #make directory
+                        if not os.path.exists(file_path):
+                            np_vec = np.array(self.positions) ##[::2]
+                            np_ego = np.array(self.ego_traject)
+                            plt.cla()
+                            plt.scatter(np_ego[:, -1], np_ego[:, 0], label='ego rear')
+                            plt.scatter(np_vec[:, 1], np_vec[:, 0], label='planned path')
+                            plt.scatter(self.target_y, self.target_x, label='target rear')
+                            try:
+                                plt.scatter(self.r_trajectory.cy[waypoint_index], self.r_trajectory.cx[waypoint_index], label='current target')
+                            except:
+                                pass
+                            plt.plot(np_ego[:, 1], np_ego[:, 0], label='ego path')
+                            plt.axes().set_xticks(np.arange(int(min(np.round(np_vec[:, 1]))), int(max(np.round(np_vec[:, 1]))), 0.1), minor=True)
+                            plt.axes().set_yticks(np.arange(int(min(np.round(np_vec[:, 0]))), int(max(np.round(np_vec[:, 0]))), 0.1), minor=True)
+                            plt.grid()
+                            plt.grid(which='minor', alpha=0.3)
+                            plt.title('p-{} i-{} d-{}-max-steer-{}'.format(lat_p, lat_i, lat_d, max_steering))
+                            plt.legend()
+                            plt.pause(0.001)
+                            
+                            plt.savefig(file_path)
                         
                         ##reach_goal = abs(self.player.get_transform().location.x-self.net_eva._parking_goal.x) < 0.4 and abs(self.player.get_transform().location.y-self.net_eva._parking_goal.y) < 0.4
                         reach_goal = np.hypot(self.player.get_transform().location.x-self.net_eva._parking_goal.x, self.player.get_transform().location.y-self.net_eva._parking_goal.y) < 0.5
@@ -746,7 +777,7 @@ class Path_collector:
                             if abs(diff_yaw) > 5: #0.5: ### 5 degrees
                                 print('finetuning by moving forward to adjust the heading angle')
                                 self.net_eva.skip_saving = True
-                                alue_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
+                                value_filter = np.clip(diff_yaw*0.05, -1.0, 1.0) 
                                 self.player.apply_control(carla.VehicleControl(throttle=0.2, steer=value_filter))
                                 return
                             else: ### backwards for 
@@ -839,8 +870,8 @@ class Path_collector:
 
         np_vec = np.array(self.positions) ##[::2]
         np_ego = np.array(self.ego_traject)
-      
-        do_plot = True # Set to True if you want to enable plotting
+
+        do_plot = False # Set to True if you want to enable plotting
         if do_plot:
             plt.cla()
             plt.scatter(np_ego[:, -1], np_ego[:, 0], label='ego rear')

@@ -25,7 +25,7 @@ class DataGenerator:
 
         self._world = World(carla_world, args)
 
-        self._parking_goal_index = 26  # 2-2; index 15+2=17
+        self._parking_goal_index = 17  # 2-2; index 15+2=17
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator = parking_position.EgoPosTown04()
 
