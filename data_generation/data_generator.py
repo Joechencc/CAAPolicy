@@ -7,7 +7,6 @@ import pathlib
 import yaml
 import numpy as np
 import cv2
-import shutil
 from multiprocessing import Process
 
 from datetime import datetime
@@ -26,7 +25,7 @@ class DataGenerator:
 
         self._world = World(carla_world, args)
 
-        self._parking_goal_index = 17  # 2-2; index 15+2=17
+        self._parking_goal_index = 33  # 2-2; index 15+2=17
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator = parking_position.EgoPosTown04()
 
@@ -42,6 +41,8 @@ class DataGenerator:
 
         self._distance_diff_to_goal = 10000
         self._rotation_diff_to_goal = 10000
+        self._goal_reach_distance_diff = 0.5  # meter
+        self._goal_reach_rotation_diff = 1.0  # degree
         self._goal_reach_distance_diff = 0.53  # meter
         self._goal_reach_rotation_diff = 1.1  # degree, loose both saving data conditions a little to consider the momentum of the car
 
@@ -87,9 +88,6 @@ class DataGenerator:
         self._world.init_sensors()
 
         self._world.next_weather()
-
-        # Count to skip saving when timeout
-        self.skip_saving_counter = 0
 
         logging.info('*****Init environment for task %d done*****', self._task_index)
 
@@ -151,19 +149,6 @@ class DataGenerator:
             self._num_frames_in_goal += 1
         else:
             self._num_frames_in_goal = 0
-        
-        # check if finetune needed (distance fulfilled but rotation diff not fulfilled)
-        if self._distance_diff_to_goal < self._goal_reach_distance_diff and \
-                self._rotation_diff_to_goal >= self._goal_reach_rotation_diff:
-            self.skip_saving_counter += 1
-
-        # restart if fine_tune is needed
-        if self.skip_saving_counter > 600: # 20s * 30Hz = 600, timeout condition: stuck for longer than 20 seconds
-            if self._task_index >= self._num_tasks:
-                logging.info('completed all tasks; Thank you!')
-                exit(0)
-            self.delete_data()
-            self.restart()
 
         if self._num_frames_in_goal > self._num_frames_goal_needed:
             logging.info('task %d goal reached; ready to save sensor data', self._task_index)
@@ -211,12 +196,12 @@ class DataGenerator:
         for i in range(start, end):
             align_from_path_save(cur_save_path, lidar_specs, i)
     def save_sensor_data(self, parking_goal):
-        
+
         if self.skip_saving:
             logging.info('Skipping save for trial in fine-tuning process.')
             self.skip_saving = False  # Reset the flag for the next trial
             return
-        
+
         # create dirs
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
         cur_save_path.mkdir(parents=True, exist_ok=True)
@@ -348,13 +333,3 @@ class DataGenerator:
             bev_view1 = self._world.render_BEV_from_state(data_frame['bev_state'])
             img1 = encode_npy_to_pil(np.asarray(bev_view1.squeeze().cpu()))
             save_img(img1, keyword)
-            
-    def delete_data(self):
-        cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index)) # path of folder
-        if cur_save_path.exists():
-            try:
-                shutil.rmtree(cur_save_path)
-                print(f"We need clean data, so directory: {cur_save_path} is deleted")
-            except Exception as e:
-                print(f"Error deleting directory: {e}")
-
