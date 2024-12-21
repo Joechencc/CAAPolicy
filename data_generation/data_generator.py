@@ -172,7 +172,6 @@ class DataGenerator:
             self._task_index += 1
             if self._task_index >= self._num_tasks:
                 logging.info('completed all tasks; Thank you!')
-                self.delete_lidar_data()
                 exit(0)
             self.restart()
 
@@ -212,7 +211,7 @@ class DataGenerator:
         for i in range(start, end):
             align_from_path_save(cur_save_path, lidar_specs, i)
     def save_sensor_data(self, parking_goal):
-        print("Saving status: ",self.skip_saving)
+        
         if self.skip_saving:
             logging.info('Skipping save for trial in fine-tuning process.')
             self.skip_saving = False  # Reset the flag for the next trial
@@ -350,17 +349,12 @@ class DataGenerator:
             img1 = encode_npy_to_pil(np.asarray(bev_view1.squeeze().cpu()))
             save_img(img1, keyword)
             
-    def delete_lidar_data(self):
-        
-        for i in range(17):
-            cur_save_path = pathlib.Path(self._save_path) / ('task' + str(i)) # path of folder
-            if cur_save_path.exists():
-                for j in range(6):
-                    lidar_save_path = cur_save_path / f'lidar_0{j}'
-                    if lidar_save_path.exists():
-                        try:
-                            shutil.rmtree(lidar_save_path)
-                            print(f"We need clean data, so directory: {lidar_save_path} is deleted")
-                        except Exception as e:
-                            print(f"Error deleting directory: {e}")
+    def delete_data(self):
+        cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index)) # path of folder
+        if cur_save_path.exists():
+            try:
+                shutil.rmtree(cur_save_path)
+                print(f"We need clean data, so directory: {cur_save_path} is deleted")
+            except Exception as e:
+                print(f"Error deleting directory: {e}")
 
