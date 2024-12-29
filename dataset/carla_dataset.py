@@ -651,38 +651,29 @@ class CarlaDataset(torch.utils.data.Dataset):
                 parking_goal = convert_slot_coord3D(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
 
-                if self.is_train == 1:
-                    modified_task_path = all_tasks[0].replace('e2e_parking', 'e2e_parking_process')
-                    total_frames = len(os.listdir(task_path + "/measurements/"))
-                    modified_task_path = task_path.replace('e2e_parking', 'e2e_parking_process')
-                    filename = modified_task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
-                    
-                    if not os.path.isfile(filename):
-                        assert()
-                    else:
-                        segmentation = np.load(filename).astype(np.int64)
-                        occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
-                        resolution = (max_bound[0] - min_bound[0])/occ_size[0]
-                        segmentation = self.draw_target_slot3D(segmentation, parking_goal, min_bound, max_bound, resolution)
-                        segmentation = np.max(segmentation, axis=2)
-                        segmentation = segmentation[:,::-1]
-                        # import pdb; pdb.set_trace()
-                        # if str(filename).split("/")[-4] == "11_05_17_47_17" and str(filename).split("/")[-3] == "task0" and str(filename).split("/")[-1] == "0010_info.npy":
-                        #     self.plot_grid_2D(segmentation, os.path.join("visual", "gt_11_05_17_47_17.png"))
-                        #     print("filename::::", filename)
-                        #     import pdb; pdb.set_trace()
-                        #     assert()
-                        segmentations.append(segmentation)
+                
+                modified_task_path = all_tasks[0].replace('e2e_parking', 'e2e_parking_process')
+                total_frames = len(os.listdir(task_path + "/measurements/"))
+                modified_task_path = task_path.replace('e2e_parking', 'e2e_parking_process')
+                filename = modified_task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
+                
+                if not os.path.isfile(filename):
+                    assert()
                 else:
-                    current_voxel = task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
-                    segmentation = self.semantic_process3D(current_voxel,
-                                                        target_slot=parking_goal)
+                    segmentation = np.load(filename).astype(np.int64)
                     occ_size, min_bound, max_bound = self.cfg.occ_size, self.cfg.point_cloud_range[:3], self.cfg.point_cloud_range[3:]
                     resolution = (max_bound[0] - min_bound[0])/occ_size[0]
                     segmentation = self.draw_target_slot3D(segmentation, parking_goal, min_bound, max_bound, resolution)
                     segmentation = np.max(segmentation, axis=2)
                     segmentation = segmentation[:,::-1]
+                    # import pdb; pdb.set_trace()
+                    # if str(filename).split("/")[-4] == "11_05_17_47_17" and str(filename).split("/")[-3] == "task0" and str(filename).split("/")[-1] == "0010_info.npy":
+                    #     self.plot_grid_2D(segmentation, os.path.join("visual", "gt_11_05_17_47_17.png"))
+                    #     print("filename::::", filename)
+                    #     import pdb; pdb.set_trace()
+                    #     assert()
                     segmentations.append(segmentation)
+            
 
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
@@ -762,9 +753,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         #                                     target_slot=self.target_point[index])
         # elif self.cfg.feature_encoder == "conet":
         segmentation = self.segmentation[index]
-        # if self.is_train==1 and str(self.voxel[index]).split("/")[-4] == "11_05_17_47_17" and str(self.voxel[index]).split("/")[-3] == "task0" and str(self.voxel[index]).split("/")[-1] == "0010_info.npy'":
-        #     print("temp::", str(self.voxel[index]).split("/")[-3]== 'task0')
-        #     self.plot_grid_2D(segmentation, os.path.join("visual", "gt_11_05_17_47_17.png"))
+        # if self.is_train==1 and str(self.voxel[index]).split("/")[-4] == "11_08_11_35_26" and str(self.voxel[index]).split("/")[-3] == "task5" and str(self.voxel[index]).split("/")[-1] == "0020_info.npy'":
+        #     self.plot_grid_2D(segmentation, os.path.join("visual", "gt_11_08_11_35_26__task5__0020_info.png"))
         #     print("self.voxel[index]::::", self.voxel[index])
         #     import pdb; pdb.set_trace()
         #     assert()
