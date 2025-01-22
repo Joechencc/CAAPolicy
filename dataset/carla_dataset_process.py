@@ -30,7 +30,7 @@ def replace_labels(interpolated_segmentation, map_segmentation, boundary_coords,
         interpolated_segmentation[x_min:x_max, y_min:y_max, z_min:z_max] = \
             map_segmentation[x_min:x_max, y_min:y_max, z_min:z_max]
     return interpolated_segmentation
-
+    
 def convert_slot_coord(ego_trans, target_point):
     """
     Convert target parking slot from world frame into self_veh frame
@@ -458,7 +458,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         all_frameno = []
         next_poses = []
         segmentations = []
-        if self.is_train == 1:
+        if self.is_train == 1 or self.is_train == 0:
             if not os.path.exists("e2e_parking_process"):
                 os.makedirs("e2e_parking_process")
             modified_town_dir = town_dir.replace('e2e_parking', 'e2e_parking_process')
@@ -467,13 +467,13 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         for root_dir in root_dirs:
             root_path = os.path.join(town_dir, root_dir)
-            if self.is_train == 1:
+            if self.is_train == 1 or self.is_train == 0:
                 modified_root_path = os.path.join(modified_town_dir, root_dir)
                 if not os.path.exists(modified_root_path):
                     os.makedirs(modified_root_path)   
             for task_dir in os.listdir(root_path):
                 task_path = os.path.join(root_path, task_dir)
-                if self.is_train == 1:
+                if self.is_train == 1 or self.is_train == 0:
                     modified_task_path = os.path.join(modified_root_path, task_dir)
                     if not os.path.exists(modified_task_path):
                         os.makedirs(modified_task_path)  
@@ -590,7 +590,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.all_poses = np.array(all_poses).astype(np.float32)
         self.all_frameno = np.array(all_frameno).astype(np.int64)
 
-        if self.is_train == 1:
+        if self.is_train == 1 or self.is_train == 0:
             modified_task_path = all_tasks[0].replace('e2e_parking', 'e2e_parking_process')
             filename = f"{str(0).zfill(4)}.png"
             one_file_path = modified_task_path + "/voxel/" + filename.split(".")[0]+"_info.npy"
@@ -620,7 +620,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                     # segmentation_2D = np.max(segmentation, axis=2)
                     # segmentation_2D = segmentation[:,::-1]
                     # segmentations.append(segmentation.astype(np.int64))
-        assert()
+        #assert()
         self.next_poses = np.array(next_poses).astype(np.float32)
         self.segmentation = np.array(segmentations).astype(np.int64)
         logger.info('Preloaded {} sequences', str(len(self.front)))
@@ -878,12 +878,29 @@ class ProcessSemantic3D:
                 boundary_mask |= dilated_label & (interpolated_segmentation == next_label)
 
         boundary_coords = np.argwhere(boundary_mask)
-        map_segmentation_bound = replace_labels(interpolated_segmentation, map_segmentation, boundary_coords, radius=2)
+        map_segmentation_bound = replace_labels(interpolated_segmentation, map_segmentation, boundary_coords, radius=0)
 
         # segmentation = np.max(map_segmentation, axis=2)
         # segmentation = segmentation[:,::-1]
 
         return map_segmentation_bound.copy()
+
+    def replace_labels(interpolated_segmentation, map_segmentation, boundary_coords, radius=2):
+        for coord in boundary_coords:
+            x, y, z = coord
+            
+            # 确定边界框，防止超出数组范围
+            x_min = max(x - radius, 0)
+            x_max = min(x + radius + 1, interpolated_segmentation.shape[0])
+            y_min = max(y - radius, 0)
+            y_max = min(y + radius + 1, interpolated_segmentation.shape[1])
+            z_min = max(z - radius, 0)
+            z_max = min(z + radius + 1, interpolated_segmentation.shape[2])
+
+            # 使用 map_segmentation 中的标签替换 interpolated_segmentation 中对应位置的标签
+            interpolated_segmentation[x_min:x_max, y_min:y_max, z_min:z_max] = \
+                map_segmentation[x_min:x_max, y_min:y_max, z_min:z_max]
+        return interpolated_segmentation
 
     def create_waypoint_mask(self, trajectory_waypoints, pc_range, occ_size, extent_pixel=4):
         grid_size = (pc_range[3] - pc_range[0]) / occ_size[1] 
