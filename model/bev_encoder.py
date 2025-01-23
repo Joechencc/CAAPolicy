@@ -10,7 +10,8 @@ class BevEncoder(nn.Module):
         super().__init__()
         trunk = resnet18(pretrained=False, zero_init_residual=True)
 
-        self.conv1 = nn.Conv2d(in_channel + 1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        #self.conv1 = nn.Conv2d(in_channel + 1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = trunk.bn1
         self.relu = trunk.relu
         self.max_pool = trunk.maxpool
