@@ -5,9 +5,10 @@ import torch.utils.data
 import numpy as np
 import torchvision.transforms
 import yaml
-import cv2
 from PIL import Image
 from loguru import logger
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 
 def convert_slot_coord(ego_trans, target_point):
@@ -447,9 +448,12 @@ class ProcessOCC:
         :param target_slot: center location of the target parking slot in meters; vehicle frame
         :return: processed BEV semantic ground truth
         """
-
-        data = np.load(occ_file_path, allow_pickle=True).item()
-        gt_occ, resolution, min_bound, max_bound = data['gt_occ'], data['resolution'], data['min_bound'], data['max_bound']
+        if(type(occ_file_path) == str):
+            data = np.load(occ_file_path, allow_pickle=True).item()
+            gt_occ, resolution, min_bound, max_bound = data['gt_occ'], data['resolution'], data['min_bound'], data['max_bound']
+        else:
+            gt_occ, resolution, min_bound, max_bound = occ_file_path['gt_occ'], occ_file_path['resolution'], occ_file_path['min_bound'], occ_file_path[
+                'max_bound']
         grid_size = np.ceil((np.array(max_bound) - np.array(min_bound)) / resolution).astype(int)
         voxels = np.zeros(grid_size, dtype=int)
         for indices, value in gt_occ.items():

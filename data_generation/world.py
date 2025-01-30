@@ -7,12 +7,15 @@ from queue import Queue, Empty
 import numpy as np
 import carla
 import yaml
+from matplotlib import pyplot as plt
 
 from data_generation.hud import HUD, get_actor_display_name
 from data_generation.sensors import CollisionSensor, CameraManager
 from data_generation import parking_position
 from data_generation.bev_render import BevRender
-
+from dataset.carla_dataset import ProcessOCC
+from tool.lidar2voxel import convert2numpy, align_pcd_list, voxelization
+from tool.config import get_cfg
 parking_vehicle_rotation = [
     carla.Rotation(yaw=180),
     carla.Rotation(yaw=0)
@@ -37,7 +40,13 @@ class World(object):
         settings.fixed_delta_seconds = float(1 / 30)  # 30 FPS
         settings.synchronous_mode = True
         self._world.apply_settings(settings)
-
+        with open("./config/training.yaml", 'r') as yaml_file:
+            try:
+                cfg_yaml = yaml.safe_load(yaml_file)
+            except yaml.YAMLError:
+                print("Open {} failed!", args.config)
+        cfg = get_cfg(cfg_yaml)
+        self.occ_process = ProcessOCC(cfg)
         if args.map == 'Town04_Opt':
             self._parking_spawn_points = parking_position.parking_vehicle_locations_Town04.copy()
         else:
@@ -471,12 +480,25 @@ class World(object):
             self._sensor_data_frame['veh_transfrom'] = t
             self._sensor_data_frame['veh_velocity'] = v
             self._sensor_data_frame['veh_control'] = c
-
             # collect sensor data at each frame
             for i in range(0, len(self._sensor_list)):
                 s_data = self._sensor_queue.get(block=True, timeout=1.0)
                 self._sensor_data_frame[s_data[1]] = s_data[0]
+            all_pcd = {}
+            for key in self._lidar_specs.keys():
+                all_pcd[key] = convert2numpy(self._sensor_data_frame[key])
+            all_points, all_categories = align_pcd_list(all_pcd, self._lidar_specs)
+            gt_occ_voxel = voxelization(all_points, all_categories)
+            gt_occ, gt_occ_w_target = self.occ_process(gt_occ_voxel, [1,2,3])
+            self._sensor_data_frame["gt_occ"] = gt_occ
 
+            # image_occ = gt_occ[1]
+            # plt.imshow(image_occ, cmap='gray')  # 使用灰度图
+            # plt.colorbar()  # 显示颜色条
+            # plt.axis('off')  # 关闭坐标轴
+            # plt.savefig('output_image_occ.png', bbox_inches='tight', pad_inches=0)  # 保存图像
+            # plt.close()  # 关闭图像窗口
+            # breakpoint()
                 # if s_data[1] == 'rgb_left':
                 #     target_ego = convert_veh_coord(self.target_parking_goal.x, self.target_parking_goal.y, self.target_parking_goal.z, t)
                 #     self.image_process(target_ego, cam_id=s_data[1], image=s_data[0])

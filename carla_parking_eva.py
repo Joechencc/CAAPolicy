@@ -141,7 +141,7 @@ def main():
         choices=['cpu', 'cuda'])
     argparser.add_argument(
         '--show_eva_imgs',
-        default=False,
+        default=True,
         type=str2bool,
         help='show eva figure in eva model (default: False)')
     argparser.add_argument(
