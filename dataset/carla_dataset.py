@@ -5,7 +5,7 @@ import torch.utils.data
 import numpy as np
 import torchvision.transforms
 import yaml
-
+import cv2
 from PIL import Image
 from loguru import logger
 
@@ -173,6 +173,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.veh2cam_dict = {}
         self.extrinsic = None
         self.image_process = ProcessImage(self.image_crop)
+        self.occ_process = ProcessOCC(self.cfg)
         self.semantic_process = ProcessSemantic(self.cfg)
 
         self.init_camera_config()
@@ -207,6 +208,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.target_point = []
 
         self.topdown = []
+        
+        self.topdown_occ = []
 
         self.get_data()
 
@@ -298,6 +301,9 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
 
+                # gt occ in open3D file
+                self.topdown_occ.append(task_path + "/voxel/" + f"{str(frame).zfill(4)}" +"_info.npy")
+
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
 
@@ -375,7 +381,7 @@ class CarlaDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         data = {}
         keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
-                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse']
+                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse',"gt_occ","gt_occ_w_target"]
         for key in keys:
             data[key] = []
 
@@ -403,6 +409,14 @@ class CarlaDataset(torch.utils.data.Dataset):
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
+        # occupancy
+        gt_occ,gt_occ_w_target = self.occ_process(self.topdown_occ[index],target_slot=self.target_point[index])
+        data["gt_occ"] = torch.from_numpy(gt_occ).long()
+        data["gt_occ_w_target"] = torch.from_numpy(gt_occ_w_target).long()
+        
+        #topdown
+        data['topdown'] = np.array(Image.open(self.topdown[index]))
+
         # target_point
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
@@ -419,8 +433,109 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['gt_reverse'] = torch.from_numpy(self.reverse[index])
 
         return data
+class ProcessOCC:
+    def __init__(self, cfg):
+        self.cfg = cfg
+    def indices2coor(self,indices,min,resolution):
+        return np.array(indices)*resolution+np.array(min)
+    def __call__(self, occ_file_path, target_slot,scale=1, crop=0):
+        """
+        Process original BEV ground truth image; return cropped image with target slot
+        :param image: PIL Image or path to image
+        :param scale: scale factor
+        :param crop: image crop size
+        :param target_slot: center location of the target parking slot in meters; vehicle frame
+        :return: processed BEV semantic ground truth
+        """
+
+        data = np.load(occ_file_path, allow_pickle=True).item()
+        gt_occ, resolution, min_bound, max_bound = data['gt_occ'], data['resolution'], data['min_bound'], data['max_bound']
+        grid_size = np.ceil((np.array(max_bound) - np.array(min_bound)) / resolution).astype(int)
+        voxels = np.zeros(grid_size, dtype=int)
+        for indices, value in gt_occ.items():
+            # GT invert x-axis
+            # indice_0 = int(- np.array(indices)[0])
+
+            tmp_coor = self.indices2coor(indices,min_bound,resolution)
+            if (min_bound[0] < tmp_coor[0] and  tmp_coor[0] < max_bound[0] and
+                min_bound[1] < tmp_coor[1] and  tmp_coor[1]< max_bound[1] and
+                min_bound[2] < tmp_coor[2] and  tmp_coor[2]< max_bound[2]):
+                indices = (indices[0], -indices[1], indices[2])
+
+                voxels[(indices)] = value
+  
+        voxels = np.max(voxels, axis=-1).astype(int)
 
 
+        sample = voxels
+        sample = sample[110:210, 110:210]  # 剪切中心区域，形状变为 [100, 100]
+        sample = np.flip(sample, axis=1)  # 沿着 y 轴对称
+
+        # 将中心区域的值设置为 0
+        center_height, center_width = 24, 12
+        start_h = (sample.shape[0] - center_height) // 2  # 中心区域的起始行索引
+        start_w = (sample.shape[1] - center_width) // 2   # 中心区域的起始列索引
+        sample[start_h:start_h + center_height, start_w:start_w + center_width] = 0
+
+        # 创建掩码并替换值
+        mask_1 = np.isin(sample, np.array([4.0]))
+        mask_2 = np.isin(sample, np.array([1,2,3,5,6,7,8,9,10,11.0, 12,13.0, 14.0,15,16]))
+        sample = np.where(mask_1, 1.0, sample)  # 将 1, 4, 15, 16 替换为 1
+        sample = np.where(mask_2, 0.0, sample)  # 将 11, 13, 14 替换为 0
+        # 调整大小为 [200, 200]
+        sample_pil = Image.fromarray(sample.astype(np.uint8))  # 转换为 uint8 类型
+
+        # 使用 PIL.Image.resize 进行缩放
+        sample_resized_pil = sample_pil.resize((200, 200), resample=Image.NEAREST)  
+
+        # 将 PIL.Image 对象转换回 NumPy 数组
+        sample = np.array(sample_resized_pil).astype(int)
+
+        # draw target slot
+        target = np.zeros((200, 200), dtype=int)
+        target = self.draw_target_slot(target, target_slot)
+
+        result = target+sample
+        
+        num_classes = 2  # 类别数为 2（0 和 1）
+        one_hot = np.eye(num_classes)[sample]  # 使用 np.eye 创建 one-hot 编码
+
+
+        sample = np.transpose(one_hot, (2, 0, 1))  # 将类别维度移到最前面
+
+
+        return  sample,result
+
+    def draw_target_slot(self, image, target_slot):
+
+        size = image.shape[0]
+
+        # convert target slot position into pixels
+        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
+        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
+
+        # draw the whole parking slot
+        slot_points = []
+        for x in range(-27, 28):
+            for y in range(-15, 16):
+                slot_points.append(np.array([x, y, 1, 1], dtype=int))
+
+        # rotate parking slots points
+
+        slot_trans = np.array(
+            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[2]))).get_matrix())
+        slot_points = np.vstack(slot_points).T
+        slot_points_ego = (slot_trans @ slot_points)[0:2].astype(int)
+
+        # get parking slot points on pixel frame
+        slot_points_ego[0] += target_point[0]
+        slot_points_ego[1] += target_point[1]
+
+        image[tuple(slot_points_ego)] = 2
+        image = np.flip(image, axis=0) 
+        return image
+        
 class ProcessSemantic:
     def __init__(self, cfg):
         self.cfg = cfg

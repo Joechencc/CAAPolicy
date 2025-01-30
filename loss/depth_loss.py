@@ -16,10 +16,11 @@ class DepthLoss(nn.Module):
         self.depth_channels = int((self.cfg.d_bound[1] - self.cfg.d_bound[0]) / self.cfg.d_bound[2])
 
     def forward(self, depth_preds, depth_labels):
+        if depth_preds == None:
+            return 0
         depth_labels = self.get_down_sampled_gt_depth(depth_labels)
         depth_preds = depth_preds.permute(0, 2, 3, 1).contiguous().view(-1, self.depth_channels)
         fg_mask = torch.max(depth_labels, dim=1).values > 0.0
-
         with autocast(enabled=False):
             depth_loss = (F.binary_cross_entropy(
                 depth_preds[fg_mask],

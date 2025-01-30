@@ -7,8 +7,41 @@ from model.bev_encoder import BevEncoder
 from model.feature_fusion import FeatureFusion
 from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
+class BEVUpsample(nn.Module):
+    def __init__(self, in_channels=2, out_channels=64):
+        super(BEVUpsample, self).__init__()
+        # 主分支
+        self.main_conv = nn.Conv2d(
+            in_channels=in_channels, 
+            out_channels=out_channels, 
+            kernel_size=1, 
+            bias=False
+        )
+        # 用来保证跳跃分支和输出形状一致（维度匹配）
+        self.shortcut = nn.Conv2d(
+            in_channels=in_channels, 
+            out_channels=out_channels, 
+            kernel_size=1, 
+            bias=False
+        )
+        # 可自行选择合适的激活函数
+        self.act = nn.ReLU(inplace=True)
 
+    def forward(self, x):
+        # 主分支
+        out = self.main_conv(x)
+        # 跳跃分支
+        identity = self.shortcut(x)
+        # 残差连接
+        out += identity
+        # 激活
+        out = self.act(out)
+        return out
+
+    
 class ParkingModel(nn.Module):
     def __init__(self, cfg: Configuration):
         super().__init__()
@@ -24,6 +57,8 @@ class ParkingModel(nn.Module):
         self.control_predict = ControlPredict(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
+
+        self.bev_upsample = BEVUpsample()
 
     def add_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
@@ -52,7 +87,40 @@ class ParkingModel(nn.Module):
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True)
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
 
-        bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
+
+        # image_seg = data["segmentation"].squeeze(0).squeeze(0).cpu()
+        
+        # image_occ_w_target = data["gt_occ_w_target"].squeeze(0).cpu().numpy()
+        # image_occ = data["gt_occ"].squeeze(0)[1].cpu().numpy()
+        
+        # topdown = data["topdown"][0].cpu().numpy()
+
+        # plt.imshow(topdown, cmap='gray')  # 使用灰度图
+        # plt.colorbar()  # 显示颜色条
+        # plt.axis('off')  # 关闭坐标轴
+        # plt.savefig('output_image_topdown.png', bbox_inches='tight', pad_inches=0)  # 保存图像
+        # plt.close()  # 关闭图像窗口
+
+        # plt.imshow(image_seg, cmap='gray')  # 使用灰度图
+        # plt.colorbar()  # 显示颜色条
+        # plt.axis('off')  # 关闭坐标轴
+        # plt.savefig('output_image_seg.png', bbox_inches='tight', pad_inches=0)  # 保存图像
+        # plt.close()  # 关闭图像窗口
+
+        # plt.imshow(image_occ, cmap='gray')  # 使用灰度图
+        # plt.colorbar()  # 显示颜色条
+        # plt.axis('off')  # 关闭坐标轴
+        # plt.savefig('output_image_occ.png', bbox_inches='tight', pad_inches=0)  # 保存图像
+        # plt.close()  # 关闭图像窗口
+
+        # plt.imshow(image_occ_w_target, cmap='gray')  # 使用灰度图
+        # plt.colorbar()  # 显示颜色条
+        # plt.axis('off')  # 关闭坐标轴
+        # plt.savefig('output_image_occ_w_target.png', bbox_inches='tight', pad_inches=0)  # 保存图像
+        # plt.close()  # 关闭图像窗口
+        #bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
+
+        bev_feature = self.bev_upsample(data["gt_occ"].float())
 
         bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
 
@@ -62,7 +130,8 @@ class ParkingModel(nn.Module):
 
         pred_segmentation = self.segmentation_head(fuse_feature)
 
-        return fuse_feature, pred_segmentation, pred_depth, bev_target
+        #return fuse_feature, pred_segmentation, pred_depth, bev_target
+        return fuse_feature, pred_segmentation, None, bev_target
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
