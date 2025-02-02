@@ -34,9 +34,9 @@ def setup_callbacks(cfg):
 
 
 class ParkingTrainingModule(pl.LightningModule):
-    def __init__(self, cfg: Configuration):
+    def __init__(self, cfg: Configuration, model_path=None):
         super(ParkingTrainingModule, self).__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['model_path'])
 
         self.cfg = cfg
 

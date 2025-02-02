@@ -2,7 +2,8 @@ import os
 import sys
 import argparse
 import yaml
-
+import sys
+print(sys.path)  # 检查导入路径
 from loguru import logger
 from pytorch_lightning import Trainer, seed_everything
 from trainer.pl_trainer import ParkingTrainingModule, setup_callbacks
@@ -21,6 +22,10 @@ def train():
         default='./config/training.yaml',
         type=str,
         help='path to training.yaml (default: ./config/training.yaml)')
+    arg_parser.add_argument(
+        '--model_path',
+        default=None,
+        help='path to model.ckpt')
     args = arg_parser.parse_args()
 
     with open(args.config, 'r') as yaml_file:
@@ -29,7 +34,7 @@ def train():
         except yaml.YAMLError:
             logger.exception("Open {} failed!", args.config)
     cfg = get_cfg(cfg_yaml)
-
+    cfg.model_path = args.model_path
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)
     logger.add(sys.stderr, enqueue=True)
@@ -51,9 +56,13 @@ def train():
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
 
-    parking_model = ParkingTrainingModule(cfg)
+    parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
     parking_datamodule = ParkingDataModule(cfg)
-    parking_trainer.fit(parking_model, datamodule=parking_datamodule)
+    parking_trainer.fit(
+        parking_model, 
+        datamodule=parking_datamodule, 
+        ckpt_path=cfg.model_path if cfg.model_path else None 
+    )
 
 
 if __name__ == '__main__':
