@@ -478,8 +478,9 @@ class ParkingAgent:
         data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
-        if self.pre_target_point is not None:
-            target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
+        # use gt target
+        # if self.pre_target_point is not None:
+        #     target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
         data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
 
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
