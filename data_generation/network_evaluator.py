@@ -548,8 +548,11 @@ class NetworkEvaluator:
 
     @property
     def eva_parking_goal(self):
-        return self._eva_parking_goal
-
+        if self._parking_goal_index >=16 and self._parking_goal_index <=30:
+            return self._eva_parking_goal
+        else:
+            self._eva_parking_goal[2] = 0
+            return self._eva_parking_goal
     @property
     def ego_transform(self):
         return self._ego_transform
