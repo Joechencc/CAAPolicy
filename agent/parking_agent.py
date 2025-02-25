@@ -463,9 +463,9 @@ class ParkingAgent:
         front_final, self.camera_front = self.image_process(data_frame['camera_front'])
         front_left_final, self.camera_front_left = self.image_process(data_frame['camera_front_left'])
         front_right_final, self.camera_front_right = self.image_process(data_frame['camera_front_right'])
-        back_final, self.camera_front = self.image_process(data_frame['camera_back'])
-        back_left_final, self.camera_front_left = self.image_process(data_frame['camera_back_left'])
-        back_right_final, self.camera_front_right = self.image_process(data_frame['camera_back_right'])
+        back_final, self.camera_back = self.image_process(data_frame['camera_back'])
+        back_left_final, self.camera_back_left = self.image_process(data_frame['camera_back_left'])
+        back_right_final, self.camera_back_right = self.image_process(data_frame['camera_back_right'])
 
         images = [front_final, front_left_final, front_right_final,back_final,back_left_final,back_right_final]
         images = torch.cat(images, dim=0)
