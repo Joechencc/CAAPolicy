@@ -68,12 +68,10 @@ class NetworkEvaluator:
         terminate_immediately = True
         if terminate_immediately:
             self._num_frames_in_goal_needed = 1
-            self._num_frames_nearby_goal_needed = 1
-            self._num_frames_nearby_no_goal_needed = 1
         else:
-            self._num_frames_in_goal_needed = 2 * self._frames_per_second         # 2s
-            self._num_frames_nearby_goal_needed = 2 * self._frames_per_second     # 2s
-            self._num_frames_nearby_no_goal_needed = 2 * self._frames_per_second  # 2s
+            self._num_frames_in_goal_needed = 2 * self._frames_per_second     # 2s
+        self._num_frames_nearby_goal_needed = 2 * self._frames_per_second     # 2s
+        self._num_frames_nearby_no_goal_needed = 2 * self._frames_per_second  # 2s
         self._num_frames_outbound_needed = 10 * self._frames_per_second       # 10s
         self._num_frames_total_needed = 30 * self._frames_per_second          # 30s
 
