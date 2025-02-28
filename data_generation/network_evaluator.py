@@ -24,8 +24,7 @@ class NetworkEvaluator:
 
         # only eva odd slot: 1, 3, 5, ..., 15
         # 2-1, index 15 + 1 = 16
-        #self._parking_goal_index = 16
-        self._parking_goal_index = 17
+        self._parking_goal_index = 16
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator = parking_position.EgoPosTown04()
 
@@ -199,8 +198,7 @@ class NetworkEvaluator:
 
         self._seed = self._init_seed
 
-        #self._parking_goal_index = 16
-        self._parking_goal_index = 17
+        self._parking_goal_index = 16
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator.update_eva_goal_y(self._parking_goal.y,
                                                         self._eva_parking_nums,
