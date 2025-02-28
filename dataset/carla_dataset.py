@@ -8,7 +8,79 @@ import yaml
 
 from PIL import Image
 from loguru import logger
-import matplotlib.pyplot as plt
+
+
+def update_ego_xy(ego_xy, velocity, acc_x, acc_y, ego_trans, reverse, dt=0.1):
+    """
+    Update ego's position using velocity, acceleration, and reverse motion.
+    Compute displacement (dx, dy) to track the target in ego's frame.
+    
+    :param ego_xy: [x, y] in world frame
+    :param velocity: vehicle speed (m/s)
+    :param acc_x: acceleration in x direction (m/s^2)
+    :param acc_y: acceleration in y direction (m/s^2)
+    :param ego_trans: ego vehicle's transform (provides yaw angle)
+    :param reverse: whether the vehicle is in reverse gear (boolean)
+    :param dt: time step (s)
+    :return: updated ego_xy [x, y], displacement [dx, dy]
+    """
+    
+    x, y = ego_xy  # Current position
+    yaw = ego_trans.rotation.yaw  # Extract yaw angle (in degrees)
+
+    # Adjust velocity for reverse motion
+    if reverse:
+        velocity = -velocity  # Negate velocity if in reverse
+
+    # Compute velocity components in world frame
+    velocity_x = velocity * np.cos(np.radians(yaw)) + acc_x * dt
+    velocity_y = velocity * np.sin(np.radians(yaw)) + acc_y * dt
+
+    # Compute displacement, used for target point tracking
+    dx = velocity_x * dt
+    dy = velocity_y * dt
+
+    # Compute new ego position
+    x += dx
+    y += dy
+
+    return [x, y], [dx, dy]  # Return updated position and displacement
+
+def update_ego_xy(ego_xy, velocity, acc_x, acc_y, ego_trans, reverse, dt=0.1):
+    """
+    Update ego's position using velocity, acceleration, and reverse motion.
+    Compute displacement (dx, dy) to track the target in ego's frame.
+    
+    :param ego_xy: [x, y] in world frame
+    :param velocity: vehicle speed (m/s)
+    :param acc_x: acceleration in x direction (m/s^2)
+    :param acc_y: acceleration in y direction (m/s^2)
+    :param ego_trans: ego vehicle's transform (provides yaw angle)
+    :param reverse: whether the vehicle is in reverse gear (boolean)
+    :param dt: time step (s)
+    :return: updated ego_xy [x, y], displacement [dx, dy]
+    """
+    
+    x, y = ego_xy  # Current position
+    yaw = ego_trans.rotation.yaw  # Extract yaw angle (in degrees)
+
+    # Adjust velocity for reverse motion
+    if reverse:
+        velocity = -velocity  # Negate velocity if in reverse
+
+    # Compute velocity components in world frame
+    velocity_x = velocity * np.cos(np.radians(yaw)) + acc_x * dt
+    velocity_y = velocity * np.sin(np.radians(yaw)) + acc_y * dt
+
+    # Compute displacement, used for target point tracking
+    dx = velocity_x * dt
+    dy = velocity_y * dt
+
+    # Compute new ego position
+    x += dx
+    y += dy
+
+    return [x, y], [dx, dy]  # Return updated position and displacement
 
 
 def convert_slot_coord(ego_trans, target_point):
@@ -259,6 +331,13 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.reverse = []
 
         self.target_point = []
+        self.relative_target_point = {}  # frame by frame target point's location relative to the ego, stores relative positions per parking goal
+        '''self.relative_target_point = {
+        goal_1: [[x_rel_1, y_rel_1], [x_rel_2, y_rel_2], ...],  # Sequence of relative positions for goal_1
+        goal_2: [[x_rel_1, y_rel_1], [x_rel_2, y_rel_2], ...],  # Sequence of relative positions for goal_2
+        ...
+        }
+        '''
 
         self.topdown = []
 
@@ -327,7 +406,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         town_dir = train_data if self.is_train == 1 else val_data
 
-        # collect all parking data tasks
+        # Collect all parking data tasks
         root_dirs = os.listdir(town_dir)
         all_tasks = []
         for root_dir in root_dirs:
@@ -338,9 +417,10 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         for task_path in all_tasks:
             total_frames = len(os.listdir(task_path + "/measurements/"))
+            self.task_frame_counts.append(total_frames - self.cfg.hist_frame_nums - self.cfg.future_frame_nums + 1)
+
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
-                # collect data at current frame
-                # image
+                # Collect data at current frame
                 filename = f"{str(frame).zfill(4)}.png"
                 self.front.append(task_path + "/camera_front/" + filename)
                 self.front_left.append(task_path + "/camera_front_left/" + filename)
@@ -349,7 +429,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.back_left.append(task_path + "/camera_back_left/" + filename)
                 self.back_right.append(task_path + "/camera_back_right/" + filename)
 
-                # depth
+                # Depth images
                 self.front_depth.append(task_path + "/depth_front/" + filename)
                 self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
                 self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
@@ -363,16 +443,19 @@ class CarlaDataset(torch.utils.data.Dataset):
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
 
-                # ego position
+                # Ego position (in world frame)
                 ego_trans = carla.Transform(carla.Location(x=data['x'], y=data['y'], z=data['z']),
                                             carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
 
-                # motion
+                # Initialize `ego_xy` with the first frame's position (world frame)
+                ego_xy = [data['x'], data['y']]
+
+                # Motion data
                 self.velocity.append(data['speed'])
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
 
-                # control
+                # Control signals
                 controls = []
                 throttle_brakes = []
                 steers = []
@@ -381,6 +464,26 @@ class CarlaDataset(torch.utils.data.Dataset):
                 for i in range(self.cfg.future_frame_nums):
                     with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
                         data = json.load(read_file)
+
+                    # Update ego position in world frame
+                    ego_xy, _ = update_ego_xy(
+                        ego_xy,
+                        velocity=data['speed'],
+                        acc_x=data['acc_x'],
+                        acc_y=data['acc_y'],
+                        ego_trans=ego_trans,  
+                        reverse=data['Reverse']  
+                    )
+                    #print(f"ego_xy at frame {frame + i}: {ego_xy}, type: {type(ego_xy)}")
+
+                    # Compute relative target position in ego frame
+                    target_x_rel = parking_goal_world[0] - ego_xy[0]
+                    target_y_rel = parking_goal_world[1] - ego_xy[1]
+
+                    # Store relative target location for this goal, in ego frame
+                    self.relative_target_point[goal_idx].append([target_x_rel, target_y_rel])
+
+                    # Store control information
                     controls.append(
                         tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
                     add_raw_control(data, throttle_brakes, steers, reverse)
@@ -515,6 +618,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.target_point = np.array(self.target_point).astype(np.float32)
 
 
+
+        
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
     def __len__(self):

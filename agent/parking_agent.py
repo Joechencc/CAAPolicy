@@ -16,7 +16,7 @@ from collections import OrderedDict
 
 from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
-from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint
+from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint, convert_veh_coord
 from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
@@ -243,6 +243,9 @@ class ParkingAgent:
         self.boost = False
         self.boot_step = 0
 
+        self.relative_target = [0,0]
+        self.ego_xy = []
+
         self.init_agent()
 
         plt.ion()
@@ -346,6 +349,7 @@ class ParkingAgent:
 
         self.step = -1
         self.pre_target_point = None
+        self.ego_xy=[]
 
     def save_atten_avg_map(self, data):
         atten = self.save_output.outputs[0].detach().cpu()
@@ -458,14 +462,46 @@ class ParkingAgent:
 
     def get_model_data(self, data_frame):
 
-        vehicle_transform = data_frame['veh_transfrom']
-        imu_data = data_frame['imu']
-        vehicle_velocity = data_frame['veh_velocity']
-
+        vehicle_transform = data_frame['veh_transfrom'] # world frame
+        imu_data = data_frame['imu'] # ego frame
+        vehicle_velocity = data_frame['veh_velocity'] #m/s
+        #print('vx',vehicle_velocity.x)
+        #print('vy',vehicle_velocity.y)
+        #print('ax',imu_data.accelerometer.x)
+        #print('ay',imu_data.accelerometer.y)
+        #print("\n")
         data = {}
         data["ego_position"] = [vehicle_transform.location.x, vehicle_transform.location.y, vehicle_transform.location.z]
         target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
 
+        # Compute using speed
+        if not self.ego_xy: # read only once after initilization
+            self.ego_xy = [vehicle_transform.location.x, vehicle_transform.location.y] 
+            #print('self.ego_xy initialization:', self.ego_xy)
+        parking_goal_world = self.net_eva.eva_parking_goal[:2]
+        #print('This is target under global frame', parking_goal_world)
+        dt = 0.1  
+
+        yaw = np.deg2rad(vehicle_transform.rotation.yaw)  # Convert yaw to radians
+
+        accel_x_world = imu_data.accelerometer.x * np.cos(yaw) + imu_data.accelerometer.y * np.sin(yaw)
+        accel_y_world = -imu_data.accelerometer.x * np.sin(yaw) + imu_data.accelerometer.y * np.cos(yaw)
+
+        displacement_x_world = vehicle_velocity.x * dt + 0.5 * accel_x_world * dt**2
+        displacement_y_world = vehicle_velocity.y * dt + 0.5 * accel_y_world * dt**2
+        self.ego_xy[0] += displacement_x_world
+        self.ego_xy[1] += displacement_y_world
+        #print('this is egox', self.ego_xy[0])
+        #print('this is egoy', self.ego_xy[1])
+        # Compute target location relative to the updated ego position
+        relative_x_world = parking_goal_world[0] - self.ego_xy[0]
+        relative_y_world = parking_goal_world[1] - self.ego_xy[1]
+
+        relative_x_ego = relative_x_world * np.cos(yaw) + relative_y_world * np.sin(yaw)
+        relative_y_ego = -relative_x_world * np.sin(yaw) + relative_y_world * np.cos(yaw)
+
+        data['relative_target'] = torch.tensor([relative_x_ego,relative_y_ego], dtype=torch.float).unsqueeze(0)
+        #print("This is relative_target:", data['relative_target'])
         front_final, self.camera_front = self.image_process(data_frame['camera_front'])
         front_left_final, self.camera_front_left = self.image_process(data_frame['camera_front_left'])
         front_right_final, self.camera_front_right = self.image_process(data_frame['camera_front_right'])
@@ -480,7 +516,7 @@ class ParkingAgent:
         data['extrinsics'] = self.extrinsic.unsqueeze(0)
         data['intrinsics'] = self.intrinsic_crop.unsqueeze(0)
 
-        velocity = (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2))
+        velocity = (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)) #km/h
         data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
@@ -488,7 +524,10 @@ class ParkingAgent:
         # if self.pre_target_point is not None:
         #     target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
         data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
-
+        #print('This is target_point under ego frame', data['target_point'])
+        data["target_point"][0][0] = data["relative_target"][0][0]
+        data["target_point"][0][1] = data["relative_target"][0][1]
+        #print('\n')
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         data['gt_waypoint'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         if self.show_eva_imgs:
