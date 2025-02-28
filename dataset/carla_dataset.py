@@ -8,6 +8,7 @@ import yaml
 
 from PIL import Image
 from loguru import logger
+import matplotlib.pyplot as plt
 
 
 def convert_slot_coord(ego_trans, target_point):
@@ -65,7 +66,7 @@ def scale_and_crop_image(image, scale=1.0, crop=256):
     return cropped_image
 
 
-def tokenize(throttle, brake, steer, reverse, token_nums=200):
+def tokenize_control(throttle, brake, steer, reverse, token_nums=200):
     """
     Tokenize control signal
     :param throttle: [0,1]
@@ -88,7 +89,7 @@ def tokenize(throttle, brake, steer, reverse, token_nums=200):
     return [throttle_brake_token, steer_token, reverse_token]
 
 
-def detokenize(token_list, token_nums=200):
+def detokenize_control(token_list, token_nums=204):
     """
     Detokenize control signals
     :param token_list: [throttle_brake, steer, reverse]
@@ -111,6 +112,58 @@ def detokenize(token_list, token_nums=200):
 
     return [throttle, brake, steer, reverse]
 
+
+def tokenize_waypoint(x, y, yaw, token_nums=204):
+    """
+    Tokenize control signal
+    :param x: [-1.5, 1.5]
+    :param y: [-2, 2]
+    :param yaw: [-20, 20]
+    :param token_nums: size of token
+    :return: tokenized x, y, yaw
+    """
+    token_nums = token_nums -4
+    # Helper function to tokenize a single value
+    def tokenize_single_value(value, min_value, max_value):
+        # Normalize to [0, 1]
+        normalized_value = (value - min_value) / (max_value - min_value)
+        # Scale to [0, token_nums]
+        tokenized_value = normalized_value * token_nums
+        # Ensure the tokenized value is within [0, token_nums]
+        tokenized_value = max(0, min(token_nums, tokenized_value))
+        return int(tokenized_value)
+
+    # Tokenize each parameter
+    x_token = tokenize_single_value(x, -3, 3)
+    y_token = tokenize_single_value(y, -6, 6)
+    yaw_token = tokenize_single_value(yaw, -40, 40)
+
+    return  [x_token, y_token, yaw_token]
+
+
+
+def detokenize_waypoint(token_list, token_nums=204):
+    """
+    Detokenize control signals
+    :param token_list: [delta_x, delta_y, delta_yaw]
+    :param token_nums: size of token number
+    :return: control signal values
+    """
+
+    valid_token = token_nums - 4
+    half_token = float(valid_token / 2)
+
+    if token_list[0] > half_token:
+        throttle = token_list[0] / half_token - 1
+        brake = 0.0
+    else:
+        throttle = 0.0
+        brake = -(token_list[0] / half_token - 1)
+
+    steer = (token_list[1] / half_token) - 1
+    reverse = (True if token_list[2] > half_token else False)
+
+    return [throttle, brake, steer, reverse]
 
 def get_depth(depth_image_path, crop):
     """
@@ -208,6 +261,14 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.topdown = []
 
+        self.waypoint = []
+        self.delta_x_values = []
+        self.delta_y_values = []
+        self.delta_yaw_values = []
+
+        self.plot_x = []
+        self.plot_y = []
+        self.plot_yaw = []
         self.get_data()
 
     def init_camera_config(self):
@@ -315,11 +376,12 @@ class CarlaDataset(torch.utils.data.Dataset):
                 throttle_brakes = []
                 steers = []
                 reverse = []
+
                 for i in range(self.cfg.future_frame_nums):
                     with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
                         data = json.load(read_file)
                     controls.append(
-                        tokenize(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                        tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
                     add_raw_control(data, throttle_brakes, steers, reverse)
 
                 controls = [item for sublist in controls for item in sublist]
@@ -332,12 +394,91 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.steer.append(steers)
                 self.reverse.append(reverse)
 
+                # waypoint
+                with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
+                    data = json.load(read_file)
+                    cur_x = data['x']
+                    cur_y = data['y']
+                    cur_yaw = data['yaw']
+                waypoints = []
+                xs = []
+                ys = []
+                yaws = []
+
+
+                for i in range(self.cfg.future_frame_nums):
+                    file_path = task_path + f"/measurements/{str(frame + 1 + i ).zfill(4)}.json"
+                    if not os.path.exists(file_path):
+                        # If the file doesn't exist, use the last frame
+                        file_path = task_path + f"/measurements/{str(frame).zfill(4)}.json"
+                    with open(file_path, "r") as read_file:
+                        data = json.load(read_file)
+
+                        delta_x = data['x'] - cur_x
+                        delta_y = data['y'] - cur_y
+                        delta_yaw = data['yaw'] - cur_yaw
+                        if delta_yaw > 180:
+                            delta_yaw -= 360
+                        elif delta_yaw < -180:
+                            delta_yaw += 360
+                        self.plot_x.append(delta_x)
+                        self.plot_y.append(delta_y)
+                        self.plot_yaw.append(delta_yaw)
+                    waypoints.append(
+                        tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
+                    xs.append(delta_x)
+                    ys.append(delta_y)
+                    yaws.append(delta_yaw)
+
+                    # add_raw_control(data, throttle_brakes, steers, reverse)
+
+                waypoints = [item for sublist in waypoints for item in sublist]
+                waypoints.insert(0, self.BOS_token)
+                waypoints.append(self.EOS_token)
+                waypoints.append(self.PAD_token)
+                self.waypoint.append(waypoints)
+
+                self.delta_x_values.append(xs)
+                self.delta_y_values.append(ys)
+                self.delta_yaw_values.append(yaws)
+
+
                 # target point
                 with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
                     data = json.load(read_file)
                 parking_goal = [data['x'], data['y'], data['yaw']]
                 parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
+
+        plt.figure(figsize=(10, 8))
+
+        # 绘制plot_x的直方图
+        plt.subplot(3, 1, 1)  # 3行1列的第1个
+        plt.hist(self.plot_x, bins=20, alpha=0.7, label='X distribution')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of X')
+        plt.legend()
+
+        # 绘制plot_y的直方图
+        plt.subplot(3, 1, 2)  # 3行1列的第2个
+        plt.hist(self.plot_y, bins=20, alpha=0.7, label='Y distribution')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of Y')
+        plt.legend()
+
+        # 绘制plot_yaw的直方图
+        plt.subplot(3, 1, 3)  # 3行1列的第3个
+        plt.hist(self.plot_yaw, bins=20, alpha=0.7, label='Yaw distribution')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of Yaw')
+        plt.legend()
+
+        # 调整子图间距
+        plt.tight_layout()
+
+        # 显示图形
+        plt.show()
 
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
@@ -360,13 +501,19 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.acc_y = np.array(self.acc_y).astype(np.float32)
 
         self.control = np.array(self.control).astype(np.int64)
+        self.waypoint = np.array(self.waypoint).astype(np.int64)
 
         self.throttle_brake = np.array(self.throttle_brake).astype(np.float32)
         self.steer = np.array(self.steer).astype(np.float32)
         self.reverse = np.array(self.reverse).astype(np.int64)
 
+        self.delta_x_values = np.array(self.delta_x_values).astype(np.float32)
+        self.delta_y_values = np.array(self.delta_y_values).astype(np.float32)
+        self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
+
         self.target_point = np.array(self.target_point).astype(np.float32)
 
+        breakpoint()
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
     def __len__(self):

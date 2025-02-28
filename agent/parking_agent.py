@@ -17,7 +17,7 @@ from collections import OrderedDict
 from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
 from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic
-from dataset.carla_dataset import detokenize
+from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
@@ -393,7 +393,7 @@ class ParkingAgent:
                 self.net_eva.inference_time.append(end_time - start_time)
 
                 self.save_prev_target(pred_segmentation)
-                control_signal = detokenize(pred_controls[0].tolist()[1:], self.cfg.token_nums)
+                control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
 
                 self.trans_control.throttle = control_signal[0]
                 self.trans_control.brake = control_signal[1]
