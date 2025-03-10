@@ -7,6 +7,7 @@ from model.bev_encoder import BevEncoder
 from model.feature_fusion import FeatureFusion
 from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
+from model.waypoint_predict import WaypointPredict
 
 
 class ParkingModel(nn.Module):
@@ -22,6 +23,8 @@ class ParkingModel(nn.Module):
         self.feature_fusion = FeatureFusion(self.cfg)
 
         self.control_predict = ControlPredict(self.cfg)
+
+        self.waypoint_predict = WaypointPredict(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
     def adjust_target_bev(self, bev_feature, target_point):
@@ -85,13 +88,20 @@ class ParkingModel(nn.Module):
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        fuse_feature_copy = fuse_feature.clone()
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        return pred_control, pred_segmentation, pred_depth
+        pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
+        return pred_control, pred_waypoint, pred_segmentation, pred_depth
 
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
         pred_multi_controls = data['gt_control'].cuda()
+        pred_multi_waypoints = data['gt_waypoint'].cuda()
+        fuse_feature_copy = fuse_feature.clone()
         for i in range(3):
             pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-        return pred_multi_controls, pred_segmentation, pred_depth, bev_target
+        for i in range(12):
+            pred_waypoint = self.waypoint_predict.predict(fuse_feature_copy, pred_multi_waypoints)
+            pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
+        return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target

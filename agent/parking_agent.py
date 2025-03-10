@@ -16,7 +16,7 @@ from collections import OrderedDict
 
 from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
-from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic
+from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint
 from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
@@ -387,7 +387,7 @@ class ParkingAgent:
             with torch.no_grad():
                 start_time = time.time()
 
-                pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -407,9 +407,15 @@ class ParkingAgent:
                     self.save_seg_img(pred_segmentation)
                     self.save_target_bev_img(target_bev)
                     self.display_imgs()
-
                 self.save_output.clear()
 
+                # draw waypoint WP1, WP2, WP3, WP4
+                for i in range(0,4):
+                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                    waypoint[-1] = 0.3 #z=0.3
+                    location = carla.Location(x=waypoint[0]+data["ego_position"][0], y=waypoint[1]+data["ego_position"][1], z=waypoint[2])
+                    self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+                                                        color=carla.Color(255, 0, 0))
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
@@ -457,7 +463,7 @@ class ParkingAgent:
         vehicle_velocity = data_frame['veh_velocity']
 
         data = {}
-
+        data["ego_position"] = [vehicle_transform.location.x, vehicle_transform.location.y, vehicle_transform.location.z]
         target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
 
         front_final, self.camera_front = self.image_process(data_frame['camera_front'])
@@ -484,7 +490,7 @@ class ParkingAgent:
         data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
 
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
-
+        data['gt_waypoint'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         if self.show_eva_imgs:
             img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
             img = np.moveaxis(img, 0, 2)

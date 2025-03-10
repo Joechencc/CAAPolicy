@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar, LearningRateMonitor, ModelSummary
 from tool.config import Configuration
 from loss.control_loss import ControlLoss, ControlValLoss
+from loss.waypoint_loss import WaypointLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from model.parking_model import ParkingModel
@@ -16,7 +17,7 @@ def setup_callbacks(cfg):
 
     ckpt_callback = ModelCheckpoint(dirpath=cfg.checkpoint_dir,
                                     monitor='val_loss',
-                                    save_top_k=3,
+                                    save_top_k=10,
                                     mode='min',
                                     filename='E2EParking-{epoch:02d}-{val_loss:.2f}',
                                     save_last=True)
@@ -42,6 +43,8 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.control_loss_func = ControlLoss(self.cfg)
 
+        self.waypoint_loss_func = WaypointLoss(self.cfg)
+
         self.control_val_loss_func = ControlValLoss(self.cfg)
 
         self.segmentation_loss_func = SegmentationLoss(
@@ -54,11 +57,16 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
             "control_loss": control_loss
+        })
+
+        waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
+        loss_dict.update({
+            "waypoint_loss": waypoint_loss
         })
 
         segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
@@ -84,12 +92,17 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
             "acc_steer_val_loss": acc_steer_val_loss,
             "reverse_val_loss": reverse_val_loss
+        })
+
+        waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
+        val_loss_dict.update({
+            "waypoint_val_loss": waypoint_loss,
         })
 
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])

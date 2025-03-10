@@ -144,26 +144,27 @@ def tokenize_waypoint(x, y, yaw, token_nums=204):
 
 def detokenize_waypoint(token_list, token_nums=204):
     """
-    Detokenize control signals
-    :param token_list: [delta_x, delta_y, delta_yaw]
+    Detokenize waypoint values
+    :param token_list: [x_token, y_token, yaw_token]
     :param token_nums: size of token number
-    :return: control signal values
+    :return: original x, y, yaw values
     """
+    token_nums -= 4  # Adjusting for the valid range of tokens
 
-    valid_token = token_nums - 4
-    half_token = float(valid_token / 2)
+    # Helper function to detokenize a single value
+    def detokenize_single_value(token, min_value, max_value):
+        # Scale token from [0, token_nums] to [0, 1]
+        normalized_value = token / token_nums
+        # Scale and shift the normalized value to its original range
+        original_value = (normalized_value * (max_value - min_value)) + min_value
+        return original_value
 
-    if token_list[0] > half_token:
-        throttle = token_list[0] / half_token - 1
-        brake = 0.0
-    else:
-        throttle = 0.0
-        brake = -(token_list[0] / half_token - 1)
+    # Detokenize each parameter
+    x = detokenize_single_value(token_list[0], -3, 3)
+    y = detokenize_single_value(token_list[1], -6, 6)
+    yaw = detokenize_single_value(token_list[2], -40, 40)
 
-    steer = (token_list[1] / half_token) - 1
-    reverse = (True if token_list[2] > half_token else False)
-
-    return [throttle, brake, steer, reverse]
+    return [x, y, yaw]
 
 def get_depth(depth_image_path, crop):
     """
@@ -407,7 +408,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
 
                 for i in range(self.cfg.future_frame_nums):
-                    file_path = task_path + f"/measurements/{str(frame + 1 + i ).zfill(4)}.json"
+                    file_path = task_path + f"/measurements/{str(frame + 1 + 10*i ).zfill(4)}.json"
                     if not os.path.exists(file_path):
                         # If the file doesn't exist, use the last frame
                         file_path = task_path + f"/measurements/{str(frame).zfill(4)}.json"
@@ -513,7 +514,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.target_point = np.array(self.target_point).astype(np.float32)
 
-        breakpoint()
+
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
     def __len__(self):
@@ -522,7 +523,7 @@ class CarlaDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         data = {}
         keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
-                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse']
+                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
         for key in keys:
             data[key] = []
 
@@ -564,6 +565,15 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['gt_acc'] = torch.from_numpy(self.throttle_brake[index])
         data['gt_steer'] = torch.from_numpy(self.steer[index])
         data['gt_reverse'] = torch.from_numpy(self.reverse[index])
+
+        # gt waypoint token
+        data['gt_waypoint'] = torch.from_numpy(self.waypoint[index])
+
+        # gt waypoint raw
+        data['delta_x'] = torch.from_numpy(self.delta_x_values[index])
+        data['delta_y'] = torch.from_numpy(self.delta_y_values[index])
+        data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
+
 
         return data
 
