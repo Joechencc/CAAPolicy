@@ -1,9 +1,8 @@
-import torch
 
-from torch import nn
+import torch
+import torch.nn as nn
 from timm.models.layers import trunc_normal_
 from tool.config import Configuration
-
 
 class FeatureFusion(nn.Module):
     def __init__(self, cfg: Configuration):
@@ -13,7 +12,10 @@ class FeatureFusion(nn.Module):
         tf_layer = nn.TransformerEncoderLayer(d_model=self.cfg.tf_en_dim, nhead=self.cfg.tf_en_heads)
         self.tf_encoder = nn.TransformerEncoder(tf_layer, num_layers=self.cfg.tf_en_layers)
 
-        total_length = self.cfg.tf_en_bev_length
+        total_length = self.cfg.tf_en_bev_length + self.cfg.tf_en_img_length
+        # print("Total_length" ,total_length)
+        # print("tf_en_img_length" ,self.cfg.tf_en_img_length)
+        # print("tf_en_bev_length" ,self.cfg.tf_en_bev_length)
         self.pos_embed = nn.Parameter(torch.randn(1, total_length, self.cfg.tf_en_dim) * .02)
         self.pos_drop = nn.Dropout(self.cfg.tf_en_dropout)
 
@@ -36,6 +38,12 @@ class FeatureFusion(nn.Module):
             nn.ReLU(inplace=True),
         ).to(self.cfg.device)
 
+        # Project img_token to the embedding space
+        self.img_proj = nn.Sequential(
+            nn.Conv2d(512, self.cfg.tf_en_dim, kernel_size=1),
+            nn.ReLU(inplace=True),
+        ).to(self.cfg.device)
+
         self.init_weights()
 
     def init_weights(self):
@@ -46,8 +54,12 @@ class FeatureFusion(nn.Module):
                 nn.init.xavier_uniform_(p)
         trunc_normal_(self.pos_embed, std=.02)
 
-    def forward(self, bev_feature, ego_motion,target_point):
+    def forward(self, bev_feature, img_token, ego_motion, target_point):
 
+        print(f"bev_feature shape: {bev_feature.shape}, expected channels: {self.cfg.tf_en_dim}")
+        print(f"img_feature shape: {img_token.shape}, expected channels: {self.cfg.img_feature_dim}")
+        print(f"ego_motion shape: {ego_motion.shape}, expected length: {self.cfg.tf_en_motion_length}")
+        print(f"target_point shape: {target_point.shape}, expected length: {self.cfg.tf_en_target_length}")
 
         bev_feature = bev_feature.transpose(1, 2)
         # bev_feature.shape
@@ -56,14 +68,23 @@ class FeatureFusion(nn.Module):
         motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
         target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 4)
 
+        # Project img_token to the embedding space
+        img_token = self.img_proj(img_token)
+        # Reshape img_token to match the expected dimensions
+        img_token = img_token.view(img_token.size(0), img_token.size(1), -1)  # Flatten spatial dimensions
+        img_token = img_token.transpose(1, 2)  # Transpose to match the expected shape
+
         # motion_feature.shape
         # torch.Size([1, 256, 2])
 
-        fuse_feature = torch.cat([bev_feature, motion_feature,target_feature], dim=2)
+        bev_feature = torch.cat([bev_feature, motion_feature, target_feature], dim=2)
 
+        # Concatenate bev_feature and img_token along the sequence dimension
+        fuse_feature = torch.cat([bev_feature, img_token], dim=1)
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
-
+        print(f"fuse_feature shape: {fuse_feature.shape}")
         fuse_feature = fuse_feature.transpose(0, 1)
         fuse_feature = self.tf_encoder(fuse_feature)
         fuse_feature = fuse_feature.transpose(0, 1)
         return fuse_feature
+    

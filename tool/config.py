@@ -38,20 +38,24 @@ class Configuration:
 
     seg_classes = None
     seg_vehicle_weights = None
+    BOS_token = None
+    img_feature_dim = None
 
     tf_en_dim = None
     tf_en_heads = None
     tf_en_layers = None
     tf_en_dropout = None
     tf_en_bev_length = None
+    tf_en_img_length = None
     tf_en_motion_length = None
+    tf_en_target_length = None
 
     tf_de_dim = None
     tf_de_heads = None
     tf_de_layers = None
     tf_de_dropout = None
-    tf_de_tgt_dim = None
-
+    tf_de_control_length = None
+    tf_de_img_length = None
 
 def get_cfg(cfg_yaml: dict):
     today = datetime.now()
@@ -95,17 +99,24 @@ def get_cfg(cfg_yaml: dict):
     cfg.seg_classes = config['seg_classes']
     cfg.seg_vehicle_weights = config['seg_vehicle_weights']
 
+    cfg.BOS_token = config['BOS_token']
+
+    cfg.img_feature_dim = config['img_feature_dim']
+
     cfg.tf_en_dim = config['tf_en_dim']
     cfg.tf_en_heads = config['tf_en_heads']
     cfg.tf_en_layers = config['tf_en_layers']
     cfg.tf_en_dropout = config['tf_en_dropout']
     cfg.tf_en_bev_length = config['tf_en_bev_length']
+    cfg.tf_en_img_length = config['tf_en_img_length']
     cfg.tf_en_motion_length = config['tf_en_motion_length']
+    cfg.tf_en_target_length = config['tf_en_target_length']
 
     cfg.tf_de_dim = config['tf_de_dim']
     cfg.tf_de_heads = config['tf_de_heads']
     cfg.tf_de_layers = config['tf_de_layers']
     cfg.tf_de_dropout = config['tf_de_dropout']
-    cfg.tf_de_tgt_dim = config['tf_de_tgt_dim']
+    cfg.tf_de_control_length = config['tf_de_control_length']
+    cfg.tf_de_img_length = config['tf_de_img_length']
 
     return cfg

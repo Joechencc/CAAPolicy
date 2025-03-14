@@ -11,8 +11,8 @@ parking_model:
   weight_decay: 0.0001
   batch_size: 32
 
-  training_map: "/vast/rs9193/Town_Opt_1000"
-  validation_map: "/scratch/rs9193/Town_Opt_1000_Val"
+  training_map: "/vast/rs9193/Town_Opt_1000" #"/scratch/rs9193/ParkWithUncertainty/e2e_parking/Town_Opt_1"
+  validation_map: "/scratch/rs9193/Town_Opt_1000_Val" #"/scratch/rs9193/ParkWithUncertainty/e2e_parking/Town_Opt_1"
   future_frame_nums: 4
   hist_frame_nums: 10
   token_nums: 204
@@ -35,18 +35,28 @@ parking_model:
   # segmentation
   seg_classes: 3
   seg_vehicle_weights: [1.0, 2.0, 2.0]
+  # Control Predict
+  BOS_token: 201
+
+  # Feature dimensions
+  img_feature_dim: 512  # Dimension of img_feature (e.g., DINOv2-base)
 
   # transformer encoder
   tf_en_dim: 264
   tf_en_heads: 6
   tf_en_layers: 4
   tf_en_dropout: 0.05
-  tf_en_bev_length: 256
-  tf_en_motion_length: 3
+
+  # Sequence lengths
+  tf_en_bev_length: 256  # Sequence length of bev_feature
+  tf_en_img_length: 384  # Sequence length of img_feature (e.g., 16x16 for DINOv2)
+  tf_en_motion_length: 3  # Sequence length of motion_feature
+  tf_en_target_length: 3  # Sequence length of target_feature
 
   # transformer decoder
   tf_de_dim: 264
   tf_de_heads: 6
   tf_de_layers: 4
   tf_de_dropout: 0.05
-  tf_de_tgt_dim: 15
+  tf_de_control_length: 15
+  tf_de_img_length: 384 #8*48 = 384 for resnet // img_feature token length assuming DINOv2's feature map is (16*16,768) 

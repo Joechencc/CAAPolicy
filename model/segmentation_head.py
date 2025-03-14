@@ -41,6 +41,17 @@ class SegmentationHead(nn.Module):
     def forward(self, fuse_feature):
         fuse_feature_t = fuse_feature.transpose(1, 2)
         b, c, s = fuse_feature_t.shape
+
+        # Print shapes and values for debugging
+        # print(f"fuse_feature shape: {fuse_feature.shape}")
+        # print(f"fuse_feature_t shape: {fuse_feature_t.shape}")
+        # print(f"b (batch size): {b}")
+        # print(f"c (channels): {c}")
+        # print(f"s (spatial dimension): {s}")
+        # print(f"sqrt(s): {math.sqrt(s)}")
+        # print(f"Expected total elements for reshape: {b * c * int(math.sqrt(s)) * (-1)}")
+        # print(f"Actual total elements in fuse_feature_t: {fuse_feature_t.numel()}")
+
         fuse_bev = torch.reshape(fuse_feature_t, (b, c, int(math.sqrt(s)), -1))
         fuse_bev = self.top_down(fuse_bev)
         pred_segmentation = self.segmentation_head(fuse_bev)

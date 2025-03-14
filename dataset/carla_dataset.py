@@ -286,7 +286,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.back.append(task_path + "/camera_back/" + filename)
                 self.back_left.append(task_path + "/camera_back_left/" + filename)
                 self.back_right.append(task_path + "/camera_back_right/" + filename)
-
+                
                 # depth
                 self.front_depth.append(task_path + "/depth_front/" + filename)
                 self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
@@ -339,6 +339,9 @@ class CarlaDataset(torch.utils.data.Dataset):
                 parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
 
+        print("get_data() image length", len(self.front))
+        #import pdb; pdb.set_trace()
+
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
         self.front_right = np.array(self.front_right).astype(np.string_)
@@ -374,7 +377,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         data = {}
-        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
+        keys = ['image', 'future_images', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
                 'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse']
         for key in keys:
             data[key] = []
@@ -383,7 +386,17 @@ class CarlaDataset(torch.utils.data.Dataset):
         images = [self.image_process(self.front[index])[0], self.image_process(self.front_left[index])[0],self.image_process(self.front_right[index])[0],
                   self.image_process(self.back[index])[0], self.image_process(self.back_left[index])[0],self.image_process(self.back_right[index])[0],]
         images = torch.cat(images, dim=0)
+        # image_future 2s after current (data collection rate @ 3hz)
+        if index + 6 < len(self.front) :
+            future_images = [self.image_process(self.front[index+6])[0], self.image_process(self.front_left[index+6])[0],self.image_process(self.front_right[index+6])[0],
+                            self.image_process(self.back[index+6])[0], self.image_process(self.back_left[index+6])[0],self.image_process(self.back_right[index+6])[0],]
+            future_images = torch.cat(future_images, dim=0)
+            data['future_images'] = future_images
+        else:
+            data['future_images'] = images
+
         data['image'] = images
+        
 
         data['extrinsics'] = self.extrinsic
         data['intrinsics'] = self.intrinsic

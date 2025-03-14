@@ -64,7 +64,7 @@ class ControlValLoss(nn.Module):
         steer_val_loss = self.l1_loss(pred_steer, gt_steer)
 
         acc_steer_val_loss = (acc_val_loss + steer_val_loss)
-
+        #import pdb; pdb.set_trace()
         pred_reverse_token = torch.softmax(pred_reverse_token, dim=-1)
         p_no_reverse = torch.sum(pred_reverse_token[:, :, :101], dim=-1).reshape(-1)
         p_reverse = torch.sum(pred_reverse_token[:, :, 101:], dim=-1).reshape(-1)

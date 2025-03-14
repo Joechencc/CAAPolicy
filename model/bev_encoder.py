@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch import nn
 from torchvision.models.resnet import resnet18
 
-
+# Is this a typical Transformer Decoder?
 class BevEncoder(nn.Module):
     def __init__(self, in_channel):
         super().__init__()

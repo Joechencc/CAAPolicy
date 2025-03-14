@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar, LearningRateMonitor, ModelSummary
 from tool.config import Configuration
 from loss.control_loss import ControlLoss, ControlValLoss
+from loss.feature_loss import FeatureLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from model.parking_model import ParkingModel
@@ -42,6 +43,8 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.control_loss_func = ControlLoss(self.cfg)
 
+        self.feature_loss_func = FeatureLoss(self.cfg)
+
         self.control_val_loss_func = ControlValLoss(self.cfg)
 
         self.segmentation_loss_func = SegmentationLoss(
@@ -54,11 +57,16 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_image_feature, pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
             "control_loss": control_loss
+        })
+        #TODO: finish feature_loss_func
+        feature_loss = self.feature_loss_func(pred_image_feature, batch)
+        loss_dict.update({
+            "feature_loss": feature_loss
         })
 
         segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
@@ -84,12 +92,17 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
-        pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_image_feature, pred_control, pred_segmentation, pred_depth = self.parking_model(batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
             "acc_steer_val_loss": acc_steer_val_loss,
             "reverse_val_loss": reverse_val_loss
+        })
+
+        feature_loss = self.feature_loss_func(pred_image_feature, batch)
+        val_loss_dict.update({
+            "feature_loss": feature_loss
         })
 
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
