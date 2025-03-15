@@ -79,7 +79,7 @@ def main():
     argparser.add_argument(
         '-p', '--port',
         metavar='P',
-        default=4000,
+        default=2000,
         type=int,
         help='TCP port to listen to (default: 2000)')
     argparser.add_argument(

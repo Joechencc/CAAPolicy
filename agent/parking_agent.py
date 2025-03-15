@@ -520,14 +520,21 @@ class ParkingAgent:
         data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
-        # use gt target
-        # if self.pre_target_point is not None:
-        #     target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
-        data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
-        #print('This is target_point under ego frame', data['target_point'])
-        data["target_point"][0][0] = data["relative_target"][0][0]
-        data["target_point"][0][1] = data["relative_target"][0][1]
-        #print('\n')
+        target_types = ["gt","predicted","tracking"]
+        target_type = target_types[2]
+        if target_type =="tracking":
+            data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+            data["target_point"][0][0] = data["relative_target"][0][0]
+            data["target_point"][0][1] = data["relative_target"][0][1]
+        elif target_type == "gt":
+            data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+        elif target_type == "predicted":
+       
+            if self.pre_target_point is not None:
+                target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
+            else:
+                data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         data['gt_waypoint'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         if self.show_eva_imgs:
