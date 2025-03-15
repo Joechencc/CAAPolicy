@@ -603,31 +603,31 @@ class ParkingAgent:
         ax_ctl.text(t_x, t_y - 0.4, '   Brake: ' + str(brake_show), fontsize=10, color='red')
         ax_ctl.text(t_x, t_y - 0.6, 'Reverse: ' + str(reverse_show), fontsize=10, color='red')
 
-        ax_front = plt.subplot(rows, cols, 1)
-        ax_front.axis('off')
-        ax_front.set_title('front', fontsize=10)
-        ax_front.imshow(self.rgb_front)
-
-        ax_rear = plt.subplot(rows, cols, 2)
-        ax_rear.axis('off')
-        ax_rear.set_title('rear', fontsize=10)
-        ax_rear.imshow(self.rgb_rear)
+        # ax_front = plt.subplot(rows, cols, 1)
+        # ax_front.axis('off')
+        # ax_front.set_title('front', fontsize=10)
+        # ax_front.imshow(self.rgb_front)
+        #
+        # ax_rear = plt.subplot(rows, cols, 2)
+        # ax_rear.axis('off')
+        # ax_rear.set_title('rear', fontsize=10)
+        # ax_rear.imshow(self.rgb_rear)
 
         ax_atten = plt.subplot(rows, cols, 7)
         ax_atten.axis('off')
         ax_atten.set_title('atten(output)', fontsize=10)
         ax_atten.imshow(self.grid_image)
         ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
-
-        ax_left = plt.subplot(rows, cols, 5)
-        ax_left.axis('off')
-        ax_left.set_title('left', fontsize=10)
-        ax_left.imshow(self.rgb_left)
-
-        ax_right = plt.subplot(rows, cols, 6)
-        ax_right.axis('off')
-        ax_right.set_title('right', fontsize=10)
-        ax_right.imshow(self.rgb_right)
+        #
+        # ax_left = plt.subplot(rows, cols, 5)
+        # ax_left.axis('off')
+        # ax_left.set_title('left', fontsize=10)
+        # ax_left.imshow(self.rgb_left)
+        #
+        # ax_right = plt.subplot(rows, cols, 6)
+        # ax_right.axis('off')
+        # ax_right.set_title('right', fontsize=10)
+        # ax_right.imshow(self.rgb_right)
 
         ax_bev = plt.subplot(rows, cols, 3)
         ax_bev.axis('off')
