@@ -521,7 +521,7 @@ class ParkingAgent:
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking"]
-        target_type = target_types[2]
+        target_type = target_types[1]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
@@ -532,6 +532,7 @@ class ParkingAgent:
        
             if self.pre_target_point is not None:
                 target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
+                data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             else:
                 data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
 
