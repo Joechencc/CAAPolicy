@@ -9,7 +9,7 @@ parking_model:
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 32
+  batch_size: 24 #10 --> 30GB VRAM, 24 --> 68GB, VRAM 28 --> 79GB
 
   training_map: "/vast/rs9193/Town_Opt_1000" #"/scratch/rs9193/ParkWithUncertainty/e2e_parking/Town_Opt_1"
   validation_map: "/scratch/rs9193/Town_Opt_1000_Val" #"/scratch/rs9193/ParkWithUncertainty/e2e_parking/Town_Opt_1"

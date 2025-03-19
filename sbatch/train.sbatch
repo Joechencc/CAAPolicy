@@ -4,11 +4,12 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=48:00:00
-#SBATCH --mem=128GB
+#SBATCH --time=147:00:00
+#SBATCH --mem=200GB
 #SBATCH --gres=gpu:a100:2
 #SBATCH --job-name=e2e_image
-#SBATCH --output=e2e6imges_img_feature_train.out
+#SBATCH --output=e2e6imges_img_feature_train_new.out
+#SBATCH --mail-type=ALL
 #SBATCH --mail-user=rs9193@nyu.edu
 
 module purge

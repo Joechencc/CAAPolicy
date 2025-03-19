@@ -100,9 +100,9 @@ class ParkingTrainingModule(pl.LightningModule):
             "reverse_val_loss": reverse_val_loss
         })
 
-        feature_loss = self.feature_loss_func(pred_image_feature, batch)
+        feature_val_loss = self.feature_loss_func(pred_image_feature, batch)
         val_loss_dict.update({
-            "feature_loss": feature_loss
+            "feature_val_loss": feature_val_loss
         })
 
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])

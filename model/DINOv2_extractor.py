@@ -74,22 +74,22 @@ class FeatureExtractor(nn.Module):  # Inherit from nn.Module
             processed_images = self._process_resnet(images_total)
             features = self.model(processed_images)  # [B, 512, h, w]
         
-        # Feature map size after backbone
-        print(f"Backbone output size: {features.shape}")
+        # # Feature map size after backbone
+        # print(f"Backbone output size: {features.shape}")
         
-        # Adaptive projection
-        features = features.permute(0, 2, 3, 1)  # [B, H, W, C]
-        features = self.input_proj(features)
-        features = features.permute(0, 3, 1, 2)  # [B, output_dim, H, W]
+        # # Adaptive projection
+        # features = features.permute(0, 2, 3, 1)  # [B, H, W, C]
+        # features = self.input_proj(features)
+        # features = features.permute(0, 3, 1, 2)  # [B, output_dim, H, W]
         
-        # Adaptive positional embedding
-        _, _, fh, fw = features.shape
-        if self.pos_embed.shape[2:] != (fh, fw):
-            # Dynamically create new positional embedding
-            self.pos_embed = nn.Parameter(torch.randn(1, self.output_dim, fh, fw))
-            print(f"Updated positional embedding size: {self.pos_embed.shape}")
+        # # Adaptive positional embedding
+        # _, _, fh, fw = features.shape
+        # if self.pos_embed.shape[2:] != (fh, fw):
+        #     # Dynamically create new positional embedding
+        #     self.pos_embed = nn.Parameter(torch.randn(1, self.output_dim, fh, fw))
+        #     print(f"Updated positional embedding size: {self.pos_embed.shape}")
             
-        features += self.pos_embed.to(features.device)
+        # features += self.pos_embed.to(features.device)
         
         # Final feature map size
         print(f"Final feature map size: {features.shape}")
