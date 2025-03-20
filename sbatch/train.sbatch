@@ -12,6 +12,6 @@
 
 module purge
 
-singularity exec --nv --overlay /scratch/sy3913/overlay_images/ParkingWithUncertainty3.ext3:rw /scratch/work/public/singularity/cuda11.7.99-cudnn8.5-devel-ubuntu22.04.2.sif\
+singularity exec --nv --overlay /scratch/cc7287/environments/habitat6.ext3:rw /scratch/work/public/singularity/cuda11.7.99-cudnn8.5-devel-ubuntu22.04.2.sif\
             /bin/bash -c "source /ext3/env.sh; conda activate E2EParking; cd /scratch/sy3913/waypoint/ParkWithUncertainty;python pl_train.py "
             

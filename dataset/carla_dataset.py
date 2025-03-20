@@ -8,6 +8,8 @@ import yaml
 
 from PIL import Image
 from loguru import logger
+from tqdm import tqdm
+from pathlib import Path
 #import matplotlib.pyplot as plt
 
 
@@ -336,7 +338,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 task_path = os.path.join(root_path, task_dir)
                 all_tasks.append(task_path)
 
-        for task_path in all_tasks:
+        for task_path in tqdm(all_tasks):
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
                 # collect data at current frame
@@ -360,96 +362,132 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
 
-                with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
-                    data = json.load(read_file)
-
-                # ego position
-                ego_trans = carla.Transform(carla.Location(x=data['x'], y=data['y'], z=data['z']),
-                                            carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
-
-                # motion
-                self.velocity.append(data['speed'])
-                self.acc_x.append(data['acc_x'])
-                self.acc_y.append(data['acc_y'])
-
-                # control
-                controls = []
-                throttle_brakes = []
-                steers = []
-                reverse = []
-
-                for i in range(self.cfg.future_frame_nums):
-                    with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
-                        data = json.load(read_file)
-                    controls.append(
-                        tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
-                    add_raw_control(data, throttle_brakes, steers, reverse)
-
-                controls = [item for sublist in controls for item in sublist]
-                controls.insert(0, self.BOS_token)
-                controls.append(self.EOS_token)
-                controls.append(self.PAD_token)
-                self.control.append(controls)
-
-                self.throttle_brake.append(throttle_brakes)
-                self.steer.append(steers)
-                self.reverse.append(reverse)
-
-                # waypoint
-                with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
-                    data = json.load(read_file)
-                    cur_x = data['x']
-                    cur_y = data['y']
-                    cur_yaw = data['yaw']
-                waypoints = []
-                xs = []
-                ys = []
-                yaws = []
-
-
-                for i in range(self.cfg.future_frame_nums):
-                    file_path = task_path + f"/measurements/{str(frame + 1 + 10*i ).zfill(4)}.json"
-                    if not os.path.exists(file_path):
-                        # If the file doesn't exist, use the last frame
-                        file_path = task_path + f"/measurements/{str(frame).zfill(4)}.json"
-                    with open(file_path, "r") as read_file:
+                json_path = Path("preprocess") / Path(*Path(task_path).parts[3:]) / "json" / f"{str(frame).zfill(4)}.json"
+                if not json_path.exists():
+                    with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                         data = json.load(read_file)
 
-                        delta_x = data['x'] - cur_x
-                        delta_y = data['y'] - cur_y
-                        delta_yaw = data['yaw'] - cur_yaw
-                        if delta_yaw > 180:
-                            delta_yaw -= 360
-                        elif delta_yaw < -180:
-                            delta_yaw += 360
-                        self.plot_x.append(delta_x)
-                        self.plot_y.append(delta_y)
-                        self.plot_yaw.append(delta_yaw)
-                    waypoints.append(
-                        tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
-                    xs.append(delta_x)
-                    ys.append(delta_y)
-                    yaws.append(delta_yaw)
+                    # ego position
+                    ego_trans = carla.Transform(carla.Location(x=data['x'], y=data['y'], z=data['z']),
+                                                carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
 
-                    # add_raw_control(data, throttle_brakes, steers, reverse)
+                    # motion
+                    self.velocity.append(data['speed'])
+                    self.acc_x.append(data['acc_x'])
+                    self.acc_y.append(data['acc_y'])
 
-                waypoints = [item for sublist in waypoints for item in sublist]
-                waypoints.insert(0, self.BOS_token)
-                waypoints.append(self.EOS_token)
-                waypoints.append(self.PAD_token)
-                self.waypoint.append(waypoints)
+                    # control
+                    controls = []
+                    throttle_brakes = []
+                    steers = []
+                    reverse = []
 
-                self.delta_x_values.append(xs)
-                self.delta_y_values.append(ys)
-                self.delta_yaw_values.append(yaws)
+                    for i in range(self.cfg.future_frame_nums):
+                        with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
+                            data = json.load(read_file)
+                        controls.append(
+                            tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                        add_raw_control(data, throttle_brakes, steers, reverse)
+
+                    controls = [item for sublist in controls for item in sublist]
+                    controls.insert(0, self.BOS_token)
+                    controls.append(self.EOS_token)
+                    controls.append(self.PAD_token)
+                    self.control.append(controls)
+                    self.throttle_brake.append(throttle_brakes)
+                    self.steer.append(steers)
+                    self.reverse.append(reverse)
+
+                    # waypoint
+                    with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
+                        measurement = json.load(read_file)
+                        cur_x = measurement['x']
+                        cur_y = measurement['y']
+                        cur_yaw = measurement['yaw']
+                    waypoints = []
+                    xs = []
+                    ys = []
+                    yaws = []
 
 
-                # target point
-                with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
-                    data = json.load(read_file)
-                parking_goal = [data['x'], data['y'], data['yaw']]
-                parking_goal = convert_slot_coord(ego_trans, parking_goal)
-                self.target_point.append(parking_goal)
+                    for i in range(self.cfg.future_frame_nums):
+                        file_path = task_path + f"/measurements/{str(frame + 1 + 10*i ).zfill(4)}.json"
+                        if not os.path.exists(file_path):
+                            # If the file doesn't exist, use the last frame
+                            file_path = task_path + f"/measurements/{str(frame).zfill(4)}.json"
+
+                        with open(file_path, "r") as read_file:
+                            measurement = json.load(read_file)
+
+                            delta_x = measurement['x'] - cur_x
+                            delta_y = measurement['y'] - cur_y
+                            delta_yaw = measurement['yaw'] - cur_yaw
+                            if delta_yaw > 180:
+                                delta_yaw -= 360
+                            elif delta_yaw < -180:
+                                delta_yaw += 360
+                            # self.plot_x.append(delta_x)
+                            # self.plot_y.append(delta_y)
+                            # self.plot_yaw.append(delta_yaw)
+                        waypoints.append(
+                            tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
+                        xs.append(delta_x)
+                        ys.append(delta_y)
+                        yaws.append(delta_yaw)
+
+                        # add_raw_control(data, throttle_brakes, steers, reverse)
+
+                    waypoints = [item for sublist in waypoints for item in sublist]
+                    waypoints.insert(0, self.BOS_token)
+                    waypoints.append(self.EOS_token)
+                    waypoints.append(self.PAD_token)
+                    self.waypoint.append(waypoints)
+
+                    self.delta_x_values.append(xs)
+                    self.delta_y_values.append(ys)
+                    self.delta_yaw_values.append(yaws)
+
+                    # target point
+                    with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
+                        measurement = json.load(read_file)
+                    parking_goal = [measurement['x'], measurement['y'], measurement['yaw']]
+                    parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                    self.target_point.append(parking_goal)
+
+                    json_data = {
+                        "controls": controls,
+                        "throttle_brakes": throttle_brakes,
+                        "steers": steers,
+                        "reverse": reverse,
+                        "speed": data["speed"],
+                        "acceleration": {"x": data["acc_x"], "y": data["acc_y"]},
+                        "waypoints": waypoints,
+                        "xs": xs,
+                        "ys": ys,
+                        "yaws": yaws,
+                        "parking_goal": parking_goal
+                    }
+                    json_path.parent.mkdir(parents=True, exist_ok=True)
+                    with json_path.open("w") as f:
+                        json.dump(json_data, f, indent=4)
+                else:
+                    try:
+                        with json_path.open("r") as f:
+                            json_data = json.load(f)
+                    except:
+                        import pdb; pdb.set_trace()
+                    self.velocity.append(json_data['speed'])
+                    self.acc_x.append(json_data['acceleration']['x'])
+                    self.acc_y.append(json_data['acceleration']['y'])
+                    self.control.append(json_data['controls'])
+                    self.throttle_brake.append(json_data['throttle_brakes'])
+                    self.steer.append(json_data['steers'])
+                    self.reverse.append(json_data['reverse'])
+                    self.waypoint.append(json_data['waypoints'])
+                    self.delta_x_values.append(json_data['xs'])
+                    self.delta_y_values.append(json_data['ys'])
+                    self.delta_yaw_values.append(json_data['yaws'])
+                    self.target_point.append(json_data['parking_goal'])
         #
         # plt.figure(figsize=(10, 8))
         #
