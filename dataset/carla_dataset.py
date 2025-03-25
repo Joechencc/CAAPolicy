@@ -414,14 +414,11 @@ class CarlaDataset(torch.utils.data.Dataset):
                         file_path = task_path + f"/measurements/{str(frame).zfill(4)}.json"
                     with open(file_path, "r") as read_file:
                         data = json.load(read_file)
+                        egocentric_waypoint = convert_slot_coord(ego_trans,[data['x'],data['y'],data['yaw']])
+                        delta_x = egocentric_waypoint[0]
+                        delta_y = egocentric_waypoint[1]
+                        delta_yaw = egocentric_waypoint[2]
 
-                        delta_x = data['x'] - cur_x
-                        delta_y = data['y'] - cur_y
-                        delta_yaw = data['yaw'] - cur_yaw
-                        if delta_yaw > 180:
-                            delta_yaw -= 360
-                        elif delta_yaw < -180:
-                            delta_yaw += 360
                         self.plot_x.append(delta_x)
                         self.plot_y.append(delta_y)
                         self.plot_yaw.append(delta_yaw)

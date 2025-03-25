@@ -23,6 +23,27 @@ from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
 
 
+# convert location in ego centric to world frame
+def convert_to_world(delta_x, delta_y, delta_yaw, ego_trans):
+
+    Ex = ego_trans.location.x
+    Ey = ego_trans.location.y
+    Eyaw = ego_trans.rotation.yaw
+
+    theta = math.radians(Eyaw)
+
+
+    Wx = Ex + (delta_x * math.cos(theta) - delta_y * math.sin(theta))
+    Wy = Ey + (delta_x * math.sin(theta) + delta_y * math.cos(theta))
+
+
+    Wyaw = Eyaw + delta_yaw
+    if Wyaw > 180:
+        Wyaw -= 360
+    elif Wyaw < -180:
+        Wyaw += 360
+
+    return [Wx, Wy, Wyaw]
 def show_control_info(window, control, steering_wheel_image, width, height, font):
     histogram_width = 15
 
@@ -415,9 +436,12 @@ class ParkingAgent:
 
                 # draw waypoint WP1, WP2, WP3, WP4
                 for i in range(0,4):
+                    #waypoint : [x,y,yaw] in egocentric
                     waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                    #convert to world frame
+                    waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
                     waypoint[-1] = 0.3 #z=0.3
-                    location = carla.Location(x=waypoint[0]+data["ego_position"][0], y=waypoint[1]+data["ego_position"][1], z=waypoint[2])
+                    location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
                     self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
                                                         color=carla.Color(255, 0, 0))
             self.prev_xy_thea = [vehicle_transform.location.x,
@@ -546,19 +570,19 @@ class ParkingAgent:
             seg_gt[seg_gt == 1] = 128
             seg_gt[seg_gt == 2] = 255
             data['segmentation'] = Image.fromarray(seg_gt)
-
+        data["ego_trans"] = vehicle_transform
         return data
 
-    def draw_waypoints(self, waypoints):
-        ego_t = self.world.player.get_transform()
-        ego_loc = carla.Location(x=ego_t.location.x, y=ego_t.location.y, z=0.20)
-        self.world.world.debug.draw_string(ego_loc, 'O', draw_shadow=True, color=carla.Color(255, 0, 0))
-
-        wp_list = waypoints[0].tolist()
-        for wp in wp_list:
-            logging.info('wp: dx: %4f; dy: %4f;', wp[0], wp[1])
-            loc = carla.Location(x=ego_t.location.x + wp[0], y=ego_t.location.y + wp[1], z=0.20)
-            self.world.world.debug.draw_string(loc, 'O', draw_shadow=True, color=carla.Color(0, 255, 0))
+    # def draw_waypoints(self, waypoints):
+    #     ego_t = self.world.player.get_transform()
+    #     ego_loc = carla.Location(x=ego_t.location.x, y=ego_t.location.y, z=0.20)
+    #     self.world.world.debug.draw_string(ego_loc, 'O', draw_shadow=True, color=carla.Color(255, 0, 0))
+    #
+    #     wp_list = waypoints[0].tolist()
+    #     for wp in wp_list:
+    #         logging.info('wp: dx: %4f; dy: %4f;', wp[0], wp[1])
+    #         loc = carla.Location(x=ego_t.location.x + wp[0], y=ego_t.location.y + wp[1], z=0.20)
+    #         self.world.world.debug.draw_string(loc, 'O', draw_shadow=True, color=carla.Color(0, 255, 0))
 
     def draw_control_info(self, trans_control):
         ego_t = carla.Transform(carla.Location(x=302.0, y=-248.239487, z=0.32682),

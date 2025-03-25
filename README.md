@@ -9,5 +9,3 @@ every 10 ticks(1s) 4 step
 waypoints
 ![img.png](img.png)
 
-linear square 来预测delta T
-convex points 来找车辆的中心点
