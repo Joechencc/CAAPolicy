@@ -51,6 +51,12 @@ class Configuration:
     tf_de_layers = None
     tf_de_dropout = None
     tf_de_tgt_dim = None
+    x_min = None
+    x_max = None
+    y_min = None
+    y_max = None
+    yaw_min = None
+    yaw_max = None
 
 
 def get_cfg(cfg_yaml: dict):
@@ -107,5 +113,11 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_de_layers = config['tf_de_layers']
     cfg.tf_de_dropout = config['tf_de_dropout']
     cfg.tf_de_tgt_dim = config['tf_de_tgt_dim']
+    cfg.x_min = config['x_min']
+    cfg.x_max = config['x_max']
+    cfg.y_min = config['y_min']
+    cfg.y_max = config['y_max']
+    cfg.yaw_min = config['yaw_min']
+    cfg.yaw_max = config['yaw_max']
 
     return cfg

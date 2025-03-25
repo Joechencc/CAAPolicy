@@ -35,7 +35,9 @@ class SegmentationHead(nn.Module):
         p4 = self.relu(self.up_conv5(self.up_sample(p5)))
         p3 = self.relu(self.up_conv4(self.up_sample(p4)))
         p2 = self.relu(self.up_conv3(self.up_sample(p3)))
-        p1 = F.interpolate(p2, size=(200, 200), mode="bilinear", align_corners=False)
+        x_intepolate = int((self.cfg.bev_x_bound[1] - self.cfg.bev_x_bound[0])/self.cfg.bev_x_bound[2])
+        y_intepolate = int((self.cfg.bev_y_bound[1] - self.cfg.bev_y_bound[0])/self.cfg.bev_y_bound[2])
+        p1 = F.interpolate(p2, size=(x_intepolate, y_intepolate), mode="bilinear", align_corners=False)
         return p1
 
     def forward(self, fuse_feature):
@@ -44,4 +46,4 @@ class SegmentationHead(nn.Module):
         fuse_bev = torch.reshape(fuse_feature_t, (b, c, int(math.sqrt(s)), -1))
         fuse_bev = self.top_down(fuse_bev)
         pred_segmentation = self.segmentation_head(fuse_bev)
-        return pred_segmentation
+        return pred_segmentation, fuse_bev
