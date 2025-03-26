@@ -624,7 +624,7 @@ class ProcessSemantic:
     def __init__(self, cfg):
         self.cfg = cfg
 
-    def __call__(self, image, scale, crop, target_slot):
+    def __call__(self, image, scale, crop, target_slot, is_train=True):
         """
         Process original BEV ground truth image; return cropped image with target slot
         :param image: PIL Image or path to image
@@ -635,16 +635,21 @@ class ProcessSemantic:
         """
 
         # read image from disk
-        image_path = Path(image.decode())
-        topdown_coarse_path = ("preprocess",) + image_path.parts[3:]
-        topdown_coarse_path = Path(*topdown_coarse_path).with_suffix(".npy")
-        topdown_coarse_path = topdown_coarse_path.parent.parent / "topdown_coarse" / topdown_coarse_path.name
-        if not isinstance(image, Image.Image):
-            image = Image.open(image)
+        if is_train:
+            image_path = Path(image.decode())
+            topdown_coarse_path = ("preprocess",) + image_path.parts[3:]
+            topdown_coarse_path = Path(*topdown_coarse_path).with_suffix(".npy")
+            topdown_coarse_path = topdown_coarse_path.parent.parent / "topdown_coarse" / topdown_coarse_path.name
+            if not isinstance(image, Image.Image):
+                image = Image.open(image)
+        else:
+            # import pdb; pdb.set_trace()
+            pass
         image = image.convert('L')
 
         # crop image
         cropped_image = scale_and_crop_image(image, scale, crop)
+        
 
         # draw target slot on BEV semantic
         cropped_image = self.draw_target_slot(cropped_image, target_slot)
@@ -661,22 +666,25 @@ class ProcessSemantic:
         # self.plot_bev(semantics, "semantics.png")
         # self.plot_bev(semantics_downsampled, "semantics_downsampled.png")
         # import pdb; pdb.set_trace()
-        coarse_exist = self.save_if_not_exists(topdown_coarse_path)
-        if not coarse_exist:
-            semantics_downsampled = zoom(semantics, zoom=0.25, order=0).astype(int).astype(np.float64)
-            np.save(topdown_coarse_path, semantics_downsampled)
-        else:
-            semantics_downsampled = np.load(topdown_coarse_path)
+        if is_train:
+            coarse_exist = self.save_if_not_exists(topdown_coarse_path)
+            if not coarse_exist:
+                semantics_downsampled = zoom(semantics, zoom=0.25, order=0).astype(int).astype(np.float64)
+                np.save(topdown_coarse_path, semantics_downsampled)
+            else:
+                semantics_downsampled = np.load(topdown_coarse_path)
 
-        return semantics.copy(), semantics_downsampled.copy()
+            return semantics.copy(), semantics_downsampled.copy()
+        else:
+            return semantics.copy()
 
     def draw_target_slot(self, image, target_slot):
 
         size = image.shape[0]
 
         # convert target slot position into pixels
-        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
-        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        x_pixel = target_slot[0] / (self.cfg.bev_x_bound[2]/self.cfg.scale)
+        y_pixel = target_slot[1] / (self.cfg.bev_y_bound[2]/self.cfg.scale)
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
 
         # draw the whole parking slot

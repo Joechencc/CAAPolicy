@@ -100,7 +100,7 @@ class ParkingModel(nn.Module):
         return pred_control, pred_waypoint_token, pred_segmentation, pred_depth
 
     def predict(self, data):
-        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
+        fuse_feature, fuse_bev, pred_segmentation, pred_depth, bev_target = self.encoder(data)
         pred_multi_controls = data['gt_control'].cuda()
         pred_multi_waypoints = data['gt_waypoint'].cuda()
         fuse_feature_copy = fuse_feature.clone()
