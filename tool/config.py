@@ -58,10 +58,13 @@ class Configuration:
     y_max = None
     yaw_min = None
     yaw_max = None
+<<<<<<< HEAD
     
     point_cloud_range = None
     occ_size = None
     voxel_out_indices = None
+=======
+>>>>>>> d42d9d2e2e428bf90b18e166086d9d3175ad1d15
 
 
 def get_cfg(cfg_yaml: dict):

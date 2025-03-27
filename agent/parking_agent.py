@@ -222,6 +222,7 @@ class ParkingAgent:
         self.player = network_evaluator.world.player
 
         self.is_init = False
+        self.is_train = False
         self.intrinsic_crop = None
         self.extrinsic = None
         self.image_process = None
@@ -415,7 +416,7 @@ class ParkingAgent:
 
                 # draw waypoint WP1, WP2, WP3, WP4
                 for i in range(0,4):
-                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg)
                     waypoint[-1] = 0.3 #z=0.3
                     location = carla.Location(x=waypoint[0]+data["ego_position"][0], y=waypoint[1]+data["ego_position"][1], z=waypoint[2])
                     self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
@@ -542,11 +543,11 @@ class ParkingAgent:
             img = encode_npy_to_pil(np.asarray(data_frame['topdown'].squeeze().cpu()))
             img = np.moveaxis(img, 0, 2)
             img = Image.fromarray(img)
-            seg_gt = self.semantic_process(image=img, scale=0.5, crop=200, target_slot=target_point)
+            seg_gt = self.semantic_process(image=img, scale=0.5, crop=200, target_slot=target_point, is_train=False)
             seg_gt[seg_gt == 1] = 128
             seg_gt[seg_gt == 2] = 255
             data['segmentation'] = Image.fromarray(seg_gt)
-
+        data["ego_trans"] = vehicle_transform
         return data
 
     def draw_waypoints(self, waypoints):
