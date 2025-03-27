@@ -27,6 +27,7 @@ class Configuration:
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
 
+    scale = None
     bev_x_bound = None
     bev_y_bound = None
     bev_z_bound = None
@@ -51,6 +52,16 @@ class Configuration:
     tf_de_layers = None
     tf_de_dropout = None
     tf_de_tgt_dim = None
+    x_min = None
+    x_max = None
+    y_min = None
+    y_max = None
+    yaw_min = None
+    yaw_max = None
+    
+    point_cloud_range = None
+    occ_size = None
+    voxel_out_indices = None
 
 
 def get_cfg(cfg_yaml: dict):
@@ -83,6 +94,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
     cfg.bev_encoder_out_channel = config['bev_encoder_out_channel']
 
+    cfg.scale = config['scale']
     cfg.bev_x_bound = config['bev_x_bound']
     cfg.bev_y_bound = config['bev_y_bound']
     cfg.bev_z_bound = config['bev_z_bound']
@@ -107,5 +119,30 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_de_layers = config['tf_de_layers']
     cfg.tf_de_dropout = config['tf_de_dropout']
     cfg.tf_de_tgt_dim = config['tf_de_tgt_dim']
+    cfg.x_min = config['x_min']
+    cfg.x_max = config['x_max']
+    cfg.y_min = config['y_min']
+    cfg.y_max = config['y_max']
+    cfg.yaw_min = config['yaw_min']
+    cfg.yaw_max = config['yaw_max']
+
+    cfg.point_cloud_range = config['point_cloud_range']
+    cfg.occ_size = config['occ_size']
+
+    ####OCCNet
+    cfg.OccNet_cfg = config['OccNet_cfg']
+    cfg.OccNet_cfg['img_backbone']['out_indices'] = eval(cfg.OccNet_cfg['img_backbone']['out_indices'])
+    cfg.voxel_out_indices = config['voxel_out_indices']
+    voxel_out_indices = eval(cfg.voxel_out_indices)
+    voxel_out_channel = 256
+    cfg.OccNet_cfg['pts_bbox_head']['norm_cfg'] = dict(type='GN', num_groups=8, requires_grad=True)
+    cfg.OccNet_cfg['pts_bbox_head']['num_level'] = len(voxel_out_indices)
+    cfg.OccNet_cfg['pts_bbox_head']['in_channels'] = [voxel_out_channel] * len(voxel_out_indices)
+    cfg.OccNet_cfg['pts_bbox_head']['loss_weight_cfg'] = dict(
+            loss_voxel_ce_weight=1.0,
+            loss_voxel_sem_scal_weight=1.0,
+            loss_voxel_geo_scal_weight=1.0,
+            loss_voxel_lovasz_weight=1.0,
+        )
 
     return cfg

@@ -9,7 +9,7 @@ parking_model:
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 20
+  batch_size: 16
 
   training_map: "/vast/rs9193/Town_Opt_1000"
   # validation_map: "/vast/rs9193/Town_Opt_1000_extra_small"
@@ -20,12 +20,13 @@ parking_model:
   image_crop: 256
 
   # bev encoder
-  bev_encoder_in_channel: 64
+  bev_encoder_in_channel: 128
   bev_encoder_out_channel: 264  # 256 + 4 + 4
 
   # bev model
-  bev_x_bound: [-10.0, 10.0, 0.1]
-  bev_y_bound: [-10.0, 10.0, 0.1]
+  scale: 4
+  bev_x_bound: [-10.0, 10.0, 0.4]
+  bev_y_bound: [-10.0, 10.0, 0.4]
   bev_z_bound: [-10.0, 10.0, 20.0]
   d_bound: [0.5, 12.5, 0.25]
   final_dim: [256, 256]
@@ -51,3 +52,53 @@ parking_model:
   tf_de_layers: 4
   tf_de_dropout: 0.05
   tf_de_tgt_dim: 15
+
+  # waypoint tokenize
+  x_min: -3
+  x_max: 3
+  y_min: -6
+  y_max: 6
+  yaw_min: -40
+  yaw_max: 40
+
+  point_cloud_range: [-10.0, -10.0, -10.0, 10.0, 10.0, 10.0]
+  occ_size: [200, 200]
+  voxel_out_indices: (0, 1, 2, 3)
+
+  OccNet_cfg:
+    loss_norm: True
+    img_backbone:
+      pretrained: 'torchvision://resnet50'
+      type: 'ResNet'
+      depth: 50
+      num_stages: 4
+      out_indices: (0, 1, 2, 3)
+      frozen_stages: 0
+      with_cp: True
+      norm_eval: False
+      style: 'pytorch'
+      
+    img_neck:
+      type: 'SECONDFPN'
+      in_channels: [256, 512, 1024, 2048]
+      upsample_strides: [0.25, 0.5, 1, 2]
+      out_channels: [128, 128, 128, 128]
+
+    pts_bbox_head:
+      type: 'CONetHead'
+      norm_cfg: null
+      soft_weights: True
+      cascade_ratio: 4
+      sample_from_voxel: True
+      sample_from_img: True
+      final_occ_size: [200, 200]
+      fine_topk: 15000
+      empty_idx: 0
+      num_level: null
+      in_channels: null
+      out_channel: 3
+      point_cloud_range: [-10.0, -10.0, 10.0, 10.0]
+      loss_weight_cfg: null
+      baseline_mode: "base"
+
+    empty_idx: 0

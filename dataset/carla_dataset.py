@@ -10,7 +10,8 @@ from PIL import Image
 from loguru import logger
 from tqdm import tqdm
 from pathlib import Path
-#import matplotlib.pyplot as plt
+from scipy.ndimage import zoom
+import matplotlib.pyplot as plt
 
 
 def convert_slot_coord(ego_trans, target_point):
@@ -115,7 +116,7 @@ def detokenize_control(token_list, token_nums=204):
     return [throttle, brake, steer, reverse]
 
 
-def tokenize_waypoint(x, y, yaw, token_nums=204):
+def tokenize_waypoint(x, y, yaw, cfg):
     """
     Tokenize control signal
     :param x: [-1.5, 1.5]
@@ -124,6 +125,7 @@ def tokenize_waypoint(x, y, yaw, token_nums=204):
     :param token_nums: size of token
     :return: tokenized x, y, yaw
     """
+    token_nums=cfg.token_nums
     token_nums = token_nums -4
     # Helper function to tokenize a single value
     def tokenize_single_value(value, min_value, max_value):
@@ -136,21 +138,22 @@ def tokenize_waypoint(x, y, yaw, token_nums=204):
         return int(tokenized_value)
 
     # Tokenize each parameter
-    x_token = tokenize_single_value(x, -3, 3)
-    y_token = tokenize_single_value(y, -6, 6)
-    yaw_token = tokenize_single_value(yaw, -40, 40)
+    x_token = tokenize_single_value(x, cfg.x_min, cfg.x_max)
+    y_token = tokenize_single_value(y, cfg.y_min, cfg.y_max)
+    yaw_token = tokenize_single_value(yaw, cfg.yaw_min, cfg.yaw_max)
 
     return  [x_token, y_token, yaw_token]
 
 
 
-def detokenize_waypoint(token_list, token_nums=204):
+def detokenize_waypoint(token_list, cfg):
     """
     Detokenize waypoint values
     :param token_list: [x_token, y_token, yaw_token]
     :param token_nums: size of token number
     :return: original x, y, yaw values
     """
+    token_nums = cfg.token_nums
     token_nums -= 4  # Adjusting for the valid range of tokens
 
     # Helper function to detokenize a single value
@@ -162,9 +165,9 @@ def detokenize_waypoint(token_list, token_nums=204):
         return original_value
 
     # Detokenize each parameter
-    x = detokenize_single_value(token_list[0], -3, 3)
-    y = detokenize_single_value(token_list[1], -6, 6)
-    yaw = detokenize_single_value(token_list[2], -40, 40)
+    x = detokenize_single_value(token_list[0], cfg.x_min, cfg.x_max)
+    y = detokenize_single_value(token_list[1], cfg.y_min, cfg.y_max)
+    yaw = detokenize_single_value(token_list[2], cfg.yaw_min, cfg.yaw_max)
 
     return [x, y, yaw]
 
@@ -430,7 +433,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                             # self.plot_y.append(delta_y)
                             # self.plot_yaw.append(delta_yaw)
                         waypoints.append(
-                            tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
+                            tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg))
                         xs.append(delta_x)
                         ys.append(delta_y)
                         yaws.append(delta_yaw)
@@ -585,9 +588,10 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+        segmentation, segmentation_coarse = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
+        data['segmentation_coarse'] = torch.from_numpy(segmentation_coarse).long().unsqueeze(0)
 
         # target_point
         data['target_point'] = torch.from_numpy(self.target_point[index])
@@ -631,6 +635,10 @@ class ProcessSemantic:
         """
 
         # read image from disk
+        image_path = Path(image.decode())
+        topdown_coarse_path = ("preprocess",) + image_path.parts[3:]
+        topdown_coarse_path = Path(*topdown_coarse_path).with_suffix(".npy")
+        topdown_coarse_path = topdown_coarse_path.parent.parent / "topdown_coarse" / topdown_coarse_path.name
         if not isinstance(image, Image.Image):
             image = Image.open(image)
         image = image.convert('L')
@@ -650,16 +658,25 @@ class ProcessSemantic:
         semantics[target_index] = 2
         # LSS method vehicle toward positive x-axis on image
         semantics = semantics[::-1]
+        # self.plot_bev(semantics, "semantics.png")
+        # self.plot_bev(semantics_downsampled, "semantics_downsampled.png")
+        # import pdb; pdb.set_trace()
+        coarse_exist = self.save_if_not_exists(topdown_coarse_path)
+        if not coarse_exist:
+            semantics_downsampled = zoom(semantics, zoom=0.25, order=0).astype(int).astype(np.float64)
+            np.save(topdown_coarse_path, semantics_downsampled)
+        else:
+            semantics_downsampled = np.load(topdown_coarse_path)
 
-        return semantics.copy()
+        return semantics.copy(), semantics_downsampled.copy()
 
     def draw_target_slot(self, image, target_slot):
 
         size = image.shape[0]
 
         # convert target slot position into pixels
-        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
-        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        x_pixel = target_slot[0] / (self.cfg.bev_x_bound[2]/self.cfg.scale)
+        y_pixel = target_slot[1] / (self.cfg.bev_y_bound[2]/self.cfg.scale)
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
 
         # draw the whole parking slot
@@ -682,6 +699,34 @@ class ProcessSemantic:
         image[tuple(slot_points_ego)] = 255
 
         return image
+
+    def plot_bev(self, semantics, img_path):
+        # 画图
+        plt.figure(figsize=(6, 6))
+        plt.imshow(semantics, cmap="viridis", origin="lower")  # 使用颜色映射
+        plt.colorbar(label="Class")
+        plt.title("Semantic Segmentation Map")
+
+        # 保存图片
+        plt.savefig(img_path, dpi=300)
+        plt.close()
+        print(f"Saved visualization to {img_path}")
+
+    def save_if_not_exists(self, new_path):
+        """
+        Save the numpy array to new_path if the file does not exist.
+        
+        :param semantics_downsampled: The numpy array to save.
+        :param new_path: The file path where the numpy array should be saved.
+        """        
+        # 如果文件已存在，则跳过
+        if new_path.exists():
+            return True
+        
+        # 确保父目录存在
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        return False
 
 
 class ProcessImage:
