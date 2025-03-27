@@ -635,20 +635,20 @@ class ProcessSemantic:
         """
 
         # read image from disk
-        image_path = Path(image.decode())
-        topdown_coarse_path = ("preprocess",) + image_path.parts[3:]
-        topdown_coarse_path = Path(*topdown_coarse_path).with_suffix(".npy")
-        topdown_coarse_path = topdown_coarse_path.parent.parent / "topdown_coarse" / topdown_coarse_path.name
         if not isinstance(image, Image.Image):
+            image_path = Path(image.decode())
+            topdown_coarse_path = ("preprocess",) + image_path.parts[3:]
+            topdown_coarse_path = Path(*topdown_coarse_path).with_suffix(".npy")
+            topdown_coarse_path = topdown_coarse_path.parent.parent / "topdown_coarse" / topdown_coarse_path.name
             image = Image.open(image)
+
         image = image.convert('L')
 
         # crop image
         cropped_image = scale_and_crop_image(image, scale, crop)
-
+        
         # draw target slot on BEV semantic
         cropped_image = self.draw_target_slot(cropped_image, target_slot)
-
         # create a new BEV semantic GT
         h, w = cropped_image.shape
         vehicle_index = cropped_image == 75
@@ -675,8 +675,8 @@ class ProcessSemantic:
         size = image.shape[0]
 
         # convert target slot position into pixels
-        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
-        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        x_pixel = target_slot[0] / (self.cfg.bev_x_bound[2]/self.cfg.scale)
+        y_pixel = target_slot[1] / (self.cfg.bev_y_bound[2]/self.cfg.scale)
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
 
         # draw the whole parking slot

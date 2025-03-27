@@ -24,6 +24,7 @@ parking_model:
   bev_encoder_out_channel: 264  # 256 + 4 + 4
 
   # bev model
+  scale: 4
   bev_x_bound: [-10.0, 10.0, 0.4]
   bev_y_bound: [-10.0, 10.0, 0.4]
   bev_z_bound: [-10.0, 10.0, 20.0]

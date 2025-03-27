@@ -27,6 +27,7 @@ class Configuration:
     bev_encoder_in_channel = None
     bev_encoder_out_channel = None
 
+    scale = None
     bev_x_bound = None
     bev_y_bound = None
     bev_z_bound = None
@@ -89,6 +90,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.bev_encoder_in_channel = config['bev_encoder_in_channel']
     cfg.bev_encoder_out_channel = config['bev_encoder_out_channel']
 
+    cfg.scale = config['scale']
     cfg.bev_x_bound = config['bev_x_bound']
     cfg.bev_y_bound = config['bev_y_bound']
     cfg.bev_z_bound = config['bev_z_bound']
