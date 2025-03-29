@@ -134,7 +134,7 @@ def tokenize_waypoint(x, y, yaw, token_nums=204):
         return int(tokenized_value)
 
     # Tokenize each parameter
-    x_token = tokenize_single_value(x, -3, 3)
+    x_token = tokenize_single_value(x, -6, 6)
     y_token = tokenize_single_value(y, -6, 6)
     yaw_token = tokenize_single_value(yaw, -40, 40)
 
@@ -160,7 +160,7 @@ def detokenize_waypoint(token_list, token_nums=204):
         return original_value
 
     # Detokenize each parameter
-    x = detokenize_single_value(token_list[0], -3, 3)
+    x = detokenize_single_value(token_list[0], -6, 6)
     y = detokenize_single_value(token_list[1], -6, 6)
     yaw = detokenize_single_value(token_list[2], -40, 40)
 
