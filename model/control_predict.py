@@ -89,5 +89,6 @@ class ControlPredict(nn.Module):
 
         probs = torch.softmax(logits, dim=-1)
         control_index = probs.argmax(dim=-1).view(-1, 1)
-        target_logit = logits[0, control_index]
+        # target_logit = logits[0, control_index]
+        target_logit = logits.mean()
         return control_index, target_logit
