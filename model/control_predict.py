@@ -73,3 +73,21 @@ class ControlPredict(nn.Module):
         pred_controls = torch.softmax(pred_controls, dim=-1)
         pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
         return pred_controls
+
+    def predict_wt_logits(self, encoder_out, tgt):
+        length = tgt.size(1)
+        padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
+        tgt = torch.cat([tgt, padding], dim=1)
+
+        tgt_mask, tgt_padding_mask = self.create_mask(tgt)
+
+        tgt_embedding = self.embedding(tgt)
+        tgt_embedding = tgt_embedding + self.pos_embed
+
+        decoder_out = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
+        logits = self.output(decoder_out)[:, length - 1, :]
+
+        probs = torch.softmax(logits, dim=-1)
+        control_index = probs.argmax(dim=-1).view(-1, 1)
+        target_logit = logits[0, control_index]
+        return control_index, target_logit

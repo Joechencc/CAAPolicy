@@ -220,6 +220,7 @@ class ParkingAgent:
         self.camera_back_left = None
         self.camera_back_right = None
         self.seg_bev = None
+        self.seg_entropy = None
         self.target_bev = None
 
         self.pre_target_point = None
@@ -297,6 +298,8 @@ class ParkingAgent:
 
     def save_seg_img(self, pred_segmentation):
         pred_segmentation = pred_segmentation[0]
+        pred_seg_entropy = torch.nn.functional.softmax(pred_segmentation, dim=0)
+        pred_seg_entropy = -1 * torch.sum(pred_seg_entropy * torch.log(pred_seg_entropy + 1e-6), dim=0)
         pred_segmentation = torch.argmax(pred_segmentation, dim=0, keepdim=True)
         pred_segmentation = pred_segmentation.detach().cpu().numpy()
         pred_segmentation[pred_segmentation == 1] = 128
@@ -305,6 +308,8 @@ class ParkingAgent:
         # image_file = pathlib.Path(self.cfg.log_dir) / ('%04d.png' % self.step)
         # Image.fromarray(np.uint8(pred_seg_img), mode='L').save(image_file)
         self.seg_bev = pred_seg_img
+        self.seg_entropy = pred_seg_entropy.detach().cpu().numpy()[::-1]
+
 
     def save_target_bev_img(self, target_bev):
         target_bev = target_bev[0]
@@ -372,6 +377,29 @@ class ParkingAgent:
         self.pre_target_point = None
         self.ego_xy=[]
 
+    def save_control_gradcam(self, grads_throttle, grads_steer, grads_reverse, data, grid_size=16):
+        bev = data['segmentation']
+        bev = bev.convert("RGB")
+        
+        grads_throttle = grads_throttle.view(1, grid_size, grid_size, -1)
+        grads_steer = grads_steer.view(1, grid_size, grid_size, -1)
+        grads_reverse = grads_reverse.view(1, grid_size, grid_size, -1)
+
+        norm_throttle = torch.norm(grads_throttle, dim=-1).squeeze(0)
+        norm_steer = torch.norm(grads_steer, dim=-1).squeeze(0)
+        norm_reverse = torch.norm(grads_reverse, dim=-1).squeeze(0)
+
+        norm_throttle = Image.fromarray(norm_throttle.cpu().detach().numpy()).resize(bev.size)
+        norm_steer = Image.fromarray(norm_steer.cpu().detach().numpy()).resize(bev.size)
+        norm_reverse = Image.fromarray(norm_reverse.cpu().detach().numpy()).resize(bev.size)
+
+        gradcam_throttle = np.asarray(norm_throttle)[::-1, ...]
+        gradcam_steer = np.asarray(norm_steer)[::-1, ...]
+        gradcam_reverse = np.asarray(norm_reverse)[::-1, ...]
+        bev = np.asarray(bev)[::-1, ...]
+        
+        return gradcam_throttle, gradcam_steer, gradcam_reverse, bev
+        
     def save_atten_avg_map(self, data):
         atten = self.save_output.outputs[0].detach().cpu()
         # visualize_heads(atten)
@@ -409,41 +437,82 @@ class ParkingAgent:
             data = self.get_model_data(data_frame)
 
             self.model.eval()
-            with torch.no_grad():
-                start_time = time.time()
+# <<<<<<< Updated upstream
+#             with torch.no_grad():
+#                 start_time = time.time()
 
-                pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+#                 pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
 
-                end_time = time.time()
-                self.net_eva.inference_time.append(end_time - start_time)
+#                 end_time = time.time()
+#                 self.net_eva.inference_time.append(end_time - start_time)
 
-                self.save_prev_target(pred_segmentation)
-                control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
+#                 self.save_prev_target(pred_segmentation)
+#                 control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
 
-                self.trans_control.throttle = control_signal[0]
-                self.trans_control.brake = control_signal[1]
-                self.trans_control.steer = control_signal[2]
-                self.trans_control.reverse = control_signal[3]
+#                 self.trans_control.throttle = control_signal[0]
+#                 self.trans_control.brake = control_signal[1]
+#                 self.trans_control.steer = control_signal[2]
+#                 self.trans_control.reverse = control_signal[3]
 
-                self.speed_limit(data_frame)
+#                 self.speed_limit(data_frame)
 
-                if self.show_eva_imgs:
-                    self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
-                    self.save_seg_img(pred_segmentation)
-                    self.save_target_bev_img(target_bev)
-                    self.display_imgs()
-                self.save_output.clear()
+#                 if self.show_eva_imgs:
+#                     self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+#                     self.save_seg_img(pred_segmentation)
+#                     self.save_target_bev_img(target_bev)
+#                     self.display_imgs()
+#                 self.save_output.clear()
 
-                # draw waypoint WP1, WP2, WP3, WP4
-                for i in range(0,4):
-                    #waypoint : [x,y,yaw] in egocentric
-                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
-                    #convert to world frame
-                    waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
-                    waypoint[-1] = 0.3 #z=0.3
-                    location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
-                    self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
-                                                        color=carla.Color(255, 0, 0))
+#                 # draw waypoint WP1, WP2, WP3, WP4
+#                 for i in range(0,4):
+#                     #waypoint : [x,y,yaw] in egocentric
+#                     waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+#                     #convert to world frame
+#                     waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+#                     waypoint[-1] = 0.3 #z=0.3
+#                     location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
+#                     self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+#                                                         color=carla.Color(255, 0, 0))
+# =======
+            # with torch.no_grad():
+            start_time = time.time()
+
+            # pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+            pred_controls, pred_waypoints, pred_segmentation, _, target_bev, grads_throttle, grads_steer, grads_reverse = self.model.predict_wt_grads(data)
+
+            end_time = time.time()
+            self.net_eva.inference_time.append(end_time - start_time)
+
+            self.save_prev_target(pred_segmentation)
+            
+            control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
+
+            self.trans_control.throttle = control_signal[0]
+            self.trans_control.brake = control_signal[1]
+            self.trans_control.steer = control_signal[2]
+            self.trans_control.reverse = control_signal[3]
+
+            self.speed_limit(data_frame)
+
+            if self.show_eva_imgs:
+                self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+                self.gradcam_throttle, self.gradcam_steer, self.gradcam_reverse, self.bev = self.save_control_gradcam(grads_throttle, grads_steer, grads_reverse, data)
+                self.save_seg_img(pred_segmentation)
+                self.save_target_bev_img(target_bev)
+                self.display_imgs()
+            self.save_output.clear()
+
+            # draw waypoint WP1, WP2, WP3, WP4
+            for i in range(0,4):
+                
+                waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                #convert to world frame
+                waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+                waypoint[-1] = 0.3 #z=0.3
+                location = carla.Location(x=waypoint[0]+data["ego_position"][0], y=waypoint[1]+data["ego_position"][1], z=waypoint[2])
+                self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+                                                    color=carla.Color(255, 0, 0))
+# >>>>>>> Stashed changes
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
@@ -652,12 +721,6 @@ class ParkingAgent:
         # ax_rear.set_title('rear', fontsize=10)
         # ax_rear.imshow(self.rgb_rear)
 
-        ax_atten = plt.subplot(rows, cols, 7)
-        ax_atten.axis('off')
-        ax_atten.set_title('atten(output)', fontsize=10)
-        ax_atten.imshow(self.grid_image)
-        ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
-
         # ax_left = plt.subplot(rows, cols, 5)
         # ax_left.axis('off')
         # ax_left.set_title('left', fontsize=10)
@@ -673,7 +736,36 @@ class ParkingAgent:
         # ax_bev.set_title('target_bev(input)', fontsize=10)
         # ax_bev.imshow(self.target_bev)
 
-        ax_bev = plt.subplot(rows, cols, 8)
+        ax_atten = plt.subplot(rows, cols, 1)
+        ax_atten.axis('off')
+        ax_atten.set_title('throttal gradcam(', fontsize=10)
+        ax_atten.imshow(self.bev)
+        ax_atten.imshow(self.gradcam_throttle / np.max(self.gradcam_throttle), alpha=0.6, cmap='rainbow')
+        
+        ax_atten = plt.subplot(rows, cols, 2)
+        ax_atten.axis('off')
+        ax_atten.set_title('steer gradcam', fontsize=10)
+        ax_atten.imshow(self.bev)
+        ax_atten.imshow(self.gradcam_steer / np.max(self.gradcam_steer), alpha=0.6, cmap='rainbow')
+        
+        ax_atten = plt.subplot(rows, cols, 3)
+        ax_atten.axis('off')    
+        ax_atten.set_title('reverse gradcam', fontsize=10)
+        ax_atten.imshow(self.bev)
+        ax_atten.imshow(self.gradcam_reverse / np.max(self.gradcam_reverse), alpha=0.6, cmap='rainbow')
+
+        ax_atten = plt.subplot(rows, cols, 5)
+        ax_atten.axis('off')
+        ax_atten.set_title('self-atten(output)', fontsize=10)
+        ax_atten.imshow(self.grid_image)
+        ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
+        
+        ax_bev = plt.subplot(rows, cols, 6)
+        ax_bev.axis('off')
+        ax_bev.set_title('seg_entropy(output)', fontsize=10)
+        ax_bev.imshow(self.seg_entropy)
+        
+        ax_bev = plt.subplot(rows, cols, 7)
         ax_bev.axis('off')
         ax_bev.set_title('seg_bev(output)', fontsize=10)
         ax_bev.imshow(self.seg_bev)
