@@ -85,8 +85,10 @@ class ParkingModel(nn.Module):
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True)#已经是相对车的位置了
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
         bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
-        img_feature = self.dinov2(images)
-        img_feature_future = self.dinov2(images_future)
+        # TODO: Change 6 images to 3 images per frame
+        img_feature = self.dinov2(images[:,3:,:,:,:])
+        # TODO: Change 6 images to 3 images per frame
+        img_feature_future = self.dinov2(images_future[:,3:,:,:,:])
         # bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
 
         bev_target = self.adjust_target_bev(bev_feature, target_point)

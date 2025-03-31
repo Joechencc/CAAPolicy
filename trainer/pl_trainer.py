@@ -53,6 +53,8 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.depth_loss_func = DepthLoss(self.cfg)
 
+        self.feature_loss_weight = 0.001
+
         self.parking_model = ParkingModel(self.cfg)
 
     def training_step(self, batch, batch_idx):
@@ -64,7 +66,7 @@ class ParkingTrainingModule(pl.LightningModule):
             "control_loss": control_loss
         })
         #TODO: finish feature_loss_func
-        feature_loss = self.feature_loss_func(pred_image_feature, batch)
+        feature_loss = self.feature_loss_func(pred_image_feature, batch) * self.feature_loss_weight
         loss_dict.update({
             "feature_loss": feature_loss
         })
@@ -100,7 +102,7 @@ class ParkingTrainingModule(pl.LightningModule):
             "reverse_val_loss": reverse_val_loss
         })
 
-        feature_val_loss = self.feature_loss_func(pred_image_feature, batch)
+        feature_val_loss = self.feature_loss_func(pred_image_feature, batch) * self.feature_loss_weight
         val_loss_dict.update({
             "feature_val_loss": feature_val_loss
         })

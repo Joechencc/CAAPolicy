@@ -11,11 +11,12 @@ class FeatureFusion(nn.Module):
 
         tf_layer = nn.TransformerEncoderLayer(d_model=self.cfg.tf_en_dim, nhead=self.cfg.tf_en_heads)
         self.tf_encoder = nn.TransformerEncoder(tf_layer, num_layers=self.cfg.tf_en_layers)
-
+        # TODO: Change self.cfg.tf_en_img_length to e.g.: 4*12 = 48
         total_length = self.cfg.tf_en_bev_length + self.cfg.tf_en_img_length
         # print("Total_length" ,total_length)
         # print("tf_en_img_length" ,self.cfg.tf_en_img_length)
         # print("tf_en_bev_length" ,self.cfg.tf_en_bev_length)
+        
         self.pos_embed = nn.Parameter(torch.randn(1, total_length, self.cfg.tf_en_dim) * .02)
         self.pos_drop = nn.Dropout(self.cfg.tf_en_dropout)
 
@@ -81,6 +82,7 @@ class FeatureFusion(nn.Module):
 
         # Concatenate bev_feature and img_token along the sequence dimension
         fuse_feature = torch.cat([bev_feature, img_token], dim=1)
+        # import pdb; pdb.set_trace()
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
         print(f"fuse_feature shape: {fuse_feature.shape}")
         fuse_feature = fuse_feature.transpose(0, 1)

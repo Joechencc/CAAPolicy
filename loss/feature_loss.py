@@ -20,7 +20,8 @@ class FeatureLoss(nn.Module):
         
     def forward(self, pred_img_feature, batch):
         future_img = batch['image']
-        gt_img_feature = self.dinov2(future_img)
+        # TODO: Change 6 images to 3 images per frame
+        gt_img_feature = self.dinov2(future_img[:,3:,:,:,:])
         B, C, H, W = gt_img_feature.shape
         gt_img_feature = gt_img_feature.permute(0, 2, 3, 1).reshape(B, H * W, C)  # (B, H, W, C) -> (B, H*W, C)
         feature_loss = F.mse_loss(gt_img_feature, pred_img_feature).mean()

@@ -385,7 +385,10 @@ class CarlaDataset(torch.utils.data.Dataset):
         # image & extrinsics & intrinsics
         images = [self.image_process(self.front[index])[0], self.image_process(self.front_left[index])[0],self.image_process(self.front_right[index])[0],
                   self.image_process(self.back[index])[0], self.image_process(self.back_left[index])[0],self.image_process(self.back_right[index])[0],]
+        # import pdb;pdb.set_trace()
+        # print("single image shape:", self.image_process(self.front[index])[0].shape)
         images = torch.cat(images, dim=0)
+        # print("Concatenated Image Shape:", images.shape)
         # image_future 2s after current (data collection rate @ 3hz)
         if index + 6 < len(self.front) :
             future_images = [self.image_process(self.front[index+6])[0], self.image_process(self.front_left[index+6])[0],self.image_process(self.front_right[index+6])[0],
@@ -396,6 +399,7 @@ class CarlaDataset(torch.utils.data.Dataset):
             data['future_images'] = images
 
         data['image'] = images
+        # print("the shape of concatenated images: ",images.shape)
         
 
         data['extrinsics'] = self.extrinsic

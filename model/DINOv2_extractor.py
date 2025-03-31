@@ -73,6 +73,10 @@ class FeatureExtractor(nn.Module):  # Inherit from nn.Module
         else:
             processed_images = self._process_resnet(images_total)
             features = self.model(processed_images)  # [B, 512, h, w]
+
+            # Average Pooling (halves spatial dimensions)
+            pool = nn.AvgPool2d(kernel_size=2, stride=2)
+            features_pooled = pool(features)  # [B, feat_dim, H//2, W//2] (e.g., 8x48)
         
         # # Feature map size after backbone
         # print(f"Backbone output size: {features.shape}")
@@ -92,5 +96,5 @@ class FeatureExtractor(nn.Module):  # Inherit from nn.Module
         # features += self.pos_embed.to(features.device)
         
         # Final feature map size
-        print(f"Final feature map size: {features.shape}")
-        return features
+        # print(f"Final feature map size: {features_pooled.shape}")
+        return features_pooled

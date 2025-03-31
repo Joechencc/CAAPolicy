@@ -10,3 +10,4 @@ PWU.egg-info
 carla
 .pdf
 sbatch/
+.out
