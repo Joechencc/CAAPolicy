@@ -1,4 +1,3 @@
-```markdown
 # File Transfer using rclone
 
 This guide walks through setting up rclone to transfer files to/from Google Drive.
@@ -8,7 +7,7 @@ This guide walks through setting up rclone to transfer files to/from Google Driv
 1. Install rclone from [https://rclone.org/install/]
 
 2. Start the configuration tool:
-   ```bash
+   ```
    rclone config
    ```
 
