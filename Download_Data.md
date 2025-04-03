@@ -5,7 +5,7 @@ This guide walks through setting up rclone to transfer files to/from Google Driv
 
 ## Step 1: Install rclone & Configuration
 
-1. Install rclone from [https://rclone.org/install/](https://rclone.org/install/)
+1. Install rclone from [https://rclone.org/install/]
 
 2. Start the configuration tool:
    ```bash
@@ -98,4 +98,3 @@ rclone copy AI4CE:E2E-Bosch/parkinglot_1000 /vast/rs9193/Town_Opt_1000
 ```
 
 For more information, visit: [https://noisyneuron.github.io/nyu-hpc/transfer.html](https://noisyneuron.github.io/nyu-hpc/transfer.html)
-```
