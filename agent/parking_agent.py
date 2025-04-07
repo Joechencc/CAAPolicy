@@ -553,7 +553,6 @@ class ParkingAgent:
         elif target_type == "gt":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
         elif target_type == "predicted":
-       
             if self.pre_target_point is not None:
                 target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
                 data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
