@@ -8,6 +8,7 @@ import yaml
 
 from PIL import Image
 from loguru import logger
+from scipy.ndimage import zoom
 #import matplotlib.pyplot as plt
 
 
@@ -519,7 +520,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         data = {}
-        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
+        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation', 'segmentation_fine'
                 'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
         for key in keys:
             data[key] = []
@@ -546,7 +547,9 @@ class CarlaDataset(torch.utils.data.Dataset):
         # segmentation
         segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
-        data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
+        semantics_downsampled = zoom(segmentation, zoom=0.25, order=0).astype(int).astype(np.float64)
+        data['segmentation'] = torch.from_numpy(semantics_downsampled).long().unsqueeze(0)
+        data['segmentation_fine'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
         # target_point
         data['target_point'] = torch.from_numpy(self.target_point[index])

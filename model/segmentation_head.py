@@ -35,7 +35,7 @@ class SegmentationHead(nn.Module):
         p4 = self.relu(self.up_conv5(self.up_sample(p5)))
         p3 = self.relu(self.up_conv4(self.up_sample(p4)))
         p2 = self.relu(self.up_conv3(self.up_sample(p3)))
-        p1 = F.interpolate(p2, size=(200, 200), mode="bilinear", align_corners=False)
+        p1 = F.interpolate(p2, size=(50, 50), mode="bilinear", align_corners=False)
         return p1
 
     def forward(self, fuse_feature):
