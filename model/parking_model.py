@@ -81,17 +81,17 @@ class ParkingModel(nn.Module):
 
         target_point = target_point.unsqueeze(1)
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
+        pred_segmentation_coarse, pred_segmentation_fine, fine_feature = self.segmentation_head(fuse_feature, images, intrinsics)
 
-        pred_segmentation = self.segmentation_head(fuse_feature)
-
-        return fuse_feature, pred_segmentation, pred_depth, bev_target
+        return fuse_feature, fine_feature, pred_segmentation_coarse, pred_segmentation_fine, pred_depth, bev_target
 
     def forward(self, data):
-        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
-        fuse_feature_copy = fuse_feature.clone()
-        pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
-        return pred_control, pred_waypoint, pred_segmentation, pred_depth
+        fuse_feature, fine_feature, pred_segmentation_coarse, pred_segmentation_fine, pred_depth, _ = self.encoder(data)
+        # fuse_feature_copy = fuse_feature.clone()
+        fine_feature_copy = fine_feature.clone()
+        pred_control = self.control_predict(fine_feature, data['gt_control'].cuda())
+        pred_waypoint = self.waypoint_predict(fine_feature_copy,data['gt_waypoint'].cuda())
+        return pred_control, pred_waypoint, pred_segmentation_coarse, pred_segmentation_fine, pred_depth
 
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)

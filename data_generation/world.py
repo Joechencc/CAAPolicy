@@ -13,6 +13,74 @@ from data_generation.sensors import CollisionSensor, CameraManager
 from data_generation import parking_position
 from data_generation.bev_render import BevRender
 
+cam_specs_ = {
+    'rgb_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.rgb',
+    },
+    'rgb_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.rgb',
+    },
+    'depth_front': {
+        'x': 2.36, 'y': 0.0, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_front_left': {
+        'x': 2.36, 'y': -0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_front_right': {
+        'x': 2.36, 'y': 0.792, 'z': 1.5,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back': {
+        'x': -2.36, 'y': 0.0, 'z': 1.55,
+        'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back_left': {
+        'x': -2.36, 'y': -0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': -110,
+        'type': 'sensor.camera.depth',
+    },
+    'depth_back_right': {
+        'x': -2.36, 'y': 0.792, 'z': 1.55,
+        'roll': 0, 'pitch': 0.0, 'yaw': 110,
+        'type': 'sensor.camera.depth',
+    },
+    }
+
+cam2pixel_ = np.array([[0, 1, 0, 0],
+                    [0, 0, -1, 0],
+                    [1, 0, 0, 0],
+                    [0, 0, 0, 1]], dtype=float)
+
 parking_vehicle_rotation = [
     carla.Rotation(yaw=180),
     carla.Rotation(yaw=0)

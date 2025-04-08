@@ -57,7 +57,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, pred_waypoint, pred_segmentation, pred_segmentation_fine, pred_depth = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
@@ -68,10 +68,14 @@ class ParkingTrainingModule(pl.LightningModule):
         loss_dict.update({
             "waypoint_loss": waypoint_loss
         })
-
         segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         loss_dict.update({
             "segmentation_loss": segmentation_loss
+        })
+
+        segmentation_fine_loss = self.segmentation_loss_func(pred_segmentation_fine.unsqueeze(1), batch['segmentation_fine'])
+        loss_dict.update({
+            "segmentation_fine_loss": segmentation_fine_loss
         })
 
         depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
@@ -92,7 +96,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
-        pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
+        pred_control, pred_waypoint, pred_segmentation, pred_segmentation_fine, pred_depth = self.parking_model(batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
@@ -104,10 +108,14 @@ class ParkingTrainingModule(pl.LightningModule):
         val_loss_dict.update({
             "waypoint_val_loss": waypoint_loss,
         })
-
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         val_loss_dict.update({
             "segmentation_val_loss": segmentation_val_loss
+        })
+
+        segmentation_fine_loss = self.segmentation_loss_func(pred_segmentation_fine.unsqueeze(1), batch['segmentation_fine'])
+        val_loss_dict.update({
+            "segmentation_fine_loss": segmentation_fine_loss
         })
 
         depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])

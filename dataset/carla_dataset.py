@@ -8,6 +8,7 @@ import yaml
 
 from PIL import Image
 from loguru import logger
+from scipy.ndimage import zoom
 #import matplotlib.pyplot as plt
 
 
@@ -336,7 +337,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 task_path = os.path.join(root_path, task_dir)
                 all_tasks.append(task_path)
 
-        for task_path in all_tasks:
+        for task_path in all_tasks[:50]:
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
                 # collect data at current frame
@@ -519,7 +520,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         data = {}
-        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
+        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation', 'segmentation_fine',
                 'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
         for key in keys:
             data[key] = []
@@ -546,7 +547,9 @@ class CarlaDataset(torch.utils.data.Dataset):
         # segmentation
         segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
-        data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
+        semantics_downsampled = zoom(segmentation, zoom=0.25, order=0).astype(int).astype(np.float64)
+        data['segmentation'] = torch.from_numpy(semantics_downsampled).long().unsqueeze(0)
+        data['segmentation_fine'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
         # target_point
         data['target_point'] = torch.from_numpy(self.target_point[index])
@@ -615,10 +618,11 @@ class ProcessSemantic:
     def draw_target_slot(self, image, target_slot):
 
         size = image.shape[0]
+        scale = int(self.cfg.bev_x_bound[2]/0.1)
 
         # convert target slot position into pixels
-        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
-        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        x_pixel = target_slot[0] / (self.cfg.bev_x_bound[2]/scale)
+        y_pixel = target_slot[1] / (self.cfg.bev_y_bound[2]/scale)
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
 
         # draw the whole parking slot
