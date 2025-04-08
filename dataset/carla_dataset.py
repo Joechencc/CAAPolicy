@@ -599,7 +599,6 @@ class ProcessSemantic:
 
         # crop image
         cropped_image = scale_and_crop_image(image, scale, crop)
-
         # draw target slot on BEV semantic
         cropped_image = self.draw_target_slot(cropped_image, target_slot)
 
@@ -616,12 +615,12 @@ class ProcessSemantic:
         return semantics.copy()
 
     def draw_target_slot(self, image, target_slot):
-
         size = image.shape[0]
+        scale = self.cfg.bev_x_bound[2]/0.1
 
         # convert target slot position into pixels
-        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
-        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        x_pixel = target_slot[0] / (self.cfg.bev_x_bound[2]/scale)
+        y_pixel = target_slot[1] / (self.cfg.bev_y_bound[2]/scale)
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
 
         # draw the whole parking slot
