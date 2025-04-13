@@ -40,8 +40,8 @@ class OccNet(BEVDepth):
         self.occ_fuser = None
         self.occ_size = occ_size
         self.maxpool = nn.AdaptiveMaxPool3d((160, 160, 1))
-        self.conv1 = nn.Conv2d(in_channels=96, out_channels=32, kernel_size=1)
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=32, kernel_size=1)
+        self.conv1 = nn.Conv2d(in_channels=96, out_channels=64, kernel_size=1)
+        # self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=1)
             
     def image_encoder(self, img):
         imgs = img
@@ -133,14 +133,15 @@ class OccNet(BEVDepth):
         #     fine_feature = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, output['output_feature_fine'][0].shape[1], 1, 1).float()
         #     pred_f = self.empty_idx * torch.ones_like(gt_occ)[:, None].repeat(1, output['output_feature_fine'][0].shape[1], 1, 1).float()
         # else:
-        fine_feature = self.empty_idx * torch.ones((B, H*4, W*4), device=device)[:, None].repeat(1, output['output_feature_fine'][0].shape[1], 1, 1).float()
-        pred_f = self.empty_idx * torch.ones((B, H*4, W*4), device=device)[:, None].repeat(1, output['output_voxels_fine'][0].shape[1], 1, 1).float()
-        for i in range(len(output['output_feature_fine'])):
-            fine_pred_feature = output['output_feature_fine'][i]  # N feats
-            fine_coord = output['output_coords_fine'][i]  # 2 N
-            fine_pred = output['output_voxels_fine'][i]
-            fine_feature[i, :, fine_coord[0], fine_coord[1]] = fine_pred_feature.permute(1, 0)[None]
-            pred_f[i, :, fine_coord[0], fine_coord[1]] = fine_pred.permute(1, 0)[None]
+        fine_feature = self.empty_idx * torch.ones((B, H*4, W*4), device=device)[:, None].repeat(1, 96, 1, 1).float()
+        pred_f = self.empty_idx * torch.ones((B, H*4, W*4), device=device)[:, None].repeat(1, 3, 1, 1).float()
+        if output['output_voxels_fine'] is not None:
+            for i in range(len(output['output_feature_fine'])):
+                fine_pred_feature = output['output_feature_fine'][i]  # N feats
+                fine_coord = output['output_coords_fine'][i]  # 2 N
+                fine_pred = output['output_voxels_fine'][i]
+                fine_feature[i, :, fine_coord[0], fine_coord[1]] = fine_pred_feature.permute(1, 0)[None]
+                pred_f[i, :, fine_coord[0], fine_coord[1]] = fine_pred.permute(1, 0)[None]
     # else:
     #     assert()
         pred_c = output['output_voxels']
@@ -164,10 +165,10 @@ class OccNet(BEVDepth):
         fine_feature = F.interpolate(fine_feature, size=(200, 200), mode='bilinear', align_corners=False)
 
         # coarse_feature = self.maxpool(output['output_feature']).squeeze(-1)  
-        coarse_feature = self.conv2(coarse_feat)
-        coarse_feature = F.interpolate(coarse_feature, size=(200, 200), mode='bilinear', align_corners=False)
+        # coarse_feature = self.conv2(coarse_feat)
+        # coarse_feature = F.interpolate(coarse_feature, size=(200, 200), mode='bilinear', align_corners=False)
 
-        fine_feature = torch.cat((coarse_feature, fine_feature), dim=1)
+        # fine_feature = torch.cat((coarse_feature, fine_feature), dim=1)
         # if gt_occ is not None:
         #     test_output = {
         #         'pred_c': pred_c,

@@ -61,7 +61,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
-            "control_loss": control_loss
+            "control_loss": 2*control_loss
         })
 
         waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
@@ -100,8 +100,8 @@ class ParkingTrainingModule(pl.LightningModule):
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
-            "acc_steer_val_loss": acc_steer_val_loss,
-            "reverse_val_loss": reverse_val_loss
+            "acc_steer_val_loss": 2*acc_steer_val_loss,
+            "reverse_val_loss": 2*reverse_val_loss
         })
 
         waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)

@@ -337,7 +337,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 task_path = os.path.join(root_path, task_dir)
                 all_tasks.append(task_path)
 
-        for task_path in all_tasks[:50]:
+        for task_path in all_tasks:
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
                 # collect data at current frame

@@ -123,108 +123,109 @@ class CONetHead(nn.Module):
         coarse_occ = self.occ_pred_conv(out_voxel_feats)
         out_mask = None
         output = {}
-
         if self.cascade_ratio != 1:
             if self.sample_from_img or self.sample_from_voxel:
                 coarse_occ_mask = coarse_occ.argmax(1) != self.empty_idx
                 
-                assert coarse_occ_mask.sum() > 0, 'no foreground in coarse voxel'
-                B, W, H = coarse_occ_mask.shape
-                coarse_coord_x, coarse_coord_y= torch.meshgrid(torch.arange(W).to(coarse_occ.device),
-                            torch.arange(H).to(coarse_occ.device), indexing='ij')
-                ##### We need to change other mode later ##### 
-                # if self.baseline_mode == "NearRefine": # Provide near_range_mask
-                #     h,w = self.final_occ_size
-                #     w_mask = (torch.arange(W) >= int(w/2)-40) & (torch.arange(W) < int(w/2)+40)
-                #     h_mask = (torch.arange(H) >= int(h/2)-40) & (torch.arange(H) < int(h/2)+40)
-                #     w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
-                #     h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
-                #     w_h_mask = w_mask & h_mask
-                #     w_h_mask = w_h_mask.expand(B, W, H, D)
-                #     w_h_mask = w_h_mask.bool().to(coarse_occ_mask.device)
-                #     out_mask = w_h_mask.clone()
-                #     coarse_occ_mask = coarse_occ_mask & w_h_mask
-                # elif self.baseline_mode == "Trajectory": # Optimize along the trajectory
-                #     #calculate delta translation and delta rotation
-                #     delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
-                #     q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
-                #     q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
-                #     delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
-                    
-                #     r1 = R.from_quat(q1.cpu())
-                #     r2 = R.from_quat(q2.cpu())
-                #     delta_rotation = r2 * r1.inv() 
-                #     delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
-                #     # Calculate 5 waypoints
-                #     trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
-                #     traj_mask = self.create_waypoint_mask(trajectory_waypoints, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
-                #     out_mask = traj_mask.clone()
-                #     coarse_occ_mask = coarse_occ_mask & traj_mask
-                # elif self.baseline_mode == "Zonotope": # Optimize along the trajectory
-                #     #calculate delta translation and delta rotation
-                #     delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
-                #     q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
-                #     q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
-                #     delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
-                    
-                #     r1 = R.from_quat(q1.cpu())
-                #     r2 = R.from_quat(q2.cpu())
-                #     delta_rotation = r2 * r1.inv() 
-                #     delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
-                #     # Calculate 5 waypoints
-                #     trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
-                #     zonotopes = self.generate_zonotopes(trajectory_waypoints, coarse_occ_mask.device)
-                #     zono_mask = self.create_waypoint_mask(zonotopes, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
-                #     out_mask = zono_mask.clone()
-                #     coarse_occ_mask = coarse_occ_mask & zono_mask
+                if coarse_occ_mask.sum() > 0:
+                    B, W, H = coarse_occ_mask.shape
+                    coarse_coord_x, coarse_coord_y= torch.meshgrid(torch.arange(W).to(coarse_occ.device),
+                                torch.arange(H).to(coarse_occ.device), indexing='ij')
+                    ##### We need to change other mode later ##### 
+                    # if self.baseline_mode == "NearRefine": # Provide near_range_mask
+                    #     h,w = self.final_occ_size
+                    #     w_mask = (torch.arange(W) >= int(w/2)-40) & (torch.arange(W) < int(w/2)+40)
+                    #     h_mask = (torch.arange(H) >= int(h/2)-40) & (torch.arange(H) < int(h/2)+40)
+                    #     w_mask = w_mask.view(1, W, 1, 1)  # Shape (1, W, 1, 1)
+                    #     h_mask = h_mask.view(1, 1, H, 1)  # Shape (1, 1, H, 1)
+                    #     w_h_mask = w_mask & h_mask
+                    #     w_h_mask = w_h_mask.expand(B, W, H, D)
+                    #     w_h_mask = w_h_mask.bool().to(coarse_occ_mask.device)
+                    #     out_mask = w_h_mask.clone()
+                    #     coarse_occ_mask = coarse_occ_mask & w_h_mask
+                    # elif self.baseline_mode == "Trajectory": # Optimize along the trajectory
+                    #     #calculate delta translation and delta rotation
+                    #     delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
+                    #     q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
+                    #     q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
+                    #     delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
+                        
+                    #     r1 = R.from_quat(q1.cpu())
+                    #     r2 = R.from_quat(q2.cpu())
+                    #     delta_rotation = r2 * r1.inv() 
+                    #     delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
+                    #     # Calculate 5 waypoints
+                    #     trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
+                    #     traj_mask = self.create_waypoint_mask(trajectory_waypoints, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
+                    #     out_mask = traj_mask.clone()
+                    #     coarse_occ_mask = coarse_occ_mask & traj_mask
+                    # elif self.baseline_mode == "Zonotope": # Optimize along the trajectory
+                    #     #calculate delta translation and delta rotation
+                    #     delta_translation = [kwargs['ego2global_translation_next'][i] - kwargs['ego2global_translation'][i] for i in range(3)]
+                    #     q1 = [kwargs['ego2global_rotation'][i] for i in range(4)]
+                    #     q2 = [kwargs['ego2global_rotation_next'][i] for i in range(4)]
+                    #     delta_translation, q1, q2 = torch.stack(delta_translation).transpose(0,1), torch.stack(q1).transpose(0,1), torch.stack(q2).transpose(0,1)
+                        
+                    #     r1 = R.from_quat(q1.cpu())
+                    #     r2 = R.from_quat(q2.cpu())
+                    #     delta_rotation = r2 * r1.inv() 
+                    #     delta_rotation = torch.tensor(delta_rotation.as_matrix()).to(coarse_occ_mask.device)
+                    #     # Calculate 5 waypoints
+                    #     trajectory_waypoints = self.create_trajectory(r1, delta_translation, delta_rotation, coarse_occ_mask.device, n_step=5)
+                    #     zonotopes = self.generate_zonotopes(trajectory_waypoints, coarse_occ_mask.device)
+                    #     zono_mask = self.create_waypoint_mask(zonotopes, kwargs['img_metas'][0]['pc_range'], (B, W, H, D), coarse_occ_mask.device)
+                    #     out_mask = zono_mask.clone()
+                    #     coarse_occ_mask = coarse_occ_mask & zono_mask
 
-                output['fine_output'] = []
-                output['fine_feature'] = []
-                output['fine_coord'] = []
+                    output['fine_output'] = []
+                    output['fine_feature'] = []
+                    output['fine_coord'] = []
 
-                img_feats_ = img_feats[0]
-                B_i,N_i,C_i, W_i, H_i = img_feats_.shape
-                img_feats_ = img_feats_.reshape(-1, C_i, W_i, H_i)
-                img_feats = [self.img_mlp_0(img_feats_).reshape(B_i, N_i, -1, W_i, H_i)]
+                    img_feats_ = img_feats[0]
+                    B_i,N_i,C_i, W_i, H_i = img_feats_.shape
+                    img_feats_ = img_feats_.reshape(-1, C_i, W_i, H_i)
+                    img_feats = [self.img_mlp_0(img_feats_).reshape(B_i, N_i, -1, W_i, H_i)]
 
-                for b in range(B):
-                    append_feats = []
-                    this_coarse_coord = torch.stack([coarse_coord_x[coarse_occ_mask[b]],
-                                                    coarse_coord_y[coarse_occ_mask[b]]], dim=0)  # 2, N
-                    
-                    # if self.training:
-                    this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio, topk=self.fine_topk)  # 2, 8N/64N
-                    # else:
-                    #     this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio)  # 2, 8N/64N
-                    
-                    output['fine_coord'].append(this_fine_coord)
-                    new_coord = this_fine_coord[None].permute(0,2,1).float().contiguous()  # x y z
+                    for b in range(B):
+                        append_feats = []
+                        this_coarse_coord = torch.stack([coarse_coord_x[coarse_occ_mask[b]],
+                                                        coarse_coord_y[coarse_occ_mask[b]]], dim=0)  # 2, N
+                        
+                        # if self.training:
+                        this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio, topk=self.fine_topk)  # 2, 8N/64N
+                        # else:
+                        #     this_fine_coord = coarse_to_fine_coordinates(this_coarse_coord, self.cascade_ratio)  # 2, 8N/64N
+                        
+                        output['fine_coord'].append(this_fine_coord)
+                        new_coord = this_fine_coord[None].permute(0,2,1).float().contiguous()  # x y z
 
-                    if self.sample_from_voxel:
-                        this_fine_coord = this_fine_coord.float()
-                        this_fine_coord[0, :] = (this_fine_coord[0, :]/(self.final_occ_size[0]-1) - 0.5) * 2
-                        this_fine_coord[1, :] = (this_fine_coord[1, :]/(self.final_occ_size[1]-1) - 0.5) * 2
-                        # this_fine_coord[2, :] = (this_fine_coord[2, :]/(self.final_occ_size[2]-1) - 0.5) * 2
-                        this_fine_coord = this_fine_coord[None,None].permute(0,3,1,2).float()
-                        # 5D grid_sample input: [B, C, H, W, D]; cor: [B, N, 1, 1, 2]; output: [B, C, N, 1, 1]
-                        new_feat = F.grid_sample(out_voxel_feats[b:b+1].permute(0,1,3,2), this_fine_coord, mode='bilinear', padding_mode='zeros', align_corners=False)
-                        append_feats.append(new_feat[0,:,:,0].permute(1,0))
-                        assert torch.isnan(new_feat).sum().item() == 0
-                    # image branch
-                    W_new, H_new = W * self.cascade_ratio, H * self.cascade_ratio
-                    img_uv, img_mask = project_points_on_img(new_coord, rots=transform[0][b:b+1], trans=transform[1][b:b+1],
-                                intrins=transform[2][b:b+1], post_rots=transform[3][b:b+1],
-                                post_trans=transform[4][b:b+1], bda_mat=transform[5][b:b+1],
-                                W_img=transform[6][b:b+1][0][1], H_img=transform[6][b:b+1][0][0],
-                                pts_range=self.point_cloud_range, W_occ=W_new, H_occ=H_new)  # 1 N n_cam 2
-                    for img_feat in img_feats:
-                        sampled_img_feat = F.grid_sample(img_feat[b].contiguous(), img_uv.contiguous(), align_corners=True, mode='bilinear', padding_mode='zeros')
-                        sampled_img_feat = sampled_img_feat * img_mask.permute(2,1,0)[:,None]
-                        sampled_img_feat = self.img_mlp(sampled_img_feat.sum(0)[:,:,0].permute(1,0))
-                        append_feats.append(sampled_img_feat)  # N C
-                        assert torch.isnan(sampled_img_feat).sum().item() == 0
-                    output['fine_output'].append(self.fine_mlp(torch.concat(append_feats, dim=1)))
-                    output['fine_feature'].append(torch.concat(append_feats, dim=1))
+                        if self.sample_from_voxel:
+                            this_fine_coord = this_fine_coord.float()
+                            this_fine_coord[0, :] = (this_fine_coord[0, :]/(self.final_occ_size[0]-1) - 0.5) * 2
+                            this_fine_coord[1, :] = (this_fine_coord[1, :]/(self.final_occ_size[1]-1) - 0.5) * 2
+                            # this_fine_coord[2, :] = (this_fine_coord[2, :]/(self.final_occ_size[2]-1) - 0.5) * 2
+                            this_fine_coord = this_fine_coord[None,None].permute(0,3,1,2).float()
+                            # 5D grid_sample input: [B, C, H, W, D]; cor: [B, N, 1, 1, 2]; output: [B, C, N, 1, 1]
+                            new_feat = F.grid_sample(out_voxel_feats[b:b+1].permute(0,1,3,2), this_fine_coord, mode='bilinear', padding_mode='zeros', align_corners=False)
+                            append_feats.append(new_feat[0,:,:,0].permute(1,0))
+                            assert torch.isnan(new_feat).sum().item() == 0
+                        # image branch
+                        W_new, H_new = W * self.cascade_ratio, H * self.cascade_ratio
+                        img_uv, img_mask = project_points_on_img(new_coord, rots=transform[0][b:b+1], trans=transform[1][b:b+1],
+                                    intrins=transform[2][b:b+1], post_rots=transform[3][b:b+1],
+                                    post_trans=transform[4][b:b+1], bda_mat=transform[5][b:b+1],
+                                    W_img=transform[6][b:b+1][0][1], H_img=transform[6][b:b+1][0][0],
+                                    pts_range=self.point_cloud_range, W_occ=W_new, H_occ=H_new)  # 1 N n_cam 2
+                        for img_feat in img_feats:
+                            sampled_img_feat = F.grid_sample(img_feat[b].contiguous(), img_uv.contiguous(), align_corners=True, mode='bilinear', padding_mode='zeros')
+                            sampled_img_feat = sampled_img_feat * img_mask.permute(2,1,0)[:,None]
+                            sampled_img_feat = self.img_mlp(sampled_img_feat.sum(0)[:,:,0].permute(1,0))
+                            append_feats.append(sampled_img_feat)  # N C
+                            assert torch.isnan(sampled_img_feat).sum().item() == 0
+                        output['fine_output'].append(self.fine_mlp(torch.concat(append_feats, dim=1)))
+                        output['fine_feature'].append(torch.concat(append_feats, dim=1))
+                else:
+                    output['fine_feature'] = [F.interpolate(out_voxel_feats, size=(200, 200), mode="bilinear", align_corners=False)]
 
         res = {
             'output_feature': out_voxel_feats,
