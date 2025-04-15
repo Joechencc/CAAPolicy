@@ -42,7 +42,7 @@ parking_model:
   tf_en_heads: 6
   tf_en_layers: 4
   tf_en_dropout: 0.05
-  tf_en_bev_length: 16
+  tf_en_bev_length: 256
   tf_en_motion_length: 3
 
   # transformer decoder

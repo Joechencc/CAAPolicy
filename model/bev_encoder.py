@@ -22,7 +22,7 @@ class BevEncoder(nn.Module):
         self.layer4 = trunk.layer4
 
     def forward(self, x):
-        x = F.interpolate(x, size=(64, 64), mode="bilinear", align_corners=False)
+        x = F.interpolate(x, size=(256, 256), mode="bilinear", align_corners=False)
 
         x = self.conv1(x)
         x = self.bn1(x)

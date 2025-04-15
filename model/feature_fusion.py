@@ -58,9 +58,12 @@ class FeatureFusion(nn.Module):
 
         # motion_feature.shape
         # torch.Size([1, 256, 2])
+        fuse_feature = torch.cat([bev_feature, motion_feature, target_feature], dim=2)
+        fuse_feature = self.drop_out_encoder(fuse_feature)
 
-        fuse_feature = torch.cat([bev_feature, motion_feature,target_feature], dim=2)
-
+        return fuse_feature
+    
+    def drop_out_encoder(self, fuse_feature):
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
 
         fuse_feature = fuse_feature.transpose(0, 1)

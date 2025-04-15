@@ -125,7 +125,7 @@ class CONetHead(nn.Module):
         output = {}
         if self.cascade_ratio != 1:
             if self.sample_from_img or self.sample_from_voxel:
-                coarse_occ_mask = coarse_occ.argmax(1) != self.empty_idx
+                coarse_occ_mask = coarse_occ.argmax(1) != 10
                 
                 if coarse_occ_mask.sum() > 0:
                     B, W, H = coarse_occ_mask.shape

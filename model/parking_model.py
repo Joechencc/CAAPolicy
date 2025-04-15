@@ -81,7 +81,8 @@ class ParkingModel(nn.Module):
         target_point = target_point.unsqueeze(1)
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
         pred_segmentation_coarse, pred_segmentation_fine, fine_feature = self.segmentation_head(fuse_feature, images, intrinsics)
-        fine_feature = torch.cat((fuse_feature, fine_feature), 1)
+        fine_feature = self.feature_fusion.drop_out_encoder(fine_feature)
+        fine_feature = torch.cat((fine_feature, fuse_feature), 1)
 
         return fuse_feature, fine_feature, pred_segmentation_coarse, pred_segmentation_fine, pred_depth, bev_target
 
