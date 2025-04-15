@@ -41,7 +41,11 @@ class SegmentationHead(nn.Module):
     def forward(self, fuse_feature):
         fuse_feature_t = fuse_feature.transpose(1, 2)
         b, c, s = fuse_feature_t.shape
+        # reshape 256 bev fuse feature tokens to (16,16)  
         fuse_bev = torch.reshape(fuse_feature_t, (b, c, int(math.sqrt(s)), -1))
+        # interpolate (16,16) bev to (200,200) bev 
+        # fuse_bev: torch.Size([1, 64, 200, 200])
         fuse_bev = self.top_down(fuse_bev)
+        # Classification, pred_segmentation: torch.Size([1, 3, 200, 200])
         pred_segmentation = self.segmentation_head(fuse_bev)
         return pred_segmentation

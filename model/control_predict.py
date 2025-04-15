@@ -19,7 +19,29 @@ class ControlPredict(nn.Module):
         self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
         self.output = nn.Linear(self.cfg.tf_de_dim, self.cfg.token_nums)
 
+        self.cross_attention = []
+        self._patch_attention_layers()
+
         self.init_weights()
+    
+    def _patch_attention_layers(self):
+        original_forward = nn.MultiheadAttention.forward
+
+        def patched_forward(self, query, key, value, *args, **kwargs):
+            kwargs['need_weights'] = True #Ensure weights are returned
+            ouput, weights = original_forward(self, query, key, value, *args, **kwargs)
+            # Only store cross-attention (decoder's sencond attention layer) TODO: Are you sure hasattr(self, '_is_cross_attention') will always be true?
+            if hasattr(self, '_is_cross_attention'):
+                if not hasattr(self, '_weights_buffer'):
+                    self._weights_buffer = []
+                self._weights_buffer.append(weights.detach().cpu())
+
+            return ouput, weights
+        
+        nn.MultiheadAttention.forward = patched_forward
+
+        for layer in self.tf_decoder.layers:
+            layer.multihead_attn._is_cross_attention = True
 
     def init_weights(self):
         for name, p in self.named_parameters():
@@ -37,6 +59,11 @@ class ControlPredict(nn.Module):
         return tgt_mask, tgt_padding_mask
 
     def decoder(self, encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask):
+        # Clear previous attention weights
+        for layer in self.tf_decoder.layers:
+            if hasattr(layer.multihead_attn, '_weights_buffer'):
+                layer.multihead_attn._weights_buffer = []
+
         encoder_out = encoder_out.transpose(0, 1)
         tgt_embedding = tgt_embedding.transpose(0, 1)
         pred_controls = self.tf_decoder(tgt=tgt_embedding,
@@ -44,6 +71,11 @@ class ControlPredict(nn.Module):
                                         tgt_mask=tgt_mask,
                                         tgt_key_padding_mask=tgt_padding_mask)
         pred_controls = pred_controls.transpose(0, 1)
+        self.cross_attention = []
+        for i, layer in enumerate(self.tf_decoder.layers):
+            if hasattr(layer.multihead_attn, '_weights_buffer'):
+                self.cross_attention.extend(layer.multihead_attn._weights_buffer)
+        
         return pred_controls
 
     def forward(self, encoder_out, tgt):
@@ -73,3 +105,8 @@ class ControlPredict(nn.Module):
         pred_controls = torch.softmax(pred_controls, dim=-1)
         pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
         return pred_controls
+    
+    def get_cross_attention(self):
+        # Returns list of cross-attention weights from most recent forward pass
+        return self.cross_attention
+

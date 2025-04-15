@@ -107,7 +107,7 @@ class SaveOutput:
 
     def __call__(self, module, module_in, module_out):
         self.outputs.append(module_out[1])
-
+        print("self-attention length",len(self.outputs))
     def clear(self):
         self.outputs = []
 
@@ -155,6 +155,7 @@ def highlight_grid(image, grid_indexes, grid_size=14):
 
 
 def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
+
     if not isinstance(grid_size, tuple):
         grid_size = (grid_size, grid_size)
 
@@ -163,9 +164,19 @@ def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
     att_map = att_map.squeeze()
     average_att_map = att_map.mean(axis=0)
     atten_avg = average_att_map[grid_index].reshape(grid_size[0], grid_size[1])
-    atten_avg = Image.fromarray(atten_avg.numpy()).resize(image.size)
+    atten_avg = Image.fromarray(atten_avg.numpy()).resize(image.size) # (16,16) --> (200,200) using bilinear interpolation upsampling
     return grid_image, atten_avg
 
+def get_xatten_avg_map(att_map, grid_index, image, grid_size=16): #TODO: finish the function
+    if not isinstance(grid_size, tuple):
+        grid_size = (grid_size, grid_size)
+
+    grid_image = highlight_grid(image, [grid_index], grid_size)
+
+    att_map = att_map.squeeze()
+    atten_avg = att_map.reshape(grid_size[0], grid_size[1]) # sum(sum(atten_avg)) = 1, All attention weights sums to '1'
+    atten_avg = Image.fromarray(atten_avg.numpy()).resize(image.size) # (16,16) --> (200,200) using bilinear interpolation upsampling
+    return grid_image, atten_avg
 
 def visualize_grid_to_grid(att_map, grid_index, image, grid_size=16, alpha=0.6):
     if not isinstance(grid_size, tuple):
@@ -211,7 +222,9 @@ class ParkingAgent:
         self.show_eva_imgs = args.show_eva_imgs
 
         self.atten_avg = None
+        self.xatten_avg = None
         self.grid_image = None
+        self.cross_attn_weights = None
 
         self.camera_front = None
         self.camera_front_left = None
@@ -292,7 +305,7 @@ class ParkingAgent:
         patch_attention(self.model.feature_fusion.tf_encoder.layers[-1].self_attn)
         self.hook_handle = self.model.feature_fusion.tf_encoder.layers[-1].self_attn.register_forward_hook(
             self.save_output)
-
+        
         logging.info('Load E2EParkingModel from %s', parking_pth_path)
 
     def save_seg_img(self, pred_segmentation):
@@ -373,13 +386,24 @@ class ParkingAgent:
         self.ego_xy=[]
 
     def save_atten_avg_map(self, data):
-        atten = self.save_output.outputs[0].detach().cpu()
+        atten = self.save_output.outputs[0].detach().cpu() # atten: torch.Size([1, 6, 256, 256])
+        # print('self-attention length: ',len(self.save_output.outputs)) # length === 1
         # visualize_heads(atten)
-
+        # import pdb; pdb.set_trace() 
+        print('Attention shape:', atten.shape)
         bev = data['segmentation']
         bev = bev.convert("RGB")
         # visualize_grid_to_grid(atten, 136, bev)
-        grid_image, atten_avg = get_atten_avg_map(atten, 136, bev)
+        grid_image, atten_avg = get_atten_avg_map(atten, 136, bev) #136
+        grid_image = np.asarray(grid_image)[::-1, ...]
+        atten_avg = np.asarray(atten_avg)[::-1, ...]
+        return grid_image, atten_avg
+    
+    def save_xatten_avg_map(self, data):
+        bev = data['segmentation']
+        bev = bev.convert("RGB")
+        # visualize_grid_to_grid(atten, 136, bev)
+        grid_image, atten_avg = get_xatten_avg_map(self.cross_attn_weights, 0, bev) # self.cross_attn_weights.shape = [1,1,256]
         grid_image = np.asarray(grid_image)[::-1, ...]
         atten_avg = np.asarray(atten_avg)[::-1, ...]
         return grid_image, atten_avg
@@ -413,6 +437,7 @@ class ParkingAgent:
                 start_time = time.time()
 
                 pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+                self.cross_attn_weights = self.model.cross_attention
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -429,6 +454,7 @@ class ParkingAgent:
 
                 if self.show_eva_imgs:
                     self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+                    _, self.xatten_avg = self.save_xatten_avg_map(data) #TODO: display xatten map
                     self.save_seg_img(pred_segmentation)
                     self.save_target_bev_img(target_bev)
                     self.display_imgs()
@@ -656,7 +682,13 @@ class ParkingAgent:
         ax_atten.axis('off')
         ax_atten.set_title('atten(output)', fontsize=10)
         ax_atten.imshow(self.grid_image)
-        ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow')
+        ax_atten.imshow(self.atten_avg / np.max(self.atten_avg), alpha=0.6, cmap='rainbow') #TODO: enabled the original self-attention map for comparison
+
+        ax_atten = plt.subplot(rows, cols, 6)
+        ax_atten.axis('off')
+        ax_atten.set_title('xatten(output)', fontsize=10)
+        ax_atten.imshow(self.grid_image)
+        ax_atten.imshow(self.xatten_avg / np.max(self.xatten_avg), alpha=0.6, cmap='rainbow')
 
         # ax_left = plt.subplot(rows, cols, 5)
         # ax_left.axis('off')

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar, LearningRateMonitor, ModelSummary
 from tool.config import Configuration
+from loss.attention_loss import AttentionLoss
 from loss.control_loss import ControlLoss, ControlValLoss
 from loss.waypoint_loss import WaypointLoss
 from loss.depth_loss import DepthLoss
@@ -41,6 +42,8 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.cfg = cfg
 
+        self.attention_loss_func = AttentionLoss(self.cfg)
+
         self.control_loss_func = ControlLoss(self.cfg)
 
         self.waypoint_loss_func = WaypointLoss(self.cfg)
@@ -55,9 +58,19 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.parking_model = ParkingModel(self.cfg)
 
+        self.attn_loss_weight = 0.0005 #TODO: Adjust the weight for optimal performance
+
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
+        # Get xattention
+        xattention = self.parking_model.cross_attention
+        print(xattention.size)
+
+        attention_loss = self.attn_loss_weight * self.attention_loss_func(batch['attention_mask'], xattention)
+        loss_dict.update({
+            "attention_loss": attention_loss
+        })
 
         control_loss = self.control_loss_func(pred_control, batch)
         loss_dict.update({
@@ -93,6 +106,13 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
+
+        # Get xattention
+        xattention = self.parking_model.cross_attention
+        attention_loss = self.attn_loss_weight * self.attention_loss_func(batch['attention_mask'], xattention)
+        val_loss_dict.update({
+            "attention_loss": attention_loss
+        })
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({

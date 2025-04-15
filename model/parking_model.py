@@ -27,6 +27,8 @@ class ParkingModel(nn.Module):
         self.waypoint_predict = WaypointPredict(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
+
+        self.cross_attention = None
     def adjust_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
         bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
@@ -91,6 +93,8 @@ class ParkingModel(nn.Module):
         fuse_feature_copy = fuse_feature.clone()
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
+        # self.cross_attention.shape = (B,256)
+        self.cross_attention = self.control_predict.get_cross_attention()[-1][:,0,:]
         return pred_control, pred_waypoint, pred_segmentation, pred_depth
 
     def predict(self, data):
@@ -98,9 +102,14 @@ class ParkingModel(nn.Module):
         pred_multi_controls = data['gt_control'].cuda()
         pred_multi_waypoints = data['gt_waypoint'].cuda()
         fuse_feature_copy = fuse_feature.clone()
+        self.cross_attention = 0
         for i in range(3):
             pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+            # reserve the last layer cross attn weights for the first token
+            # average the cross attn for each control step(3 tokens)
+            if i != 0: # skip throttle
+                self.cross_attention += self.control_predict.get_cross_attention()[-1][:,0,:] / 2
         for i in range(12):
             pred_waypoint = self.waypoint_predict.predict(fuse_feature_copy, pred_multi_waypoints)
             pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)

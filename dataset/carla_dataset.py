@@ -5,10 +5,10 @@ import torch.utils.data
 import numpy as np
 import torchvision.transforms
 import yaml
-
+import torch.nn.functional as F
 from PIL import Image
 from loguru import logger
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
 def convert_slot_coord(ego_trans, target_point):
@@ -406,8 +406,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 ys = []
                 yaws = []
 
-
-                for i in range(self.cfg.future_frame_nums):
+                for i in range(8): # change from 4 to 8, self.cfg.future_frame_nums
                     file_path = task_path + f"/measurements/{str(frame + 1 + 10*i ).zfill(4)}.json"
                     if not os.path.exists(file_path):
                         # If the file doesn't exist, use the last frame
@@ -422,11 +421,13 @@ class CarlaDataset(torch.utils.data.Dataset):
                         self.plot_x.append(delta_x)
                         self.plot_y.append(delta_y)
                         self.plot_yaw.append(delta_yaw)
-                    waypoints.append(
-                        tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
-                    xs.append(delta_x)
-                    ys.append(delta_y)
-                    yaws.append(delta_yaw)
+                    if i < 4:
+                        #len = 12 (kept unchaged)
+                        waypoints.append(
+                            tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
+                    xs.append(delta_x) # len = 8 for attention guide
+                    ys.append(delta_y) #len = 8 for attention guide
+                    yaws.append(delta_yaw) #len = 8 for attention guide
 
                     # add_raw_control(data, throttle_brakes, steers, reverse)
 
@@ -436,10 +437,9 @@ class CarlaDataset(torch.utils.data.Dataset):
                 waypoints.append(self.PAD_token)
                 self.waypoint.append(waypoints)
 
-                self.delta_x_values.append(xs)
-                self.delta_y_values.append(ys)
-                self.delta_yaw_values.append(yaws)
-
+                self.delta_x_values.append(xs) 
+                self.delta_y_values.append(ys) 
+                self.delta_yaw_values.append(yaws) 
 
                 # target point
                 with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
@@ -511,16 +511,14 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.target_point = np.array(self.target_point).astype(np.float32)
 
-
         logger.info('Preloaded {} sequences', str(len(self.front)))
-
     def __len__(self):
         return len(self.front)
 
     def __getitem__(self, index):
         data = {}
         keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
-                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
+                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw','attention_mask',]
         for key in keys:
             data[key] = []
 
@@ -571,6 +569,45 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['delta_y'] = torch.from_numpy(self.delta_y_values[index])
         data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
 
+        # TODO: generate attention mask and plot that to confirm the mask is correct.(200*200)
+        plt.figure(figsize=(10, 8))
+
+        # Initialize mask with egocentric range (-10, 10)
+        mask = np.zeros((200, 200))
+        # Add Gaussian distributions for waypoints/targets
+        for i in range(len(self.delta_x_values[index])): # add waypoints in future (3,15)
+            # Convert to pixel coordinates (flip x/y for imshow)
+            y = int(self.delta_y_values[index][i] * 10 + 100)  # x in data → column in mask
+            x = int(self.delta_x_values[index][i] * 10 + 100)  # y in data → row in mask
+            # Add Gaussian (sigma=3 pixels, amplitude=1) 3 pixels = 0.3m
+            gaussian = np.exp(-((np.arange(200) - x)**2 / (2 * 3**2)))
+            gaussian = gaussian[:, None] * np.exp(-((np.arange(200) - y)**2 / (2 * 3**2)))
+            mask += gaussian
+
+        #add attention mask for target only
+        y = int(self.target_point[index][1] * 10 + 100)  # x in data → column in mask
+        x = int(self.target_point[index][0] * 10 + 100)  # y in data → row in mask
+        gaussian = np.exp(-((np.arange(200) - x)**2 / (2 * 3**2)))
+        print("target only")
+        gaussian = gaussian[:, None] * np.exp(-((np.arange(200) - y)**2 / (2 * 3**2)))
+        mask += gaussian
+        print(mask.shape)
+        # normalize the mask
+        mask = mask / np.sum(mask)
+        mask = torch.from_numpy(mask).float().unsqueeze(0).unsqueeze(0)
+        # Downsample to 16x16, 200/16=12.5 → approx
+        mask = F.avg_pool2d(mask, kernel_size=12, stride=12)
+        
+        # # Plot with better visibility
+        # plt.imshow(mask, cmap='hot', interpolation='bilinear')
+        # plt.colorbar(label='Intensity')
+        # plt.title("Waypoints/Targets (Gaussian Smoothed)")
+        # plt.xlabel("X (pixels)")
+        # plt.ylabel("Y (pixels)")
+        # plt.grid(True, alpha=0.3)
+        # plt.show()
+
+        data['attention_mask'] = mask.squeeze(0)    
 
         return data
 
