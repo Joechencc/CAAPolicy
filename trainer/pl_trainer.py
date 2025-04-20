@@ -101,13 +101,13 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
-        pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+        with torch.enable_grad():
+            pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
 
-        control_loss = self.control_loss_func(pred_control, batch)
-        waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-        grad = torch.autograd.grad(control_loss+waypoint_loss, fuse_feature, create_graph=True)[0]
-        refined_feature = grad*fuse_feature
-
+            control_loss = self.control_loss_func(pred_control, batch)
+            waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
+            grad = torch.autograd.grad(control_loss+waypoint_loss, fuse_feature, create_graph=True)[0]
+            refined_feature = grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control_2, batch)
