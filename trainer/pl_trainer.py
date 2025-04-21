@@ -68,7 +68,7 @@ class ParkingTrainingModule(pl.LightningModule):
         # loss_dict.update({
         #     "waypoint_loss": waypoint_loss
         # })
-        grad = torch.autograd.grad(control_loss+waypoint_loss, fuse_feature, create_graph=True)[0]
+        grad = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
         refined_feature = grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
         control_loss_2 = self.control_loss_func(pred_control_2, batch)
@@ -106,7 +106,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
             control_loss = self.control_loss_func(pred_control, batch)
             waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-            grad = torch.autograd.grad(control_loss+waypoint_loss, fuse_feature, create_graph=True)[0]
+            grad = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
             refined_feature = grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
 
