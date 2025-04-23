@@ -68,8 +68,8 @@ class ControlPredict(nn.Module):
         tgt_embedding = tgt_embedding + self.pos_embed
 
         pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
-        pred_controls = self.output(pred_controls)[:, length - 1, :]
+        pred_controls_f = self.output(pred_controls)[:, length - 1, :]
 
-        pred_controls = torch.softmax(pred_controls, dim=-1)
+        pred_controls = torch.softmax(pred_controls_f, dim=-1)
         pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
-        return pred_controls
+        return pred_controls_f, pred_controls

@@ -638,7 +638,15 @@ class ProcessSemantic:
         slot_points_ego[0] += target_point[0]
         slot_points_ego[1] += target_point[1]
 
-        image[tuple(slot_points_ego)] = 255
+        # image[tuple(slot_points_ego)] = 255
+        H, W = image.shape
+        x, y = slot_points_ego
+        valid_mask = (x>=0) & (x<H) & (y>=0) & (y<W)
+
+        x_valid = x[valid_mask]
+        y_valid = y[valid_mask]
+
+        image[x_valid, y_valid] = 255
 
         return image
 
