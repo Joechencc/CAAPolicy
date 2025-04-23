@@ -10,6 +10,7 @@ from loss.waypoint_loss import WaypointLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from model.parking_model import ParkingModel
+import torch.nn.functional as F
 
 
 def setup_callbacks(cfg):
@@ -57,7 +58,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+        pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
         # loss_dict.update({
@@ -68,13 +69,19 @@ class ParkingTrainingModule(pl.LightningModule):
         # loss_dict.update({
         #     "waypoint_loss": waypoint_loss
         # })
-        grad = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
-        refined_feature = grad*fuse_feature
+        grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
+        refined_feature = approx_grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
         control_loss_2 = self.control_loss_func(pred_control_2, batch)
         loss_dict.update({
             "control_loss": control_loss_2
         })
+
+        grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
+        loss_dict.update({
+            "grad_loss": grad_loss
+        })
+
         waypoint_loss_2 = self.waypoint_loss_func(pred_waypoint_2, batch)
         loss_dict.update({
             "waypoint_loss": waypoint_loss_2
@@ -102,12 +109,12 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+            pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
 
             control_loss = self.control_loss_func(pred_control, batch)
             waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-            grad = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
-            refined_feature = grad*fuse_feature
+            grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
+            refined_feature = approx_grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
 
         acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control_2, batch)
@@ -115,7 +122,10 @@ class ParkingTrainingModule(pl.LightningModule):
             "acc_steer_val_loss": acc_steer_val_loss,
             "reverse_val_loss": reverse_val_loss
         })
-        
+        grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
+        val_loss_dict.update({
+            "grad_loss": grad_loss
+        })
         waypoint_loss = self.waypoint_loss_func(pred_waypoint_2, batch)
         val_loss_dict.update({
             "waypoint_val_loss": waypoint_loss,
