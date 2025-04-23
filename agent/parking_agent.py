@@ -436,7 +436,7 @@ class ParkingAgent:
 
                 # import pdb; pdb.set_trace()
                 # draw waypoint WP1, WP2, WP3, WP4
-                for i in range(0,1):
+                for i in range(0,4):
                     #waypoint : [x,y,yaw] in egocentric
                     waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
                     #convert to world frame

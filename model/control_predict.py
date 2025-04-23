@@ -72,4 +72,4 @@ class ControlPredict(nn.Module):
 
         pred_controls = torch.softmax(pred_controls_f, dim=-1)
         pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
-        return pred_controls_f, pred_controls
+        return pred_controls

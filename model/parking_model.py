@@ -101,45 +101,57 @@ class ParkingModel(nn.Module):
 
         return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
 
+    # def forward_eval_twice(self, refined_fuse_feature, pred_multi_controls, pred_multi_waypoints):
+    #     refined_fuse_feature_copy = refined_fuse_feature.clone()
+    #     _, pred_control = self.control_predict.predict(refined_fuse_feature, pred_multi_controls)
+    #     pred_waypoint = self.waypoint_predict.predict(refined_fuse_feature_copy, pred_multi_waypoints)
+    #     return pred_control, pred_waypoint
     def forward_twice(self, refined_feature, data):
         refined_feature_copy = refined_feature.clone()
         pred_control = self.control_predict(refined_feature, data['gt_control'].cuda())
         pred_waypoint = self.waypoint_predict(refined_feature_copy,data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint
-
+        
     def predict(self, data):
+        # with torch.enable_grad():
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
         pred_multi_controls = data['gt_control'].cuda()
         pred_multi_waypoints = data['gt_waypoint'].cuda()
         fuse_feature_copy = fuse_feature.clone()
+        approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_tgt_logits = []
 
         for i in range(3):
-            pred_control, tgt_logit = self.control_predict.predict(fuse_feature, pred_multi_controls)
+            pred_control = self.control_predict.predict(approx_grad*fuse_feature, pred_multi_controls)
+            # pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
+            # pred_tgt_logits.append(pred_controls_f)
+            # grad = torch.autograd.grad(torch.cat(pred_tgt_logits).mean(), fuse_feature, create_graph=True)[0]
+            # refined_feature = approx_grad*fuse_feature
+            # pred_control_2, pred_waypoint_2 = self.forward_eval_twice(refined_feature, pred_multi_controls, pred_multi_waypoints)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-            pred_tgt_logits.append(tgt_logit.squeeze())
+            # pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint_2], dim=1)
         # Compute gradients of the last pred_control w.r.t. fuse_feature
-        grads_throttle = torch.autograd.grad(
-            outputs=pred_tgt_logits[0],
-            inputs=fuse_feature,
-            retain_graph=True,
-            create_graph=True  # if higher-order grads needed later
-        )
-        grads_steer = torch.autograd.grad(
-            outputs=pred_tgt_logits[1],
-            inputs=fuse_feature,
-            retain_graph=True,
-            create_graph=True  # if higher-order grads needed later
-        )
-        grads_reverse = torch.autograd.grad(
-            outputs=pred_tgt_logits[2],
-            inputs=fuse_feature,
-            retain_graph=True,
-            create_graph=True  # if higher-order grads needed later
-        )
+        # grads_throttle = torch.autograd.grad(
+        #     outputs=pred_tgt_logits[0],
+        #     inputs=fuse_feature,
+        #     retain_graph=True,
+        #     create_graph=True  # if higher-order grads needed later
+        # )
+        # grads_steer = torch.autograd.grad(
+        #     outputs=pred_tgt_logits[1],
+        #     inputs=fuse_feature,
+        #     retain_graph=True,
+        #     create_graph=True  # if higher-order grads needed later
+        # )
+        # grads_reverse = torch.autograd.grad(
+        #     outputs=pred_tgt_logits[2],
+        #     inputs=fuse_feature,
+        #     retain_graph=True,
+        #     create_graph=True  # if higher-order grads needed later
+        # )
 
         for i in range(12):
-            pred_waypoint = self.waypoint_predict.predict(fuse_feature_copy, pred_multi_waypoints)
+            pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
             pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
         return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target
