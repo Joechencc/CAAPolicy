@@ -570,7 +570,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
 
         # TODO: generate attention mask and plot that to confirm the mask is correct.(200*200)
-        plt.figure(figsize=(10, 8))
+        # plt.figure(figsize=(10, 8))
 
         # Initialize mask with egocentric range (-10, 10)
         mask = np.zeros((200, 200))
@@ -588,10 +588,10 @@ class CarlaDataset(torch.utils.data.Dataset):
         y = int(self.target_point[index][1] * 10 + 100)  # x in data → column in mask
         x = int(self.target_point[index][0] * 10 + 100)  # y in data → row in mask
         gaussian = np.exp(-((np.arange(200) - x)**2 / (2 * 3**2)))
-        print("target only")
+        # print("target only")
         gaussian = gaussian[:, None] * np.exp(-((np.arange(200) - y)**2 / (2 * 3**2)))
         mask += gaussian
-        print(mask.shape)
+        # print(mask.shape)
         # normalize the mask
         mask = mask / np.sum(mask)
         mask = torch.from_numpy(mask).float().unsqueeze(0).unsqueeze(0)
