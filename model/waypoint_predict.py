@@ -13,7 +13,9 @@ class WaypointPredict(nn.Module):
 
         self.embedding = nn.Embedding(self.cfg.token_nums, self.cfg.tf_de_dim)
         self.pos_drop = nn.Dropout(self.cfg.tf_de_dropout)
-        self.pos_embed = nn.Parameter(torch.randn(1, self.cfg.tf_de_tgt_dim - 1, self.cfg.tf_de_dim) * .02)
+
+        self.waypoint_tgt_dim = 15
+        self.pos_embed = nn.Parameter(torch.randn(1, self.waypoint_tgt_dim - 1, self.cfg.tf_de_dim) * .02)
 
         tf_layer = nn.TransformerDecoderLayer(d_model=self.cfg.tf_de_dim, nhead=self.cfg.tf_de_heads)
         self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
@@ -59,7 +61,8 @@ class WaypointPredict(nn.Module):
 
     def predict(self, encoder_out, tgt):
         length = tgt.size(1)
-        padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
+        #padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
+        padding = torch.ones(tgt.size(0), self.waypoint_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
         tgt = torch.cat([tgt, padding], dim=1)
 
         tgt_mask, tgt_padding_mask = self.create_mask(tgt)
