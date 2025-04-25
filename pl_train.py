@@ -12,10 +12,12 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from dataset.dataloader import ParkingDataModule
 from tool.config import get_cfg
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def train():
+    
+    print("Parsing arguments...")
     arg_parser = argparse.ArgumentParser(description='ParkingModel')
     arg_parser.add_argument(
         '--config',
@@ -28,13 +30,18 @@ def train():
         help='path to model.ckpt')
     args = arg_parser.parse_args()
 
+    print("Reading YAML config file...")
     with open(args.config, 'r') as yaml_file:
         try:
             cfg_yaml = yaml.safe_load(yaml_file)
         except yaml.YAMLError:
             logger.exception("Open {} failed!", args.config)
+    
+    print("Getting full cfg object...")
     cfg = get_cfg(cfg_yaml)
     cfg.model_path = args.model_path
+
+    print("Setting up logger...")
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)
     logger.add(sys.stderr, enqueue=True)
@@ -44,7 +51,7 @@ def train():
 
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
-    num_gpus = 2
+    num_gpus = 1
 
     parking_trainer = Trainer(callbacks=parking_callbacks,
                               logger=tensor_logger,
@@ -55,15 +62,22 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-
+    
+    print("Instantiating model...")
     parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
+    print("Model instantiated.")
+
+    print("Instantiating datamodule...")
     parking_datamodule = ParkingDataModule(cfg)
+    print("Datamodule instantiated.")
+
+    print("Starting training...")
     parking_trainer.fit(
         parking_model, 
         datamodule=parking_datamodule, 
         ckpt_path=cfg.model_path if cfg.model_path else None 
     )
-
+    print("Training completed.")
 
 if __name__ == '__main__':
     train()
