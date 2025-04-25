@@ -107,7 +107,7 @@ class SaveOutput:
 
     def __call__(self, module, module_in, module_out):
         self.outputs.append(module_out[1])
-        print("self-attention length",len(self.outputs))
+        # print("self-attention length",len(self.outputs))
     def clear(self):
         self.outputs = []
 
@@ -390,7 +390,7 @@ class ParkingAgent:
         # print('self-attention length: ',len(self.save_output.outputs)) # length === 1
         # visualize_heads(atten)
         # import pdb; pdb.set_trace() 
-        print('Attention shape:', atten.shape)
+        # print('Attention shape:', atten.shape)
         bev = data['segmentation']
         bev = bev.convert("RGB")
         # visualize_grid_to_grid(atten, 136, bev)

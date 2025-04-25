@@ -197,8 +197,9 @@ class NetworkEvaluator:
         self.soft_destroy()
 
         self._seed = self._init_seed
-
-        self._parking_goal_index = 16
+        
+        # TODO: set to 19 to test narrow slot parking performance
+        self._parking_goal_index = 19
         self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
         self._ego_transform_generator.update_eva_goal_y(self._parking_goal.y,
                                                         self._eva_parking_nums,
