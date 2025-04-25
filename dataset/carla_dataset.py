@@ -31,7 +31,6 @@ def convert_slot_coord(ego_trans, target_point):
 
     return target_point
 
-
 def convert_veh_coord(x, y, z, ego_trans):
     """
     Convert coordinate (x,y,z) in world frame into self-veh frame
@@ -46,7 +45,6 @@ def convert_veh_coord(x, y, z, ego_trans):
     target_array = np.array([x, y, z, 1.0], dtype=float)
     target_point_self_veh = world2veh @ target_array
     return target_point_self_veh
-
 
 def scale_and_crop_image(image, scale=1.0, crop=256):
     """
@@ -66,7 +64,7 @@ def scale_and_crop_image(image, scale=1.0, crop=256):
     return cropped_image
 
 
-def tokenize_control(throttle, brake, steer, reverse, token_nums=200):
+def tokenize_control(throttle, brake, steer, reverse, token_nums):
     """
     Tokenize control signal
     :param throttle: [0,1]
@@ -88,8 +86,8 @@ def tokenize_control(throttle, brake, steer, reverse, token_nums=200):
     reverse_token = int(reverse * valid_token)
     return [throttle_brake_token, steer_token, reverse_token]
 
-
-def detokenize_control(token_list, token_nums=204):
+def detokenize_control(token_list, token_nums):
+    
     """
     Detokenize control signals
     :param token_list: [throttle_brake, steer, reverse]
@@ -112,6 +110,65 @@ def detokenize_control(token_list, token_nums=204):
 
     return [throttle, brake, steer, reverse]
 
+def tokenize_control_group(throttle, brake, steer, reverse, token_nums=204):
+    """
+    Tokenize control signals into a single token
+    :param throttle: [0,1]
+    :param brake: [0,1]
+    :param steer: [-1,1]
+    :param reverse: {0,1}
+    :param token_nums: size of token space
+    :return: a single tokenized control value
+    """
+    # First get the individual tokens as before
+    valid_token = token_nums - 4
+    half_token = valid_token / 2
+    
+    if brake != 0.0:
+        throttle_brake_token = int(half_token * (-brake + 1))
+    else:
+        throttle_brake_token = int(half_token * (throttle + 1))
+    
+    steer_token = int((steer + 1) * half_token)
+    reverse_token = 1 if reverse else 0
+    
+    # Calculate a single combined token
+    # We use the valid_token as a base for our number system
+    # This creates a unique mapping for each combination
+    combined_token = throttle_brake_token + (steer_token * (valid_token + 1)) + (reverse_token * (valid_token + 1) * (valid_token + 1))
+    
+    return combined_token
+
+def detokenize_control_group(combined_token, token_nums):
+    """
+    Decode a combined token back into throttle/brake, steer, and reverse
+    :param combined_token: the combined token
+    :param token_nums: size of token space
+    :return: [throttle, brake, steer, reverse]
+    """
+    valid_token = token_nums - 4
+    base = valid_token + 1
+    
+    # Extract the individual tokens
+    throttle_brake_token = combined_token % base
+    steer_token = (combined_token // base) % base
+    reverse_token = combined_token // (base * base)
+    
+    # Convert back to control values
+    half_token = valid_token / 2
+    
+    # Determine if it's throttle or brake
+    if throttle_brake_token < half_token:
+        throttle = (throttle_brake_token / half_token) - 1
+        brake = 0.0
+    else:
+        throttle = 0.0
+        brake = 1 - ((throttle_brake_token - half_token) / half_token)
+    
+    steer = (steer_token / half_token) - 1
+    reverse = 1 if reverse_token > 0 else 0
+    
+    return [throttle, brake, steer, reverse]
 
 def tokenize_waypoint(x, y, yaw, token_nums=204):
     """
@@ -139,8 +196,6 @@ def tokenize_waypoint(x, y, yaw, token_nums=204):
     yaw_token = tokenize_single_value(yaw, -40, 40)
 
     return  [x_token, y_token, yaw_token]
-
-
 
 def detokenize_waypoint(token_list, token_nums=204):
     """
@@ -335,27 +390,42 @@ class CarlaDataset(torch.utils.data.Dataset):
             for task_dir in os.listdir(root_path):
                 task_path = os.path.join(root_path, task_dir)
                 all_tasks.append(task_path)
-
-        for task_path in all_tasks:
+        #print("This is all_task",all_tasks[0])
+        for task_path in all_tasks[0:1]:
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
-                self.front.append(task_path + "/camera_front/" + filename)
-                self.front_left.append(task_path + "/camera_front_left/" + filename)
-                self.front_right.append(task_path + "/camera_front_right/" + filename)
-                self.back.append(task_path + "/camera_back/" + filename)
-                self.back_left.append(task_path + "/camera_back_left/" + filename)
-                self.back_right.append(task_path + "/camera_back_right/" + filename)
+                # self.front.append(task_path + "/camera_front/" + filename)
+                # self.front_left.append(task_path + "/camera_front_left/" + filename)
+                # self.front_right.append(task_path + "/camera_front_right/" + filename)
+                # self.back.append(task_path + "/camera_back/" + filename)
+                # self.back_left.append(task_path + "/camera_back_left/" + filename)
+                # self.back_right.append(task_path + "/camera_back_right/" + filename)
+
+                # # depth
+                # self.front_depth.append(task_path + "/depth_front/" + filename)
+                # self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
+                # self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
+                # self.back_depth.append(task_path + "/depth_back/" + filename)
+                # self.back_left_depth.append(task_path + "/depth_back_left/" + filename)
+                # self.back_right_depth.append(task_path + "/depth_back_right/" + filename)
+
+                self.front.append(task_path + "/camera_front_us/" + filename)
+                self.front_left.append(task_path + "/camera_front_left_us/" + filename)
+                self.front_right.append(task_path + "/camera_front_right_us/" + filename)
+                self.back.append(task_path + "/camera_back_us/" + filename)
+                self.back_left.append(task_path + "/camera_back_left_us/" + filename)
+                self.back_right.append(task_path + "/camera_back_right_us/" + filename)
 
                 # depth
-                self.front_depth.append(task_path + "/depth_front/" + filename)
-                self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
-                self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
-                self.back_depth.append(task_path + "/depth_back/" + filename)
-                self.back_left_depth.append(task_path + "/depth_back_left/" + filename)
-                self.back_right_depth.append(task_path + "/depth_back_right/" + filename)
+                self.front_depth.append(task_path + "/depth_front_us/" + filename)
+                self.front_left_depth.append(task_path + "/depth_front_left_us/" + filename)
+                self.front_right_depth.append(task_path + "/depth_front_right_us/" + filename)
+                self.back_depth.append(task_path + "/depth_back_us/" + filename)
+                self.back_left_depth.append(task_path + "/depth_back_left_us/" + filename)
+                self.back_right_depth.append(task_path + "/depth_back_right_us/" + filename)
 
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
@@ -381,11 +451,14 @@ class CarlaDataset(torch.utils.data.Dataset):
                 for i in range(self.cfg.future_frame_nums):
                     with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
                         data = json.load(read_file)
-                    controls.append(
-                        tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                    #controls.append(
+                    #    tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                    group_token = tokenize_control_group(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums)
+                    controls.append(group_token) # already flatten, no need for further flatten
+
                     add_raw_control(data, throttle_brakes, steers, reverse)
 
-                controls = [item for sublist in controls for item in sublist]
+                #controls = [item for sublist in controls for item in sublist]
                 controls.insert(0, self.BOS_token)
                 controls.append(self.EOS_token)
                 controls.append(self.PAD_token)
