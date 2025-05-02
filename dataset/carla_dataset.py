@@ -246,8 +246,6 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.back_left_depth = []
         self.back_right_depth = []
 
-
-
         self.control = []
 
         self.velocity = []
@@ -257,12 +255,14 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.throttle_brake = []
         self.steer = []
         self.reverse = []
+        self.raw_control = [] # raw(untokenized)steer, brake, throttle
 
         self.target_point = []
 
         self.topdown = []
 
         self.waypoint = []
+        self.ego_pos = []
         self.delta_x_values = []
         self.delta_y_values = []
         self.delta_yaw_values = []
@@ -394,13 +394,16 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.throttle_brake.append(throttle_brakes)
                 self.steer.append(steers)
                 self.reverse.append(reverse)
-
+                # raw control will be used to predict next ego_pose
+                self.raw_control.append([data['Throttle'],data['Brake'],data['Steer']])
                 # waypoint
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
                     cur_x = data['x']
                     cur_y = data['y']
                     cur_yaw = data['yaw']
+                ego_pos = [cur_x, cur_y, cur_yaw]
+                self.ego_pos.append(ego_pos)
                 waypoints = []
                 xs = []
                 ys = []
@@ -510,7 +513,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
         self.target_point = np.array(self.target_point).astype(np.float32)
-
+        self.ego_pos = np.array(self.ego_pos).astype(np.float32)
 
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
@@ -520,7 +523,7 @@ class CarlaDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         data = {}
         keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
-                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
+                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw', 'ego_pos','ego_pos_next','raw_control']
         for key in keys:
             data[key] = []
 
@@ -563,7 +566,11 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['gt_steer'] = torch.from_numpy(self.steer[index])
         data['gt_reverse'] = torch.from_numpy(self.reverse[index])
 
-        # gt waypoint token
+        # gt untokenized control
+        # TODO: check if the the raw control list is converted to array successfully
+        data['raw_control'] = torch.from_numpy(np.array(self.raw_control[index]))
+        # print("raw_control", data['raw_control'])
+        # gt waypoint token:
         data['gt_waypoint'] = torch.from_numpy(self.waypoint[index])
 
         # gt waypoint raw
@@ -571,6 +578,9 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['delta_y'] = torch.from_numpy(self.delta_y_values[index])
         data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
 
+        # gt ego_pos current & next frame
+        data['ego_pos'] = torch.from_numpy(self.ego_pos[index])
+        data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index+1 if index + 1 < len(self.ego_pos) else index])
 
         return data
 
