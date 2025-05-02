@@ -9,6 +9,8 @@ from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
 from model.waypoint_predict import WaypointPredict
 from model.gradient_approx import GradientApproximator
+from model.temporal_fusion import TemporalFusion
+from model.dynamics_model import DynamicsModel
 
 
 class ParkingModel(nn.Module):
@@ -30,6 +32,10 @@ class ParkingModel(nn.Module):
         self.grad_approx = GradientApproximator(self.cfg.bev_encoder_out_channel)
 
         self.segmentation_head = SegmentationHead(self.cfg)
+
+        self.dynamics_model = DynamicsModel()
+
+        self.temporal_fusion = TemporalFusion(self.cfg)
     def adjust_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
         bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
@@ -90,16 +96,23 @@ class ParkingModel(nn.Module):
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        fuse_feature_copy = fuse_feature.clone()
         # if not self.training:
         #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
         #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
-        # else:
-        fuse_feature_copy = fuse_feature.clone()
+        # Predict the next ego_pos dynamic model
+        pred_ego_pos = self.dynamics_model(data)
+
+        delta_ego_motion = pred_ego_pos - data['ego_pos']
+
+        # Temporal Fusion: return the fused feature and bev cache for next-step's input
+        fuse_feature_copy = self.temporal_fusion(fuse_feature_copy,delta_ego_motion)
+
         approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
-
-        return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
+        
+        return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad, pred_ego_pos
 
     # def forward_eval_twice(self, refined_fuse_feature, pred_multi_controls, pred_multi_waypoints):
     #     refined_fuse_feature_copy = refined_fuse_feature.clone()
