@@ -11,7 +11,7 @@ from model.waypoint_predict import WaypointPredict
 from model.gradient_approx import GradientApproximator
 from model.temporal_fusion import TemporalFusion
 from model.dynamics_model import DynamicsModel
-
+from model.hybrid_dynamics_model import HybridDynamicsModel
 
 class ParkingModel(nn.Module):
     def __init__(self, cfg: Configuration):
@@ -36,6 +36,19 @@ class ParkingModel(nn.Module):
         self.dynamics_model = DynamicsModel()
 
         self.temporal_fusion = TemporalFusion(self.cfg)
+
+        self.hybrid_dynamics_model = HybridDynamicsModel()
+
+        checkpoint = torch.load(self.cfg.hybrid_ckpt_path, map_location=self.cfg.device)
+        # Remove "model." prefix from keys in the state_dict
+        state_dict = checkpoint['state_dict']
+        new_state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
+        self.hybrid_dynamics_model.load_state_dict(new_state_dict)
+
+        # Freeze weights of hybrid_dynamics_model
+        for param in self.hybrid_dynamics_model.parameters():
+            param.requires_grad = False
+
     def adjust_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
         bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
@@ -95,24 +108,23 @@ class ParkingModel(nn.Module):
         return fuse_feature, pred_segmentation, pred_depth, bev_target
 
     def forward(self, data):
+        # import pdb; pdb.set_trace()
+        # TODO: every time goes through the encoder, memory reserved increase 2GB
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
         fuse_feature_copy = fuse_feature.clone()
-        # if not self.training:
-        #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
-        #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
-        # Predict the next ego_pos dynamic model
-        pred_ego_pos = self.dynamics_model(data)
-
-        delta_ego_motion = pred_ego_pos - data['ego_pos']
-
+        # TODO: Train with ground truth, only use dynamics model for inference
+        delta_xy = data['delta_xy'].cuda()
+        # TODO: couuld also use ground truth for inference.
+        # with torch.no_grad():
+        #     _,_, delta_xy = self.hybrid_dynamics_model(data)
         # Temporal Fusion: return the fused feature and bev cache for next-step's input
-        fuse_feature_copy = self.temporal_fusion(fuse_feature_copy,delta_ego_motion)
+        fuse_feature_copy = self.temporal_fusion(fuse_feature_copy, delta_xy, data['ego_pos'][:, 2].unsqueeze(1))
 
         approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
         
-        return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad, pred_ego_pos
+        return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
 
     # def forward_eval_twice(self, refined_fuse_feature, pred_multi_controls, pred_multi_waypoints):
     #     refined_fuse_feature_copy = refined_fuse_feature.clone()
@@ -137,32 +149,7 @@ class ParkingModel(nn.Module):
 
         for i in range(3):
             pred_control = self.control_predict.predict(approx_grad*fuse_feature, pred_multi_controls)
-            # pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
-            # pred_tgt_logits.append(pred_controls_f)
-            # grad = torch.autograd.grad(torch.cat(pred_tgt_logits).mean(), fuse_feature, create_graph=True)[0]
-            # refined_feature = approx_grad*fuse_feature
-            # pred_control_2, pred_waypoint_2 = self.forward_eval_twice(refined_feature, pred_multi_controls, pred_multi_waypoints)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-            # pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint_2], dim=1)
-        # Compute gradients of the last pred_control w.r.t. fuse_feature
-        # grads_throttle = torch.autograd.grad(
-        #     outputs=pred_tgt_logits[0],
-        #     inputs=fuse_feature,
-        #     retain_graph=True,
-        #     create_graph=True  # if higher-order grads needed later
-        # )
-        # grads_steer = torch.autograd.grad(
-        #     outputs=pred_tgt_logits[1],
-        #     inputs=fuse_feature,
-        #     retain_graph=True,
-        #     create_graph=True  # if higher-order grads needed later
-        # )
-        # grads_reverse = torch.autograd.grad(
-        #     outputs=pred_tgt_logits[2],
-        #     inputs=fuse_feature,
-        #     retain_graph=True,
-        #     create_graph=True  # if higher-order grads needed later
-        # )
 
         for i in range(12):
             pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)

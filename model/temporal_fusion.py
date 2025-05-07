@@ -8,7 +8,8 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         super().__init__()
         # self.cfg = cfg
         self.bev_cache = None # bev_cache: torch.size(B, 256, T, 264), e.g.: T=10
-        self.delta_ego_motion = torch.Size([0, 3])  # Initialize as empty tensor
+        self.last_delta_xy = None # Initialize as empty tensor
+        self.last_yaw = None  # Initialize last_yaw as None
 
         # Define the MLP layer to reduce feature dimensions
         self.mlp = nn.Sequential(
@@ -17,7 +18,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
             nn.Linear(256, 256)  # Output: reduced feature dimension
         )
 
-    def forward(self, fuse_feature, delta_ego_motion):
+    def forward(self, fuse_feature, delta_xy, delta_yaw): # cur_yaw
         '''
         Input:
         fuse_feature: torch.size(B, 256, 264)
@@ -26,6 +27,19 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         Output:
         Updated BEV cache with all T steps projected to the current ego-centric BEV range.
         '''
+        # TODO: calculate delta yaw by cur_yaw - self.last_yaw
+        # if self.last_delta_xy is None:
+        #     self.last_delta_xy = torch.zeros(fuse_feature.shape[0], 2, device=fuse_feature.device)
+        # if self.last_yaw is None:
+        #     delta_yaw = torch.zeros(fuse_feature.shape[0], 1, device=fuse_feature.device)
+        # else:
+        #     delta_yaw = cur_yaw - self.last_yaw
+        delta_yaw = delta_yaw # Shape: (B, 1)
+        # import pdb; pdb.set_trace()
+        delta_ego_motion = torch.cat((delta_xy, delta_yaw), dim=1) # Shape: (B, 3)
+
+        # delta_ego_motion = torch.cat((self.last_delta_xy, delta_yaw), dim=1) # Shape: (B, 3)
+        # self.last_yaw = cur_yaw.detach()  # Update last_yaw for the next step
         # initialize the BEV cache by repeat the first fuse_feature 10 times, if it's empty
         if self.bev_cache is None:
             self.bev_cache = fuse_feature.unsqueeze(2).repeat(1, 1, 10, 1)  # Shape: (B, 256, T=10, 264)
@@ -38,17 +52,18 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
 
         # Add the new fuse_feature as the 10th time step
         self.bev_cache = torch.cat((self.bev_cache, new_feature), dim=2)  # Shape: (B, 256, T=10, 264)
-
         # Crop and project all T steps in bev_cache to the current ego-centric BEV range
         aligned_bev = self.align_bev(self.bev_cache, delta_ego_motion)
         # plot the BEV features for debugging
         self.plot_bev_features(aligned_bev)
 
-        self.delta_ego_motion = delta_ego_motion  # Update the delta_ego_motion for next step temporal fusion
-        self.bev_cahce = aligned_bev.view(B, L, T, C)  # Update the BEV cache with the aligned BEV
+        self.delta_ego_motion = delta_ego_motion.detach()  # Update the delta_ego_motion for next step temporal fusion
+        # TODO: Accumulated Memory is sorted by detaching bev_cache
+        # TODO: however, is this the right way to do it?
+        self.bev_cache = aligned_bev.view(B, L, T, C) # Update the BEV cache with the aligned BEV
         # Avg_pool & Max_pool, then concat the two pooled features
-        avg_pool = torch.mean(self.bev_cahce, dim=2, keepdim=True)  # Shape: (B, 256, 1, 264)
-        max_pool, _ = torch.max(self.bev_cahce, dim=2, keepdim=True)  # Shape: (B, 256, 1, 264)
+        avg_pool = torch.mean(self.bev_cache, dim=2, keepdim=True)  # Shape: (B, 256, 1, 264)
+        max_pool, _ = torch.max(self.bev_cache, dim=2, keepdim=True)  # Shape: (B, 256, 1, 264)
         pooled_features = torch.cat((avg_pool, max_pool), dim=1)  # Shape: (B, 256*2, 1, 264)
 
         # MLP layer to reduce the feature dimension from (B, 256*2, 1, 264) to (B, 256, 1, 264)
@@ -58,7 +73,8 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
 
         # Reshape to (B, 256, 264)
         final_features = reduced_features.squeeze(2)  # Shape: (B, 256, 264)
-
+        self.bev_cache = self.bev_cache.detach() 
+        # self.last_delta_xy = self.delta_xy.detach()  # Detach the last_ego_xy for next step
         return final_features
 
     def align_bev(self, raw_bev_cache, delta_ego_motion):
@@ -90,12 +106,18 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
 
         # Create the affine transformation matrix for all T-1 channels
         theta = torch.zeros((B, 2, 3), device=raw_bev_cache.device)  # Shape: (B, 2, 3)
-        theta[:, 0, 0] = torch.cos(dyaw.squeeze())
-        theta[:, 0, 1] = -torch.sin(dyaw.squeeze())
-        theta[:, 1, 0] = torch.sin(dyaw.squeeze())
-        theta[:, 1, 1] = torch.cos(dyaw.squeeze())
-        theta[:, 0, 2] = dx.squeeze()
-        theta[:, 1, 2] = dy.squeeze()
+        cos_dyaw = torch.cos(delta_yaw.squeeze())
+        sin_dyaw = torch.sin(delta_yaw.squeeze())
+
+        # Rotation part (inverse rotation)
+        theta[:, 0, 0] = cos_dyaw
+        theta[:, 0, 1] = sin_dyaw # Note: sin( -dyaw) = -sin(dyaw)
+        theta[:, 1, 0] = -sin_dyaw # Note: sin(-dyaw) = -sin(dyaw)
+        theta[:, 1, 1] = cos_dyaw
+
+        # Translation part (inverse translation in the rotated frame, mapped to [-1, 1] range)
+        theta[:, 0, 2] = -(cos_dyaw * delta_x.squeeze() + sin_dyaw * delta_y.squeeze())
+        theta[:, 1, 2] = (sin_dyaw * delta_x.squeeze() - cos_dyaw * delta_y.squeeze())
 
         # Reshape raw_bev_cache to (B * T, C, H, W)
         bev_cache = raw_bev_cache.permute(0, 3, 4, 1, 2).contiguous().view(B * T, C, H, W)
@@ -133,6 +155,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
 
         # Loop through each time step
         for t in range(T):
+            # TODO: Visualize other channels if needed
             # Take the first batch (B=0) and the first channel (C=0) for visualization
             feature_map = bev_features[0, :, :, t, 0].cpu().detach().numpy()  # Shape: (16, 16)
 

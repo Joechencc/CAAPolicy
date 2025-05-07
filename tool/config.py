@@ -108,4 +108,6 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_de_dropout = config['tf_de_dropout']
     cfg.tf_de_tgt_dim = config['tf_de_tgt_dim']
 
+    cfg.hybrid_ckpt_path = config['hybrid_ckpt_path']
+
     return cfg
