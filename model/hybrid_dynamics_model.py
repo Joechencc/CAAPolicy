@@ -46,9 +46,11 @@ class ResidualNetwork(nn.Module):
     Neural network to learn the residual error between the kinematic model's prediction
     and the ground truth.
     """
+    # TODO: remove x,y from the input 10 --> 8
     def __init__(self):
         super().__init__()
         self.mlp = nn.Sequential(
+            # TODO: 3 layers are enough?
             nn.Linear(10, 128),
             nn.LayerNorm(128),
             nn.ReLU(),
@@ -58,9 +60,11 @@ class ResidualNetwork(nn.Module):
             nn.Linear(64, 32),
             nn.LayerNorm(32),
             nn.ReLU(),
-            nn.Linear(32, 2)  # Residual correction [dx, dy, dyaw]
+            # TODO: output 4 features (dx,dy,stdx,stdy)
+            nn.Linear(32, 2)  # Residual correction [dx, dy]
         )
-
+        # TODO: add variance to the output
+        # TODO: nl gt_x, gt_y 
     def forward(self, inputs):
         return self.mlp(inputs)
 

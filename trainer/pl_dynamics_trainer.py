@@ -28,7 +28,7 @@ class DynamicsTrainingModule(pl.LightningModule):
             'raw_control': raw_control,
             'ego_pos': ego_pos
         }
-        pred_next_ego_pos, _ = self.model(data)
+        pred_next_ego_pos, _, _ = self.model(data)
 
         # Compute loss
         loss = self.criterion(pred_next_ego_pos, next_ego_pos[:, :2])
