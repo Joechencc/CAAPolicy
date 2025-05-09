@@ -384,6 +384,28 @@ class ParkingAgent:
         atten_avg = np.asarray(atten_avg)[::-1, ...]
         return grid_image, atten_avg
 
+    def draw_waypoints_on_bev(self, waypoints, bev_image):
+        """
+        Overlays waypoints onto a BEV image.
+        :param waypoints: list of [x, y, yaw] in ego-coordinates.
+        :param bev_image: numpy array representing the BEV image (H, W) or (H, W, 3)
+        :return: PIL Image with waypoints drawn.
+        """
+        img = Image.fromarray(np.uint8(bev_image)).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        bev_shape = bev_image.shape[0]
+
+        for idx, wp in enumerate(waypoints):
+            # Convert ego-coordinates to pixel (BEV center is ego, so shift accordingly)
+            x_pix = int(bev_shape / 2 - wp[0] / self.cfg.bev_x_bound[2])
+            y_pix = int(bev_shape / 2 + wp[1] / self.cfg.bev_y_bound[2])
+
+            # Draw small circle or label
+            draw.ellipse([(y_pix - 2, x_pix - 2), (y_pix + 2, x_pix + 2)], fill="red")
+            draw.text((y_pix + 3, x_pix - 10), f"WP{idx+1}", fill="yellow")
+
+        return img
+
     def tick(self):
         if self.net_eva.agent_need_init:
             self.init_agent()
@@ -427,6 +449,11 @@ class ParkingAgent:
 
                 self.speed_limit(data_frame)
 
+                self.waypoints_ego = []
+                for i in range(0, self.cfg.future_frame_nums):
+                    wp = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                    self.waypoints_ego.append(wp)
+
                 if self.show_eva_imgs:
                     self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
                     self.save_seg_img(pred_segmentation)
@@ -435,7 +462,7 @@ class ParkingAgent:
                 self.save_output.clear()
 
                 # draw waypoint WP1, WP2, WP3, WP4
-                for i in range(0,4):
+                for i in range(0, self.cfg.future_frame_nums):
                     #waypoint : [x,y,yaw] in egocentric
                     waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
                     #convert to world frame
@@ -677,6 +704,13 @@ class ParkingAgent:
         ax_bev.axis('off')
         ax_bev.set_title('seg_bev(output)', fontsize=10)
         ax_bev.imshow(self.seg_bev)
+
+        # Overlay waypoints on BEV and plot
+        bev_with_waypoints = self.draw_waypoints_on_bev(self.waypoints_ego, self.seg_bev)
+        ax_bev = plt.subplot(rows, cols, 8)
+        ax_bev.axis('off')
+        ax_bev.set_title('seg_bev + waypoints', fontsize=10)
+        ax_bev.imshow(bev_with_waypoints)
 
         plt.pause(0.1)
         plt.clf()

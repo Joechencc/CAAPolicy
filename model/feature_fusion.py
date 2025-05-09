@@ -59,7 +59,7 @@ class FeatureFusion(nn.Module):
         # motion_feature.shape
         # torch.Size([1, 256, 2])
 
-        fuse_feature = torch.cat([bev_feature, motion_feature,target_feature], dim=2)
+        fuse_feature = torch.cat([bev_feature, motion_feature, target_feature], dim=2)
 
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
 

@@ -544,7 +544,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+        # segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=100,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
@@ -620,6 +621,7 @@ class ProcessSemantic:
         x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
         y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
         target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
+        # print(target_point)
 
         # draw the whole parking slot
         slot_points = []
@@ -637,6 +639,13 @@ class ProcessSemantic:
         # get parking slot points on pixel frame
         slot_points_ego[0] += target_point[0]
         slot_points_ego[1] += target_point[1]
+
+        # Filter points to be within the image boundaries
+        valid_indices = (
+            (slot_points_ego[0] >= 0) & (slot_points_ego[0] < size) &
+            (slot_points_ego[1] >= 0) & (slot_points_ego[1] < size)
+        )
+        slot_points_ego = slot_points_ego[:, valid_indices]
 
         image[tuple(slot_points_ego)] = 255
 
