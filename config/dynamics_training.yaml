@@ -1,6 +1,7 @@
 # General settings
 log_dir: ./logs/dynamics_model  # Directory to save logs and checkpoints
 train_data_dir: /vast/rs9193/Town_Opt_1000 # /scratch/rs9193/Town_Opt_1   # Path to the training dataset
+# val_data_dir: /vast/rs9193/Town_Opt_1000_small # /scratch/rs9193/Town_Opt_1   # Path to the training dataset
 val_data_dir: /scratch/rs9193/Town_Opt_1000_Val # /scratch/rs9193/Town_Opt_1        # Path to the validation dataset
 
 # Training settings
@@ -29,12 +30,13 @@ parking_model:
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 1
+  batch_size: 200
 
   training_map: /vast/rs9193/Town_Opt_1000 # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
+  # validation_map: /vast/rs9193/Town_Opt_1000_small # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
   validation_map: /scratch/rs9193/Town_Opt_1000_Val # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
-  future_frame_nums: 4
-  hist_frame_nums: 10
+  future_frame_nums: 1
+  hist_frame_nums: 0
   token_nums: 204
   image_crop: 256
 

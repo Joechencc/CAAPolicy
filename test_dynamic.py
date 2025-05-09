@@ -2,8 +2,9 @@ import os
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+from dataset.carla_dataset_dynamic import CarlaDatasetDynamic
 from dataset.carla_dataset import CarlaDataset
-from model.hybrid_dynamics_model import HybridDynamicsModel
+from model.dynamics_model import DynamicsModel as DynamicsModel 
 from tool.config import get_cfg
 import yaml
 from loguru import logger
@@ -32,14 +33,14 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
         task_index (int): Index of the task to visualize.
     """
     # Load the dataset
-    dataset = CarlaDataset(root_dir=dataset_path, is_train=False, config=config)
+    dataset = CarlaDatasetDynamic(root_dir=dataset_path, is_train=False, config=config)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     # Get the start and end indices for the specified task
     start_index, end_index = dataset.task_offsets[task_index]
 
     # Load the trained model
-    model = HybridDynamicsModel()
-    checkpoint = torch.load("./ckpt/last.ckpt")
+    model = DynamicsModel()
+    checkpoint = torch.load("./ckpt/exp_2025_5_9_0_25_18/last.ckpt")
     # Remove "model." prefix from keys in the state_dict
     state_dict = checkpoint['state_dict']
     new_state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
@@ -50,6 +51,7 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
 
     # Initialize lists to store trajectories
     predicted_trajectory = []
+    track_trajectory = []
     ground_truth_trajectory = []
 
     # Iterate through the frames for the specified task
@@ -58,7 +60,9 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
         # Extract initial ego position and ground truth waypoints
         if frame_index == start_index:
             ego_pos = dataset[frame_index]['ego_pos']  # Shape: (3,)
+            ego_pos_track = dataset[frame_index]['ego_pos']  # Shape: (3,)
             predicted_trajectory.append(ego_pos.cpu().numpy())
+            ground_truth_trajectory.append(ego_pos.cpu().numpy().reshape(-1,3))
 
         # Prepare input data for the model
         input_data = {
@@ -69,24 +73,30 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
 
         # Predict the next ego position
         with torch.no_grad():
-            pred_ego_pos, _, _ = model(input_data) # (1,2)
-        if frame_index < end_index - 2:
+            delta_mean, log_var, displacement_x_world, displacement_y_world  = model(input_data) # (1,2)
+            pred_ego_pos = delta_mean + ego_pos.reshape(-1,3)[:,:2]
+            track_ego_pos = torch.cat([displacement_x_world.reshape(-1,1), displacement_y_world.reshape(-1,1)],dim=1) + ego_pos_track.reshape(-1,3)[:,:2]
+            
+        if frame_index < end_index - 1:
             # Update yaw for the next frame
             yaw = dataset[frame_index+1]['ego_pos'][2]  # Extract yaw from the ground truth ego_pos
             # Append gt_ego_pos
             gt_ego_pos = dataset[frame_index+1]['ego_pos'].view(1,-1)  # Shape: (3,)
             ground_truth_trajectory.append(gt_ego_pos.cpu().numpy())
-
         pred_ego_pos = torch.cat((pred_ego_pos, yaw.unsqueeze(0).unsqueeze(0)), dim=1)
+        track_ego_pos = torch.cat((track_ego_pos, yaw.unsqueeze(0).unsqueeze(0)), dim=1)
         
         # Append the predicted position to the trajectory
         predicted_trajectory.append(pred_ego_pos.squeeze(0).cpu().numpy())
+        track_trajectory.append(track_ego_pos.squeeze(0).cpu().numpy())
 
         # Update the ego position for the next step
         ego_pos = pred_ego_pos.squeeze(0)
+        ego_pos_track = track_ego_pos.squeeze(0)
 
     # Convert trajectories to numpy arrays
     predicted_trajectory = np.array(predicted_trajectory)
+    track_trajectory = np.array(track_trajectory)
     ground_truth_trajectory = np.array(ground_truth_trajectory).squeeze(1)
 
     # Create the output directory if it doesn't exist
@@ -97,6 +107,7 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
     plt.figure(figsize=(10, 8))
     plt.plot(ground_truth_trajectory[:, 0], ground_truth_trajectory[:, 1], label='Ground Truth', color='green')
     plt.plot(predicted_trajectory[:, 0], predicted_trajectory[:, 1], label='Predicted', color='blue')
+    plt.plot(track_trajectory[:, 0], track_trajectory[:, 1], label='Track', color='k')
     plt.scatter(ground_truth_trajectory[0, 0], ground_truth_trajectory[0, 1], color='red', label='Start Point')
     plt.title(f'Trajectory Visualization for Task {task_index}')
     plt.xlabel('X')

@@ -7,7 +7,7 @@ from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from trainer.pl_dynamics_trainer import DynamicsTrainingModule
-from dataset.dataloader import ParkingDataModule  # Use ParkingDataModule directly
+from dataset.dataloader_dynamic import ParkingDataModule  # Use ParkingDataModule directly
 from tool.config import get_cfg
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -53,7 +53,7 @@ def train():
         monitor="val_loss",          # Metric to monitor
         min_delta=0.001,             # Minimum change to qualify as improvement
         mode="min",                  # Minimize the monitored metric
-        stopping_threshold=0.001,    # Stop only if val_loss is below 0.001
+        stopping_threshold=1e-9,    # Stop only if val_loss is below 0.001
         patience=float('inf'),
         verbose=True
     )

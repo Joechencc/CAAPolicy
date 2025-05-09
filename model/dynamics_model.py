@@ -3,7 +3,7 @@ from torch import nn
 
 class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
 
-    def __init__(self):
+    def __init__(self, hidden_dim=128, output_dim=2):
         '''
         This module is used to predict ego_motion
         Input: velocity, acc_x, acc_y, throttle, brake, steer, current_ego_pos(x, y, yaw)
@@ -13,36 +13,57 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         
         # Define the MLP model with LayerNorm
         self.mlp = nn.Sequential(
-            nn.Linear(10, 256),
-            nn.LayerNorm(256),  # Replace BatchNorm1d with LayerNorm
+            nn.Linear(8, hidden_dim),
+            nn.LayerNorm(hidden_dim),  # Replace BatchNorm1d with LayerNorm
             nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
             nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.LayerNorm(64),
-            nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.LayerNorm(32),
-            nn.ReLU(),
-            nn.Linear(32, 3)  # Output: 3 features (next x, y, yaw)
         )
+        self.mean_head = nn.Linear(hidden_dim, output_dim)
+        self.std_head = nn.Linear(hidden_dim, output_dim)
 
-    def forward(self, data):
-        # Input
-        #torch.szie[B,1]
-        velocity, acc_x, acc_y = data['ego_motion'][:,:,0], data['ego_motion'][:,:,1], data['ego_motion'][:,:,2]
+    def forward(self, data, dt=0.1):
+        # Extract x, y, and yaw
+        ego_pos = data['ego_pos']  # [x, y, yaw]
+        ego_motion = data['ego_motion'].squeeze(1)[:, :3]
+
+        x, y, yaw = ego_pos[:, 0], ego_pos[:, 1], ego_pos[:, 2]
+
+        # Convert yaw to radians
+        yaw = torch.deg2rad(yaw)
+
+        # Transform accelerations to the world frame
+        accel_x_world = ego_motion[:, 1] * torch.cos(yaw) - ego_motion[:, 2] * torch.sin(yaw)
+        accel_y_world = ego_motion[:, 1] * torch.sin(yaw) + ego_motion[:, 2] * torch.cos(yaw)
+
+        # Convert speed from km/h to m/s
+        speed = ego_motion[:, 0] / 3.6  # Convert speed to m/s
+        reverse = data['raw_control'][:, 3]
+
+        # Adjust speed direction based on the reverse flag
+        speed = torch.where(reverse.bool(), -speed, speed)  # Negative speed when reversing
+
+        # Recover vehicle velocity components in the world frame
+        vehicle_velocity_x = speed * torch.cos(yaw)
+        vehicle_velocity_y = speed * torch.sin(yaw)
+
+        # Compute displacements for reference only
+        displacement_x_world = vehicle_velocity_x * dt + 0.5 * accel_x_world * dt**2
+        displacement_y_world = vehicle_velocity_y * dt + 0.5 * accel_y_world * dt**2
+
         # torch.szie[B]
         throttle, brake, steer, reverse = data['raw_control'][:,0], data['raw_control'][:,1], data['raw_control'][:,2], data['raw_control'][:,3]
         # torch.size[B,3]
         cur_ego_pos = data['ego_pos']  # [x, y, yaw]
         # Concatenate all inputs into a single tensor
         # inputs.shape = torch.size[26,3]
-        inputs = torch.cat((velocity, acc_x, acc_y,
-                            throttle.reshape(-1,1), brake.reshape(-1,1), steer.reshape(-1,1), reverse.reshape(-1,1),
-                            cur_ego_pos), dim=1).float()
+        inputs = torch.cat((vehicle_velocity_x.reshape(-1,1), vehicle_velocity_y.reshape(-1,1), accel_x_world.reshape(-1,1), accel_y_world.reshape(-1,1),
+                            throttle.reshape(-1,1), brake.reshape(-1,1), steer.reshape(-1,1), reverse.reshape(-1,1)), dim=1).float()
         # TODO: check if inputs needs to stored as float64
         # Pass through the MLP
-        next_ego_pos = self.mlp(inputs)
+        feat = self.mlp(inputs)
+        delta_mean = self.mean_head(feat)
+        logvar = torch.exp(self.std_head(feat))  # 输出正数std
 
-        return next_ego_pos
+        return delta_mean, logvar, displacement_x_world, displacement_y_world
