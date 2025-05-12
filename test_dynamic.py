@@ -64,12 +64,15 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
         input_data = {
             'ego_pos': ego_pos.unsqueeze(0),  # Shape: (1, 3)
             'ego_motion': dataset[frame_index]['ego_motion'],  # Shape: (1, 3)
-            'raw_control': dataset[frame_index]['raw_control'].view(1,-1)  # Shape: (4,)
+            'raw_control': dataset[frame_index]['raw_control'].view(1,-1), # Shape: (4,)
+            'speed': dataset[frame_index]['speed'].view(1,-1)  # Shape: (1, 2)
         }
 
         # Predict the next ego position
         with torch.no_grad():
-            pred_ego_pos, _, _ = model(input_data) # (1,2)
+            # pred_ego_pos, _, _ = model(input_data) # (1,2)
+            delta_mean, log_var, _, _ = model(input_data) # delta_mean: (1, 2), log_var: (1, 2)
+            pred_ego_pos = ego_pos[:2] + delta_mean.squeeze(0) # Shape: (1, 3)
         if frame_index < end_index - 2:
             # Update yaw for the next frame
             yaw = dataset[frame_index+1]['ego_pos'][2]  # Extract yaw from the ground truth ego_pos
@@ -77,7 +80,7 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
             gt_ego_pos = dataset[frame_index+1]['ego_pos'].view(1,-1)  # Shape: (3,)
             ground_truth_trajectory.append(gt_ego_pos.cpu().numpy())
 
-        pred_ego_pos = torch.cat((pred_ego_pos, yaw.unsqueeze(0).unsqueeze(0)), dim=1)
+        pred_ego_pos = torch.cat((pred_ego_pos, yaw.unsqueeze(0)), dim=0)
         
         # Append the predicted position to the trajectory
         predicted_trajectory.append(pred_ego_pos.squeeze(0).cpu().numpy())
@@ -87,6 +90,7 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
 
     # Convert trajectories to numpy arrays
     predicted_trajectory = np.array(predicted_trajectory)
+    import pdb; pdb.set_trace()
     ground_truth_trajectory = np.array(ground_truth_trajectory).squeeze(1)
 
     # Create the output directory if it doesn't exist
@@ -133,7 +137,7 @@ if __name__ == '__main__':
         help='Path to the dataset (default: /scratch/rs9193/Town_Opt_1000_Val)')
     arg_parser.add_argument(
         '--task_index',
-        default=2,
+        default=1,
         type=int,
         help='Index of the task to visualize (default: 0)')
     args = arg_parser.parse_args()

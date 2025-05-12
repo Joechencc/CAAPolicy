@@ -273,11 +273,14 @@ class CarlaDataset(torch.utils.data.Dataset):
         ## Save delta ego_motion
         self.delta_xy = []
         self.delta_yaw = []
+        self.speed = []
 
         self.plot_x = []
         self.plot_y = []
         self.plot_yaw = []
         self.get_data()
+        
+        # TODO: speed_x,speed_y
         
 
     def init_camera_config(self):
@@ -356,6 +359,8 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # collect data at current frame
                 # image
                 filename = f"{str(frame).zfill(4)}.png"
+                # TODO: Comment for loading efficiency
+                """
                 self.front.append(task_path + "/camera_front/" + filename)
                 self.front_left.append(task_path + "/camera_front_left/" + filename)
                 self.front_right.append(task_path + "/camera_front_right/" + filename)
@@ -373,7 +378,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
                 # BEV Semantic
                 self.topdown.append(task_path + "/topdown/encoded_" + filename)
-
+                """
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
 
@@ -385,8 +390,11 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.velocity.append(data['speed'])
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
-
+                self.speed.append([data['speed_x'], data['speed_y']])
+                # raw control will be used to predict next ego_pose
+                self.raw_control.append([data['Throttle'],data['Brake'],data['Steer'], data['Reverse']])
                 # control
+                
                 controls = []
                 throttle_brakes = []
                 steers = []
@@ -408,8 +416,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.throttle_brake.append(throttle_brakes)
                 self.steer.append(steers)
                 self.reverse.append(reverse)
-                # raw control will be used to predict next ego_pose
-                self.raw_control.append([data['Throttle'],data['Brake'],data['Steer'], data['Reverse']])
+                
                 # waypoint
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
                     data = json.load(read_file)
@@ -417,6 +424,9 @@ class CarlaDataset(torch.utils.data.Dataset):
                     cur_y = data['y']
                     cur_yaw = data['yaw']
                 ego_pos = [cur_x, cur_y, cur_yaw]
+                
+                # Save Waypoints
+                self.ego_pos.append(ego_pos)
                 # Save delta ego_motion
                 # Calculate delta_xy and delta_yaw
                 if len(self.ego_pos) > 1:  # Ensure there is a previous frame
@@ -437,8 +447,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                     # For the first frame, set deltas to 0
                     self.delta_xy.append([0.0, 0.0])
                     self.delta_yaw.append(0.0)
-                # Save Waypoints
-                self.ego_pos.append(ego_pos)
+
                 waypoints = []
                 xs = []
                 ys = []
@@ -520,7 +529,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         #
         # # 显示图形
         # plt.show()
-
+        """
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
         self.front_right = np.array(self.front_right).astype(np.string_)
@@ -536,10 +545,11 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.back_right_depth = np.array(self.back_right_depth).astype(np.string_)
 
         self.topdown = np.array(self.topdown).astype(np.string_)
-
+        """
         self.velocity = np.array(self.velocity).astype(np.float32)
         self.acc_x = np.array(self.acc_x).astype(np.float32)
         self.acc_y = np.array(self.acc_y).astype(np.float32)
+        self.speed = np.array(self.speed).astype(np.float32)
 
         self.control = np.array(self.control).astype(np.int64)
         self.waypoint = np.array(self.waypoint).astype(np.int64)
@@ -558,20 +568,21 @@ class CarlaDataset(torch.utils.data.Dataset):
         # Convert lists to tensors
         self.delta_xy = torch.tensor(self.delta_xy, dtype=torch.float32)
         self.delta_yaw = torch.tensor(self.delta_yaw, dtype=torch.float32)
-
         self.task_offsets = np.array(self.task_offsets).astype(np.int32)
-        logger.info('Preloaded {} sequences', str(len(self.front)))
+        logger.info('Preloaded {} sequences', str(len(self.reverse)))
 
     def __len__(self):
-        return len(self.front)
+
+        return len(self.reverse)
 
     def __getitem__(self, index):
         data = {}
-        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation','task_offsets',
+        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation','task_offsets', 'speed'
                 'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw', 'ego_pos','ego_pos_next','raw_control', 'delta_xy']
         for key in keys:
             data[key] = []
-
+        # TODO: commnet for loading efficiency
+        """
         # image & extrinsics & intrinsics
         images = [self.image_process(self.front[index])[0], self.image_process(self.front_left[index])[0],self.image_process(self.front_right[index])[0],
                   self.image_process(self.back[index])[0], self.image_process(self.back_left[index])[0],self.image_process(self.back_right[index])[0],]
@@ -595,13 +606,14 @@ class CarlaDataset(torch.utils.data.Dataset):
         segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
-
+        """
         # target_point
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
         ego_motion = np.column_stack((self.velocity[index], self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
+        data['speed'] = torch.from_numpy(self.speed[index]) # [speed_x,speed_y]
 
         # gt control token
         data['gt_control'] = torch.from_numpy(self.control[index])
@@ -625,7 +637,16 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         # gt ego_pos current & next frame
         data['ego_pos'] = torch.from_numpy(self.ego_pos[index])
-        data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index+1 if index + 1 < len(self.ego_pos) else index])
+
+        # Determine if the current index is at the end of a task
+        is_end_of_task = any(index == offset[1] - 1 for offset in self.task_offsets)
+
+        if is_end_of_task:
+            # If at the end of a task, set ego_pos_next to the current ego_pos
+            data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index])
+        else:
+            # Otherwise, set ego_pos_next to the next frame's ego_pos
+            data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index + 1])
 
         data['delta_xy'] = self.delta_xy[index]
         data['delta_yaw'] = self.delta_yaw[index]

@@ -51,9 +51,9 @@ def train():
     # Add EarlyStopping and ModelCheckpoint callbacks
     early_stopping = EarlyStopping(
         monitor="val_loss",          # Metric to monitor
-        min_delta=0.001,             # Minimum change to qualify as improvement
+        min_delta=0.00001,             # Minimum change to qualify as improvement
         mode="min",                  # Minimize the monitored metric
-        stopping_threshold=0.001,    # Stop only if val_loss is below 0.001
+        stopping_threshold=0.00001,    # Stop only if val_loss is below 0.001
         patience=float('inf'),
         verbose=True
     )

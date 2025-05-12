@@ -1,8 +1,8 @@
 parking_model:
   # train
   data_dir: '/'
-  log_dir: './log/'
-  checkpoint_dir: './ckpt'
+  log_dir: '/scratch/rs9193/e2e/log/temporal'
+  checkpoint_dir: '/scratch/rs9193/e2e/ckpt/temporal'
   log_every_n_steps: 10
   check_val_every_n_epoch: 3
 
@@ -11,8 +11,8 @@ parking_model:
   weight_decay: 0.0001
   batch_size: 20
 
-  training_map: "/scratch/rs9193/Town_Opt_1" #/scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
-  validation_map: "/scratch/rs9193/Town_Opt_1" #/scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
+  training_map: "/scratch/rs9193/dynamics_dataset" #/scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
+  validation_map: "/scratch/rs9193/dynamics_dataset" #/scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
   future_frame_nums: 4
   hist_frame_nums: 10
   token_nums: 204
