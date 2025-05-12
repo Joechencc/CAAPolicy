@@ -9,7 +9,7 @@ parking_model:
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 20
+  batch_size: 1
 
   training_map: "/scratch/rs9193/dynamics_dataset" #/scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
   validation_map: "/scratch/rs9193/dynamics_dataset" #/scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"

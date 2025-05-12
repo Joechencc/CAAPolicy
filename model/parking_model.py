@@ -113,7 +113,7 @@ class ParkingModel(nn.Module):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
         fuse_feature_copy = fuse_feature.clone()
         # TODO: Train with ground truth, only use dynamics model for inference
-        delta_xy = data['delta_xy'].cuda()
+        delta_xy = data['delta_ego_pos'][:,:2].cuda()
         # TODO: couuld also use ground truth for inference.
         # with torch.no_grad():
         #     _,_, delta_xy = self.hybrid_dynamics_model(data)
