@@ -10,3 +10,4 @@ PWU.egg-info
 carla
 *.out
 *.png
+.vscode/extensions.json
