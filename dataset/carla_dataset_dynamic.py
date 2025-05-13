@@ -1,0 +1,619 @@
+import json
+import os
+import carla
+import torch.utils.data
+import numpy as np
+import torchvision.transforms
+import yaml
+
+from PIL import Image
+from loguru import logger
+#import matplotlib.pyplot as plt
+
+
+def convert_slot_coord(ego_trans, target_point):
+    """
+    Convert target parking slot from world frame into self_veh frame
+    :param ego_trans: veh2world transform
+    :param target_point: target parking slot in world frame [x, y, yaw]
+    :return: target parking slot in veh frame [x, y, yaw]
+    """
+
+    target_point_self_veh = convert_veh_coord(target_point[0], target_point[1], 1.0, ego_trans)
+
+    yaw_diff = target_point[2] - ego_trans.rotation.yaw
+    if yaw_diff > 180:
+        yaw_diff -= 360
+    elif yaw_diff < -180:
+        yaw_diff += 360
+
+    target_point = [target_point_self_veh[0], target_point_self_veh[1], yaw_diff]
+
+    return target_point
+
+
+def convert_veh_coord(x, y, z, ego_trans):
+    """
+    Convert coordinate (x,y,z) in world frame into self-veh frame
+    :param x:
+    :param y:
+    :param z:
+    :param ego_trans: veh2world transform
+    :return: coordinate in self-veh frame
+    """
+
+    world2veh = np.array(ego_trans.get_inverse_matrix())
+    target_array = np.array([x, y, z, 1.0], dtype=float)
+    target_point_self_veh = world2veh @ target_array
+    return target_point_self_veh
+
+
+def scale_and_crop_image(image, scale=1.0, crop=256):
+    """
+    Scale and crop a PIL image, returning a channels-first numpy array
+    :param image: original image
+    :param scale: scale factor
+    :param crop: crop size
+    :return: cropped image
+    """
+
+    (width, height) = (int(image.width // scale), int(image.height // scale))
+    im_resized = image.resize((width, height), resample=Image.NEAREST)
+    image = np.asarray(im_resized)
+    start_x = height // 2 - crop // 2
+    start_y = width // 2 - crop // 2
+    cropped_image = image[start_x:start_x + crop, start_y:start_y + crop].copy()
+    return cropped_image
+
+
+def tokenize_control(throttle, brake, steer, reverse, token_nums=200):
+    """
+    Tokenize control signal
+    :param throttle: [0,1]
+    :param brake: [0,1]
+    :param steer: [-1,1]
+    :param reverse: {0,1}
+    :param token_nums: size of token
+    :return: tokenized control range [0, token_nums-4]
+    """
+
+    valid_token = token_nums - 4
+    half_token = valid_token / 2
+
+    if brake != 0.0:
+        throttle_brake_token = int(half_token * (-brake + 1))
+    else:
+        throttle_brake_token = int(half_token * (throttle + 1))
+    steer_token = int((steer + 1) * half_token)
+    reverse_token = int(reverse * valid_token)
+    return [throttle_brake_token, steer_token, reverse_token]
+
+
+def detokenize_control(token_list, token_nums=204):
+    """
+    Detokenize control signals
+    :param token_list: [throttle_brake, steer, reverse]
+    :param token_nums: size of token number
+    :return: control signal values
+    """
+
+    valid_token = token_nums - 4
+    half_token = float(valid_token / 2)
+
+    if token_list[0] > half_token:
+        throttle = token_list[0] / half_token - 1
+        brake = 0.0
+    else:
+        throttle = 0.0
+        brake = -(token_list[0] / half_token - 1)
+
+    steer = (token_list[1] / half_token) - 1
+    reverse = (True if token_list[2] > half_token else False)
+
+    return [throttle, brake, steer, reverse]
+
+
+def tokenize_waypoint(x, y, yaw, token_nums=204):
+    """
+    Tokenize control signal
+    :param x: [-1.5, 1.5]
+    :param y: [-2, 2]
+    :param yaw: [-20, 20]
+    :param token_nums: size of token
+    :return: tokenized x, y, yaw
+    """
+    token_nums = token_nums -4
+    # Helper function to tokenize a single value
+    def tokenize_single_value(value, min_value, max_value):
+        # Normalize to [0, 1]
+        normalized_value = (value - min_value) / (max_value - min_value)
+        # Scale to [0, token_nums]
+        tokenized_value = normalized_value * token_nums
+        # Ensure the tokenized value is within [0, token_nums]
+        tokenized_value = max(0, min(token_nums, tokenized_value))
+        return int(tokenized_value)
+
+    # Tokenize each parameter
+    x_token = tokenize_single_value(x, -6, 6)
+    y_token = tokenize_single_value(y, -6, 6)
+    yaw_token = tokenize_single_value(yaw, -40, 40)
+
+    return  [x_token, y_token, yaw_token]
+
+
+
+def detokenize_waypoint(token_list, token_nums=204):
+    """
+    Detokenize waypoint values
+    :param token_list: [x_token, y_token, yaw_token]
+    :param token_nums: size of token number
+    :return: original x, y, yaw values
+    """
+    token_nums -= 4  # Adjusting for the valid range of tokens
+
+    # Helper function to detokenize a single value
+    def detokenize_single_value(token, min_value, max_value):
+        # Scale token from [0, token_nums] to [0, 1]
+        normalized_value = token / token_nums
+        # Scale and shift the normalized value to its original range
+        original_value = (normalized_value * (max_value - min_value)) + min_value
+        return original_value
+
+    # Detokenize each parameter
+    x = detokenize_single_value(token_list[0], -6, 6)
+    y = detokenize_single_value(token_list[1], -6, 6)
+    yaw = detokenize_single_value(token_list[2], -40, 40)
+
+    return [x, y, yaw]
+
+def get_depth(depth_image_path, crop):
+    """
+    Convert carla RGB depth image into single channel depth in meters
+    :param depth_image_path: carla depth image in RGB format
+    :param crop: crop size
+    :return: numpy array of depth image in meters
+    """
+    depth_image = Image.open(depth_image_path).convert('RGB')
+
+    data = np.array(scale_and_crop_image(depth_image, scale=1.0, crop=crop))
+
+    data = data.astype(np.float32)
+
+    normalized = np.dot(data, [1.0, 256.0, 65536.0])
+    normalized /= (256 * 256 * 256 - 1)
+    in_meters = 1000 * normalized
+
+    return torch.from_numpy(in_meters).unsqueeze(0)
+
+
+def update_intrinsics(intrinsics, top_crop=0.0, left_crop=0.0, scale_width=1.0, scale_height=1.0):
+    update_intrinsic = intrinsics.clone()
+
+    update_intrinsic[0, 0] *= scale_width
+    update_intrinsic[0, 2] *= scale_width
+    update_intrinsic[1, 1] *= scale_height
+    update_intrinsic[1, 2] *= scale_height
+
+    update_intrinsic[0, 2] -= left_crop
+    update_intrinsic[1, 2] -= top_crop
+
+    return update_intrinsic
+
+
+def add_raw_control(data, throttle_brake, steer, reverse):
+    if data['Brake'] != 0.0:
+        throttle_brake.append(-data['Brake'])
+    else:
+        throttle_brake.append(data['Throttle'])
+    steer.append(data['Steer'])
+    reverse.append(int(data['Reverse']))
+
+
+class CarlaDatasetDynamic(torch.utils.data.Dataset):
+    def __init__(self, root_dir, is_train, config):
+        super(CarlaDatasetDynamic, self).__init__()
+        self.cfg = config
+
+        self.root_dir = root_dir
+        self.is_train = is_train
+
+        # camera configs
+        self.image_crop = self.cfg.image_crop
+        self.intrinsic = None
+        self.veh2cam_dict = {}
+        self.extrinsic = None
+
+        self.control = []
+
+        self.velocity = []
+        self.acc_x = []
+        self.acc_y = []
+
+        self.throttle_brake = []
+        self.steer = []
+        self.reverse = []
+
+        self.target_point = []
+
+        self.topdown = []
+
+        self.waypoint = []
+        self.delta_x_values = []
+        self.delta_y_values = []
+        self.delta_yaw_values = []
+
+        self.plot_x = []
+        self.plot_y = []
+        self.plot_yaw = []
+        self.get_data()
+
+    def get_data(self):
+        val_towns = self.cfg.validation_map
+        train_towns = self.cfg.training_map
+        train_data = os.path.join(self.root_dir, train_towns)
+        val_data = os.path.join(self.root_dir, val_towns)
+
+        town_dir = train_data if self.is_train == 1 else val_data
+
+        # collect all parking data tasks
+        root_dirs = os.listdir(town_dir)
+        all_tasks = []
+        for root_dir in root_dirs:
+            root_path = os.path.join(town_dir, root_dir)
+            for task_dir in os.listdir(root_path):
+                task_path = os.path.join(root_path, task_dir)
+                all_tasks.append(task_path)
+
+        for task_path in all_tasks:
+            total_frames = len(os.listdir(task_path + "/measurements/"))
+            num_valid_frames = total_frames - self.cfg.hist_frame_nums - self.cfg.future_frame_nums
+
+            # Store the start and end indices for this task
+            self.task_offsets.append((start_index, start_index + num_valid_frames))
+            for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
+                # collect data at current frame
+                # image
+                filename = f"{str(frame).zfill(4)}.png"
+                self.front.append(task_path + "/camera_front/" + filename)
+                self.front_left.append(task_path + "/camera_front_left/" + filename)
+                self.front_right.append(task_path + "/camera_front_right/" + filename)
+                self.back.append(task_path + "/camera_back/" + filename)
+                self.back_left.append(task_path + "/camera_back_left/" + filename)
+                self.back_right.append(task_path + "/camera_back_right/" + filename)
+
+                # depth
+                self.front_depth.append(task_path + "/depth_front/" + filename)
+                self.front_left_depth.append(task_path + "/depth_front_left/" + filename)
+                self.front_right_depth.append(task_path + "/depth_front_right/" + filename)
+                self.back_depth.append(task_path + "/depth_back/" + filename)
+                self.back_left_depth.append(task_path + "/depth_back_left/" + filename)
+                self.back_right_depth.append(task_path + "/depth_back_right/" + filename)
+
+                # BEV Semantic
+                self.topdown.append(task_path + "/topdown/encoded_" + filename)
+
+                with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
+                    data = json.load(read_file)
+
+                # ego position
+                ego_trans = carla.Transform(carla.Location(x=data['x'], y=data['y'], z=data['z']),
+                                            carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
+
+                # motion
+                self.velocity.append(data['speed'])
+                self.acc_x.append(data['acc_x'])
+                self.acc_y.append(data['acc_y'])
+
+                # control
+                controls = []
+                throttle_brakes = []
+                steers = []
+                reverse = []
+
+                for i in range(self.cfg.future_frame_nums):
+                    with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
+                        data = json.load(read_file)
+                    controls.append(
+                        tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                    add_raw_control(data, throttle_brakes, steers, reverse)
+
+                controls = [item for sublist in controls for item in sublist]
+                controls.insert(0, self.BOS_token)
+                controls.append(self.EOS_token)
+                controls.append(self.PAD_token)
+                self.control.append(controls)
+
+                self.throttle_brake.append(throttle_brakes)
+                self.steer.append(steers)
+                self.reverse.append(reverse)
+
+                ###### current ego #######
+                # waypoint
+                with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
+                    data = json.load(read_file)
+                    cur_x = data['x']
+                    cur_y = data['y']
+                    cur_yaw = data['yaw']
+                
+                ego_pos = [cur_x, cur_y, cur_yaw]
+                # Save Waypoints
+                self.ego_pos.append(ego_pos)
+                
+                ###### next ego ########
+                with open(task_path + f"/measurements/{str(frame+1).zfill(4)}.json", "r") as read_file:
+                    data_next = json.load(read_file)
+                    next_x = data_next['x']
+                    next_y = data_next['y']
+                    next_yaw = data_next['yaw']
+                ego_pos_next = [next_x, next_y, next_yaw]
+                # Save Waypoints
+                self.ego_pos_next.append(ego_pos_next)
+                ########################
+
+
+                for i in range(self.cfg.future_frame_nums):
+                    file_path = task_path + f"/measurements/{str(frame + 1 + 10*i ).zfill(4)}.json"
+                    if not os.path.exists(file_path):
+                        # If the file doesn't exist, use the last frame
+                        file_path = task_path + f"/measurements/{str(frame).zfill(4)}.json"
+                    with open(file_path, "r") as read_file:
+                        data = json.load(read_file)
+                        egocentric_waypoint = convert_slot_coord(ego_trans,[data['x'],data['y'],data['yaw']])
+                        delta_x = egocentric_waypoint[0]
+                        delta_y = egocentric_waypoint[1]
+                        delta_yaw = egocentric_waypoint[2]
+
+                        self.plot_x.append(delta_x)
+                        self.plot_y.append(delta_y)
+                        self.plot_yaw.append(delta_yaw)
+                    waypoints.append(
+                        tokenize_waypoint(delta_x, delta_y, delta_yaw, self.cfg.token_nums))
+                    xs.append(delta_x)
+                    ys.append(delta_y)
+                    yaws.append(delta_yaw)
+
+                    # add_raw_control(data, throttle_brakes, steers, reverse)
+
+                waypoints = [item for sublist in waypoints for item in sublist]
+                waypoints.insert(0, self.BOS_token)
+                waypoints.append(self.EOS_token)
+                waypoints.append(self.PAD_token)
+                self.waypoint.append(waypoints)
+
+                self.delta_x_values.append(xs)
+                self.delta_y_values.append(ys)
+                self.delta_yaw_values.append(yaws)
+
+
+                # target point
+                with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
+                    data = json.load(read_file)
+                parking_goal = [data['x'], data['y'], data['yaw']]
+                parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                self.target_point.append(parking_goal)
+        #
+        # plt.figure(figsize=(10, 8))
+        #
+        # # 绘制plot_x的直方图
+        # plt.subplot(3, 1, 1)  # 3行1列的第1个
+        # plt.hist(self.plot_x, bins=20, alpha=0.7, label='X distribution')
+        # plt.ylabel('Frequency')
+        # plt.title('Histogram of X')
+        # plt.legend()
+        #
+        # # 绘制plot_y的直方图
+        # plt.subplot(3, 1, 2)  # 3行1列的第2个
+        # plt.hist(self.plot_y, bins=20, alpha=0.7, label='Y distribution')
+        # plt.ylabel('Frequency')
+        # plt.title('Histogram of Y')
+        # plt.legend()
+        #
+        # # 绘制plot_yaw的直方图
+        # plt.subplot(3, 1, 3)  # 3行1列的第3个
+        # plt.hist(self.plot_yaw, bins=20, alpha=0.7, label='Yaw distribution')
+        # plt.xlabel('Value')
+        # plt.ylabel('Frequency')
+        # plt.title('Histogram of Yaw')
+        # plt.legend()
+        #
+        # # 调整子图间距
+        # plt.tight_layout()
+        #
+        # # 显示图形
+        # plt.show()
+
+        self.front = np.array(self.front).astype(np.string_)
+        self.front_left = np.array(self.front_left).astype(np.string_)
+        self.front_right = np.array(self.front_right).astype(np.string_)
+        self.back = np.array(self.back).astype(np.string_)
+        self.back_left = np.array(self.back_left).astype(np.string_)
+        self.back_right = np.array(self.back_right).astype(np.string_)
+
+        self.front_depth = np.array(self.front_depth).astype(np.string_)
+        self.front_left_depth = np.array(self.front_left_depth).astype(np.string_)
+        self.front_right_depth = np.array(self.front_right_depth).astype(np.string_)
+        self.back_depth = np.array(self.back_depth).astype(np.string_)
+        self.back_left_depth = np.array(self.back_left_depth).astype(np.string_)
+        self.back_right_depth = np.array(self.back_right_depth).astype(np.string_)
+
+        self.topdown = np.array(self.topdown).astype(np.string_)
+
+        self.velocity = np.array(self.velocity).astype(np.float32)
+        self.acc_x = np.array(self.acc_x).astype(np.float32)
+        self.acc_y = np.array(self.acc_y).astype(np.float32)
+
+        self.control = np.array(self.control).astype(np.int64)
+        self.waypoint = np.array(self.waypoint).astype(np.int64)
+
+        self.throttle_brake = np.array(self.throttle_brake).astype(np.float32)
+        self.steer = np.array(self.steer).astype(np.float32)
+        self.reverse = np.array(self.reverse).astype(np.int64)
+
+        self.delta_x_values = np.array(self.delta_x_values).astype(np.float32)
+        self.delta_y_values = np.array(self.delta_y_values).astype(np.float32)
+        self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
+
+        self.target_point = np.array(self.target_point).astype(np.float32)
+        self.task_offsets = np.array(self.task_offsets).astype(np.int32)
+
+        logger.info('Preloaded {} sequences', str(len(self.front)))
+
+    def __len__(self):
+        return len(self.front)
+
+    def __getitem__(self, index):
+        data = {}
+        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
+                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
+        for key in keys:
+            data[key] = []
+
+        # image & extrinsics & intrinsics
+        images = [self.image_process(self.front[index])[0], self.image_process(self.front_left[index])[0],self.image_process(self.front_right[index])[0],
+                  self.image_process(self.back[index])[0], self.image_process(self.back_left[index])[0],self.image_process(self.back_right[index])[0],]
+        images = torch.cat(images, dim=0)
+        data['image'] = images
+
+        data['extrinsics'] = self.extrinsic
+        data['intrinsics'] = self.intrinsic
+
+        # depth
+        depths = [get_depth(self.front_depth[index], self.image_crop),
+                  get_depth(self.front_left_depth[index], self.image_crop),
+                  get_depth(self.front_right_depth[index], self.image_crop),
+                  get_depth(self.back_depth[index], self.image_crop),
+                  get_depth(self.back_left_depth[index], self.image_crop),
+                  get_depth(self.back_right_depth[index], self.image_crop),]
+        depths = torch.cat(depths, dim=0)
+        data['depth'] = depths
+
+        # segmentation
+        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+                                             target_slot=self.target_point[index])
+        data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
+
+        # target_point
+        data['target_point'] = torch.from_numpy(self.target_point[index])
+
+        # ego_motion
+        ego_motion = np.column_stack((self.velocity[index], self.acc_x[index], self.acc_y[index]))
+        data['ego_motion'] = torch.from_numpy(ego_motion)
+
+        # gt control token
+        data['gt_control'] = torch.from_numpy(self.control[index])
+
+        # gt control raw
+        data['gt_acc'] = torch.from_numpy(self.throttle_brake[index])
+        data['gt_steer'] = torch.from_numpy(self.steer[index])
+        data['gt_reverse'] = torch.from_numpy(self.reverse[index])
+
+        # gt waypoint token
+        data['gt_waypoint'] = torch.from_numpy(self.waypoint[index])
+
+        # gt waypoint raw
+        data['delta_x'] = torch.from_numpy(self.delta_x_values[index])
+        data['delta_y'] = torch.from_numpy(self.delta_y_values[index])
+        data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
+
+
+        return data
+
+
+class ProcessSemantic:
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def __call__(self, image, scale, crop, target_slot):
+        """
+        Process original BEV ground truth image; return cropped image with target slot
+        :param image: PIL Image or path to image
+        :param scale: scale factor
+        :param crop: image crop size
+        :param target_slot: center location of the target parking slot in meters; vehicle frame
+        :return: processed BEV semantic ground truth
+        """
+
+        # read image from disk
+        if not isinstance(image, Image.Image):
+            image = Image.open(image)
+        image = image.convert('L')
+
+        # crop image
+        cropped_image = scale_and_crop_image(image, scale, crop)
+
+        # draw target slot on BEV semantic
+        cropped_image = self.draw_target_slot(cropped_image, target_slot)
+
+        # create a new BEV semantic GT
+        h, w = cropped_image.shape
+        vehicle_index = cropped_image == 75
+        target_index = cropped_image == 255
+        semantics = np.zeros((h, w))
+        semantics[vehicle_index] = 1
+        semantics[target_index] = 2
+        # LSS method vehicle toward positive x-axis on image
+        semantics = semantics[::-1]
+
+        return semantics.copy()
+
+    def draw_target_slot(self, image, target_slot):
+
+        size = image.shape[0]
+
+        # convert target slot position into pixels
+        x_pixel = target_slot[0] / self.cfg.bev_x_bound[2]
+        y_pixel = target_slot[1] / self.cfg.bev_y_bound[2]
+        target_point = np.array([size / 2 - x_pixel, size / 2 + y_pixel], dtype=int)
+
+        # draw the whole parking slot
+        slot_points = []
+        for x in range(-27, 28):
+            for y in range(-15, 16):
+                slot_points.append(np.array([x, y, 1, 1], dtype=int))
+
+        # rotate parking slots points
+
+        slot_trans = np.array(
+            carla.Transform(carla.Location(), carla.Rotation(yaw=float(-target_slot[2]))).get_matrix())
+        slot_points = np.vstack(slot_points).T
+        slot_points_ego = (slot_trans @ slot_points)[0:2].astype(int)
+
+        # get parking slot points on pixel frame
+        slot_points_ego[0] += target_point[0]
+        slot_points_ego[1] += target_point[1]
+
+        # image[tuple(slot_points_ego)] = 255
+        H, W = image.shape
+        x, y = slot_points_ego
+        valid_mask = (x>=0) & (x<H) & (y>=0) & (y<W)
+
+        x_valid = x[valid_mask]
+        y_valid = y[valid_mask]
+
+        image[x_valid, y_valid] = 255
+
+        return image
+
+
+class ProcessImage:
+    def __init__(self, crop):
+        self.crop = crop
+
+        self.normalise_image = torchvision.transforms.Compose(
+            [torchvision.transforms.ToTensor(),
+             torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+             ]
+        )
+
+    def __call__(self, image):
+        if isinstance(image, carla.Image):
+            image = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
+            image = image[:, :, :3]
+            image = image[:, :, ::-1]
+            image = Image.fromarray(image)
+        else:
+            image = Image.open(image).convert('RGB')
+
+        crop_image = scale_and_crop_image(image, scale=1.0, crop=self.crop)
+
+        return self.normalise_image(np.array(crop_image)).unsqueeze(0), crop_image
