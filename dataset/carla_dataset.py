@@ -620,7 +620,13 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         # Determine if the current index is at the end of a task
         is_end_of_task = any(index == offset[1] - 1 for offset in self.task_offsets)
+        is_start_of_task = any(index == offset[0] for offset in self.task_offsets)
 
+        # Indicator for temporal fusion intialization
+        if is_start_of_task:
+            data['restart'] = True
+        else:
+            data['restart'] = False
         if is_end_of_task:
             # If at the end of a task, set ego_pos_next to the current ego_pos
             data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index])

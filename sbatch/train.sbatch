@@ -3,12 +3,12 @@
 #SBATCH --account=pr_117_tandon_advanced
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=24
 #SBATCH --time=48:00:00
 #SBATCH --mem=100GB
 #SBATCH --gres=gpu:rtx8000:2
 #SBATCH --job-name=spatial-temporal
-#SBATCH --output=spatial-temporal_2gpu.out
+#SBATCH --output=temporal_fusion_2gpu.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=rs9193@nyu.edu
 

@@ -3,6 +3,7 @@ __pycache__
 */runs/
 todo.txt
 e2e_parking
+*.log
 log
 ckpt
 Bench2DriveZoo/

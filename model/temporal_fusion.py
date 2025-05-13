@@ -18,7 +18,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
             nn.Linear(256, 256)  # Output: reduced feature dimension
         )
 
-    def forward(self, fuse_feature, delta_xy, delta_yaw): # cur_yaw
+    def forward(self, fuse_feature, delta_xy, delta_yaw, restart = True): # cur_yaw
         '''
         Input:
         fuse_feature: torch.size(B, 256, 264)
@@ -34,14 +34,15 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         #     delta_yaw = torch.zeros(fuse_feature.shape[0], 1, device=fuse_feature.device)
         # else:
         #     delta_yaw = cur_yaw - self.last_yaw
-        delta_yaw = delta_yaw # Shape: (B, 1)
         # import pdb; pdb.set_trace()
         delta_ego_motion = torch.cat((delta_xy, delta_yaw), dim=1) # Shape: (B, 3)
 
         # delta_ego_motion = torch.cat((self.last_delta_xy, delta_yaw), dim=1) # Shape: (B, 3)
         # self.last_yaw = cur_yaw.detach()  # Update last_yaw for the next step
-        # initialize the BEV cache by repeat the first fuse_feature 10 times, if it's empty
-        if self.bev_cache is None:
+
+        # Initialize the BEV cache by repeat the first fuse_feature 10 times, if it's empty
+        # Or reinitialize the BEV cache if it is the first frame of the task
+        if self.bev_cache is None or restart:
             self.bev_cache = fuse_feature.unsqueeze(2).repeat(1, 1, 10, 1)  # Shape: (B, 256, T=10, 264)
         B, L, T, C = self.bev_cache.shape  # B: batch size, L: feature length, T: time steps, C: channels
         # Reshape the new fuse_feature to (B, 256, 1, 264)
@@ -55,25 +56,34 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         # Crop and project all T steps in bev_cache to the current ego-centric BEV range
         aligned_bev = self.align_bev(self.bev_cache, delta_ego_motion)
         # plot the BEV features for debugging
-        self.plot_bev_features(aligned_bev)
+        # self.plot_bev_features(aligned_bev)
 
         self.delta_ego_motion = delta_ego_motion.detach()  # Update the delta_ego_motion for next step temporal fusion
         # TODO: Accumulated Memory is sorted by detaching bev_cache
         # TODO: however, is this the right way to do it?
-        self.bev_cache = aligned_bev.view(B, L, T, C) # Update the BEV cache with the aligned BEV
-        # Avg_pool & Max_pool, then concat the two pooled features
-        avg_pool = torch.mean(self.bev_cache, dim=2, keepdim=True)  # Shape: (B, 256, 1, 264)
-        max_pool, _ = torch.max(self.bev_cache, dim=2, keepdim=True)  # Shape: (B, 256, 1, 264)
-        pooled_features = torch.cat((avg_pool, max_pool), dim=1)  # Shape: (B, 256*2, 1, 264)
+        # Update the BEV cache with the aligned BEV
+        self.bev_cache = aligned_bev.view(B, L, T, C) 
 
-        # MLP layer to reduce the feature dimension from (B, 256*2, 1, 264) to (B, 256, 1, 264)
-        pooled_features = pooled_features.permute(0, 3, 2, 1).contiguous()  # Reshape to (B, 264, 1, 512)
-        reduced_features = self.mlp(pooled_features.view(B * C, -1))  # Apply MLP
-        reduced_features = reduced_features.view(B, C, 1, 256).permute(0, 3, 2, 1)  # Back to (B, 256, 1, 264)
+        # Calculate the self attention score between T bev caches
+        flattened_bev = self.bev_cache.permute(0, 2, 1, 3).reshape(B, T, L * C)  # Shape: (B, T, L * C)
+        
+        # Compute self-attention scores
+        attention_scores = torch.bmm(flattened_bev, flattened_bev.transpose(1, 2))  # Shape: (B, T, T)
+        attention_scores = F.softmax(attention_scores, dim=-1)  # Normalize scores along the time dimension
 
-        # Reshape to (B, 256, 264)
-        final_features = reduced_features.squeeze(2)  # Shape: (B, 256, 264)
-        self.bev_cache = self.bev_cache.detach() 
+        # Apply attention weights to the BEV cache
+        fused_bev = torch.bmm(attention_scores, flattened_bev)  # Shape: (B, T, L * C)
+
+        # Reduce the temporal dimension to get a single fused feature
+        fused_bev = fused_bev.mean(dim=1, keepdim=True)  # Shape: (B, 1, L * C)
+
+        # Reshape back to (B, L, 1, C)
+        fused_bev = fused_bev.view(B, L, 1, C)  # Shape: (B, L, 1, C)
+
+        # Reshape to (B, 256, 264) for final output
+        final_features = fused_bev.squeeze(2)  # Shape: (B, L, C)
+
+        self.bev_cache = self.bev_cache.detach()
         # self.last_delta_xy = self.delta_xy.detach()  # Detach the last_ego_xy for next step
         return final_features
 
