@@ -113,12 +113,12 @@ class ParkingModel(nn.Module):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
         fuse_feature_copy = fuse_feature.clone()
         # TODO: Train with ground truth, only use dynamics model for inference
-        delta_xy = data['delta_ego_pos'][:,:2].cuda()
+        # delta_xy = data['delta_ego_pos'][:,:2].cuda()
         # TODO: couuld also use ground truth for inference.
         # with torch.no_grad():
         #     _,_, delta_xy = self.hybrid_dynamics_model(data)
         # Temporal Fusion: return the fused feature and bev cache for next-step's input
-        fuse_feature_copy = self.temporal_fusion(fuse_feature_copy, delta_xy, data['delta_ego_pos'][:, 2].unsqueeze(1), data['restart'])
+        fuse_feature_copy = self.temporal_fusion(fuse_feature_copy, data)# delta_xy, data['delta_ego_pos'][:, 2].unsqueeze(1), data['restart'])
 
         approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())

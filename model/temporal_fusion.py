@@ -7,18 +7,17 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
     def __init__(self, cfg):
         super().__init__()
         # self.cfg = cfg
-        self.bev_cache = None # bev_cache: torch.size(B, 256, T, 264), e.g.: T=10
-        self.last_delta_xy = None # Initialize as empty tensor
-        self.last_yaw = None  # Initialize last_yaw as None
-
-        # Define the MLP layer to reduce feature dimensions
-        self.mlp = nn.Sequential(
-            nn.Linear(256 * 2, 256),  # Input: concatenated avg and max pool features
-            nn.ReLU(),
-            nn.Linear(256, 256)  # Output: reduced feature dimension
-        )
-
-    def forward(self, fuse_feature, delta_xy, delta_yaw, restart = True): # cur_yaw
+        self.bev_cache = None # Shape (B + T, 256, 264) e.g.: (30, 256, 264)
+        self.delta_ego_pose_cache = None # Shape (B + T, 3) e.g.: (30,3)
+        self.cur_idx = 0 # Global frame index for all tasks
+        self.cur_start_idx = None # Global Start index of the current task
+        self.task_offsets_iter = None # Shape: (B, 2)
+        self.T = 10 # Number of time steps to align
+        self.tasks_offsets = None
+        self.is_sanity_checking = True # Flag to indicate if the model is in sanity checking mode
+        self.reset_flag = False
+    
+    def forward(self, fuse_feature, data): # delta_xy, delta_yaw, restart_idx = True)
         '''
         Input:
         fuse_feature: torch.size(B, 256, 264)
@@ -27,46 +26,68 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         Output:
         Updated BEV cache with all T steps projected to the current ego-centric BEV range.
         '''
-        # TODO: calculate delta yaw by cur_yaw - self.last_yaw
-        # if self.last_delta_xy is None:
-        #     self.last_delta_xy = torch.zeros(fuse_feature.shape[0], 2, device=fuse_feature.device)
-        # if self.last_yaw is None:
-        #     delta_yaw = torch.zeros(fuse_feature.shape[0], 1, device=fuse_feature.device)
-        # else:
-        #     delta_yaw = cur_yaw - self.last_yaw
-        # import pdb; pdb.set_trace()
-        delta_ego_motion = torch.cat((delta_xy, delta_yaw), dim=1) # Shape: (B, 3)
+        restart_idx = data['restart'] # Shape: (B, 1)
+        data['delta_ego_pos'] # Shape: (B, 3)
+        temporal_bevs = []  # List to store the aligned BEV features for each time step and each data sample in the batch
+        if not self.is_sanity_checking and not self.reset_flag:
+            print("Resetting task counter")
+            # Reset the iterator after sanity check
+            self.task_offsets_iter = iter(data['task_offsets'][0,:,:].detach().tolist())
+            # Reset the cur_idx counter
+            self.cur_idx = 0
+            print("task_offsets: ", data['task_offsets'][0,:,:].detach().tolist())
+            self.reset_flag = True
+            # import pdb; pdb.set_trace()
 
-        # delta_ego_motion = torch.cat((self.last_delta_xy, delta_yaw), dim=1) # Shape: (B, 3)
-        # self.last_yaw = cur_yaw.detach()  # Update last_yaw for the next step
+        if self.delta_ego_pose_cache == None:
+            # Initialize the task offsets
+            self.task_offsets_iter = iter(data['task_offsets'][0,:,:].detach().tolist())
+            # Initialize the delta_ego_pose_cache with 10 zeros tensors cat with data['delta_ego_pos']
+            self.delta_ego_pose_cache = torch.cat((torch.zeros((10, 3)).to(data['delta_ego_pos'].device), data['delta_ego_pos']), dim = 0)  # Shape: (B+T, 3), e.g.: (30, 3)
+            
+            # Initialize the BEV cache with 10 zeros tensors cat with fuse_feature
+            self.bev_cache = torch.cat((torch.zeros((10, 256, 264)).to(fuse_feature.device), fuse_feature), dim=0)  # Shape: (B+T, 256, 264), e.g.: (30, 256, 264)
+        else:
+            self.delta_ego_pose_cache = torch.cat((self.delta_ego_pose_cache.to(data['delta_ego_pos'].device), data['delta_ego_pos']), dim = 0)
+            self.bev_cache = torch.cat((self.bev_cache.to(fuse_feature.device), fuse_feature), dim=0)  # Shape: (B+T, 256, 264), e.g.: (30, 256, 264)
+        
+        # idx is the index of the current frame in the batch
+        for idx in range(len(restart_idx)):
+            # print("idx: ", idx)
+            # if this is the first frame of the task, reinitialize the BEV cache
+            if restart_idx[idx]: # No need to iterate if the task just starts
+                print("Reinitializing BEV cache, idx = : ", self.cur_idx)
+                # import pdb; pdb.set_trace()
+                self.cur_start_idx = next(self.task_offsets_iter)[0]
+            # Update the temporal BEV cache with the current frame and the valid past frames
+            temporal_bevs.append(self.align_bev(idx))
+            # Print the tracked current index and the start index of the current task
+            # print(self.cur_idx, self.cur_start_idx)
+            self.cur_idx += 1
+            
 
-        # Initialize the BEV cache by repeat the first fuse_feature 10 times, if it's empty
-        # Or reinitialize the BEV cache if it is the first frame of the task
-        if self.bev_cache is None or restart:
-            self.bev_cache = fuse_feature.unsqueeze(2).repeat(1, 1, 10, 1)  # Shape: (B, 256, T=10, 264)
-        B, L, T, C = self.bev_cache.shape  # B: batch size, L: feature length, T: time steps, C: channels
-        # Reshape the new fuse_feature to (B, 256, 1, 264)
-        new_feature = fuse_feature.unsqueeze(2)  # Shape: (B, 256, 1, 264)
+        # convert from bev space to token sapce
+        temporal_bevs = torch.stack(temporal_bevs)  # Convert list to tensor
+        # Plot the aligned BEV features for debugging
+        if self.cur_idx == 10:
+            # import pdb; pdb.set_trace()
+            self.plot_bev_features(temporal_bevs, title_prefix="Aligned BEV Feature")
 
-        # Remove the oldest time step (T=0)
-        self.bev_cache = self.bev_cache[:, :, 1:, :]  # Shape: (B, 256, T-1, 264)
+        temporal_bevs = temporal_bevs.reshape(self.T, 10, 256, 264)  # Shape: (B, T=10, 16, 16, 264)
+        B, T, L, C = temporal_bevs.shape  # B: batch size, L: feature length, T: time steps, C: channels
 
-        # Add the new fuse_feature as the 10th time step
-        self.bev_cache = torch.cat((self.bev_cache, new_feature), dim=2)  # Shape: (B, 256, T=10, 264)
-        # Crop and project all T steps in bev_cache to the current ego-centric BEV range
-        aligned_bev = self.align_bev(self.bev_cache, delta_ego_motion)
         # plot the BEV features for debugging
         # self.plot_bev_features(aligned_bev)
-
-        self.delta_ego_motion = delta_ego_motion.detach()  # Update the delta_ego_motion for next step temporal fusion
+        # Update the delta_ego_pose_cache
+        self.delta_ego_pose_cache = data['delta_ego_pos'][-self.T:,:].detach()  # Update the delta_ego_motion for next step temporal fusion
         # TODO: Accumulated Memory is sorted by detaching bev_cache
         # TODO: however, is this the right way to do it?
-        # Update the BEV cache with the aligned BEV
-        self.bev_cache = aligned_bev.view(B, L, T, C) 
+        # Update the BEV cache with the fuse_feature BEV
+        self.bev_cache = (fuse_feature[-self.T:,:,:]).detach()  # Shape: (B + 10, 256, 264) 
 
-        # Calculate the self attention score between T bev caches
-        flattened_bev = self.bev_cache.permute(0, 2, 1, 3).reshape(B, T, L * C)  # Shape: (B, T, L * C)
-        
+        # Flatten the BEV features for self-attention
+        flattened_bev = temporal_bevs.reshape(B, T, L * C)  # Shape: (B, T, L * C)
+
         # Compute self-attention scores
         attention_scores = torch.bmm(flattened_bev, flattened_bev.transpose(1, 2))  # Shape: (B, T, T)
         attention_scores = F.softmax(attention_scores, dim=-1)  # Normalize scores along the time dimension
@@ -87,184 +108,101 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         # self.last_delta_xy = self.delta_xy.detach()  # Detach the last_ego_xy for next step
         return final_features
 
-    def align_bev(self, raw_bev_cache, delta_ego_motion):
+    def align_bev(self, idx):
         '''
         Align the egocentric BEV image at all T steps by aligning the first T-1 channels to the Tth channel.
-        Fill blank areas with 0s.
-        
-        Input:
-        raw_bev_cache: torch.size(B, 16, 16, T, 264)
-        delta_ego_motion: torch.size(B, 3) [delta_x, delta_y, delta_yaw] (unit in meters)
-        
-        Output:
-        torch.size(B, 16, 16, T, 264) with the first T-1 channels aligned to the Tth channel.
+        Fill blank areas with 0s. Fill invalid steps/frames with 0s. Use the delta_ego_motion cache to align the BEV features.
         '''
-        B, _, T, C = raw_bev_cache.shape
-        raw_bev_cache = raw_bev_cache.view(B, 16, 16, T, C)  # Ensure the shape is (B, H, W, T, C)
-        _, H, W, _, _ = raw_bev_cache.shape  # B: batch size, H: height, W: width, T: time steps, C: channels
-        bev_resolution = 200 / 16  # Each grid represents 12.5 meters (200m downsampled to 16 grids)
+        # The num_past_frames is the number of past bev features to add to the BEV cache
+        num_valid_past_frames = min(9, self.cur_idx - self.cur_start_idx)
+        # Extract the relevant delta_ego_pose for alignment
+        valid_delta_ego_pose = self.delta_ego_pose_cache[idx + self.T - num_valid_past_frames : idx + self.T]
+        # [delta pose 1st to cur, delta pose 2nd to cur, ..., delta pose (T-1)th to cur]
+        cumulative_ego_pose = -torch.flip(
+            torch.cumsum(torch.flip(valid_delta_ego_pose, dims=[0]), dim=0), dims=[0]
+        )  # Shape: (num_valid_past_frames, 3), e.g.: (9, 3)
 
-        # Convert delta_ego_motion to grid units
-        delta_x = delta_ego_motion[:, 0] / bev_resolution  # Convert delta_x to grid units
-        delta_y = delta_ego_motion[:, 1] / bev_resolution  # Convert delta_y to grid units
-        delta_yaw = delta_ego_motion[:, 2]  # Rotation in radians
+        # Initialize the aligned BEV cache with zeros
+        aligned_bev = torch.zeros((10, 16, 16, 264), device=self.bev_cache.device)  # Shape: (T=10, 16, 16, 264)
 
-        # Compute relative motion for all batches
-        dx = delta_x.view(B, 1, 1)  # Shape: (B, 1, 1)
-        dy = delta_y.view(B, 1, 1)  # Shape: (B, 1, 1)
-        dyaw = delta_yaw.view(B, 1, 1)  # Shape: (B, 1, 1)
+        # Align valid past frames
+        # TODO: determine the order to align the past frames based on the cumulative ego pose
+        # Iterate over the valid past frames in reverse order
+        for t in range(num_valid_past_frames, -1, -1):
+            if num_valid_past_frames == 0:
+                break
+            # import pdb; pdb.set_trace()
+            # Downsample the BEV feature from (1, 256, 264) to (1, 16, 16, 264)
+            # print("    t:", t)
+            # TODO: Review the index calculation(for the BEV cache)
+            bev_feature = self.bev_cache[idx + self.T - (num_valid_past_frames - t)].unsqueeze(0).squeeze(2)  # Shape: (256,1,264) --> (1, 256, 264)
+            bev_feature_spatial = bev_feature.view(1, 16, 16, 264)  # Remove the added channel dimension: (1, 16, 16, 264)
+            # import pdb; pdb.set_trace()
+            # Extract cumulative ego pose for this frame
+            delta_x, delta_y, delta_yaw = cumulative_ego_pose[t - 1]
+            cos_yaw = torch.cos(delta_yaw)
+            sin_yaw = torch.sin(delta_yaw)
 
-        # Create the affine transformation matrix for all T-1 channels
-        theta = torch.zeros((B, 2, 3), device=raw_bev_cache.device)  # Shape: (B, 2, 3)
-        cos_dyaw = torch.cos(delta_yaw.squeeze())
-        sin_dyaw = torch.sin(delta_yaw.squeeze())
+            # Construct the affine transformation matrix
+            theta = torch.tensor([
+                [cos_yaw, sin_yaw, +delta_x],
+                [-sin_yaw, cos_yaw, +delta_y]
+            ], device=self.bev_cache.device).unsqueeze(0)  # Shape: (1, 2, 3)
 
-        # Rotation part (inverse rotation)
-        theta[:, 0, 0] = cos_dyaw
-        theta[:, 0, 1] = sin_dyaw # Note: sin( -dyaw) = -sin(dyaw)
-        theta[:, 1, 0] = -sin_dyaw # Note: sin(-dyaw) = -sin(dyaw)
-        theta[:, 1, 1] = cos_dyaw
+            # Generate the sampling grid
+            grid = F.affine_grid(theta, size=bev_feature_spatial.size(), align_corners=False)
 
-        # Translation part (inverse translation in the rotated frame, mapped to [-1, 1] range)
-        theta[:, 0, 2] = -(cos_dyaw * delta_x.squeeze() + sin_dyaw * delta_y.squeeze())
-        theta[:, 1, 2] = (sin_dyaw * delta_x.squeeze() - cos_dyaw * delta_y.squeeze())
+            # Apply the affine transformation to the downsampled BEV feature
+            aligned_bev[-t - 1] = F.grid_sample(
+                bev_feature_spatial,  # Shape: (1, C, H, W)
+                grid,
+                padding_mode='zeros',
+                align_corners=False
+            ).squeeze(0)  # Remove batch dimension
 
-        # Reshape raw_bev_cache to (B * T, C, H, W)
-        bev_cache = raw_bev_cache.permute(0, 3, 4, 1, 2).contiguous().view(B * T, C, H, W)
+        # Add the current frame's BEV feature as the last frame in the aligned BEV cache
+        current_bev_feature = self.bev_cache[idx].unsqueeze(0)  # Shape: (1, 256, 264)
+        current_bev_spatial = current_bev_feature.unsqueeze(1).view(1, 16, 16, 264)
+        aligned_bev[-1] = current_bev_spatial
 
-        # Generate sampling grid for affine transformation
-        grid = F.affine_grid(theta.repeat(T - 1, 1, 1), size=(B * (T - 1), C, H, W), align_corners=False)  # Shape: (B * (T-1), H, W, 2)
-
-        # Apply affine transformation to the first T-1 channels
-        transformed_bev = F.grid_sample(bev_cache[:B * (T - 1)], grid, padding_mode='zeros', align_corners=False)
-
-        # Reshape back to (B, H, W, T-1, C)
-        transformed_bev = transformed_bev.view(B, T - 1, C, H, W).permute(0, 3, 4, 1, 2) # torch.Size([1, 16, 16, 9, 264])
-
-        # Combine the transformed first T-1 channels with the unaltered Tth channel
-        aligned_bev = torch.cat((transformed_bev, raw_bev_cache[:, :, :, -1:, :]), dim=3)
-        return aligned_bev # torch.Size([1, 16, 16, 10, 264])
+        return aligned_bev  # Shape: (10, 16, 16, 264)
 
     def plot_bev_features(self, bev_features, title_prefix="BEV Feature 10 Time Step"):
         '''
-        Plots all time steps' 16x16 BEV features in the same plot.
+        Plots all time steps' 16x16 BEV features for all samples in the batch.
         
         Input:
-        bev_features: torch.Tensor of shape (B, 16, 16, T, C)
+        bev_features: torch.Tensor of shape (B, T, H, W, C)
         title_prefix: Prefix for the plot title.
         '''
+        print("Plotting aligned BEV features")
         import os
-        B, H, W, T, C = bev_features.shape
+        import matplotlib.pyplot as plt
+
+        B, T, H, W, C = bev_features.shape
 
         # Create a new folder under the current folder
         output_folder = os.path.join(os.getcwd(), "bev_feature_plots")
         os.makedirs(output_folder, exist_ok=True)  # Create the folder if it doesn't exist
 
-        # Create a figure
-        fig, axes = plt.subplots(1, T, figsize=(T * 4, 4))  # Create T subplots in a single row
+        # For each channel you want to visualize (here, channel 128)
+        channel = 128
 
-        # Loop through each time step
-        for t in range(T):
-            # TODO: Visualize other channels if needed
-            # Take the first batch (B=0) and the first channel (C=0) for visualization
-            feature_map = bev_features[0, :, :, t, 0].cpu().detach().numpy()  # Shape: (16, 16)
+        # Create a figure with B rows and T columns
+        fig, axes = plt.subplots(B, T, figsize=(T * 3, B * 3), squeeze=False)
 
-            # Plot the feature map in the corresponding subplot
-            ax = axes[t] if T > 1 else axes  # Handle case where T=1
-            im = ax.imshow(feature_map, cmap='viridis')
-            ax.set_title(f"{title_prefix} {t}")
-            ax.set_xlabel("Width")
-            ax.set_ylabel("Height")
-            fig.colorbar(im, ax=ax)
+        for b in range(B):
+            for t in range(T):
+                feature_map = bev_features[b, t, :, :, channel].cpu().detach().numpy()  # Shape: (H, W)
+                ax = axes[b, t]
+                im = ax.imshow(feature_map, cmap='viridis')
+                ax.set_title(f"Timestep:{b} Feature:{B-t}")
+                ax.set_xlabel("W")
+                ax.set_ylabel("H")
+                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-        # Save the plot to the output folder
-        plot_path = os.path.join(output_folder, f"{title_prefix}.png")
+        plt.suptitle(title_prefix)
+        plot_path = os.path.join(output_folder, f"{title_prefix}_all_samples.png")
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(plot_path)
-        plt.close()  # Close the figure to free memory
-
-
-# import torch
-# import torch.nn.functional as F
-# from torch import nn
-
-# class TemporalFusion(nn.Module):
-#     def __init__(self, cfg):
-#         super().__init__()
-#         # Assuming cfg might contain parameters like bev_size, etc.
-#         self.bev_height = 16  # Downsampled BEV height
-#         self.bev_width = 16   # Downsampled BEV width
-
-#     def forward(self, bev_cache, delta_ego_motion):
-#         cropped_bev = self.crop_bev(bev_cache, delta_ego_motion)
-#         # Further processing can be added here if needed
-#         return cropped_bev
-
-#     def crop_bev(self, raw_bev_cache, delta_ego_motion):
-#         B, C, T, _ = raw_bev_cache.shape
-#         H, W = self.bev_height, self.bev_width
-#         # Reshape BEV cache to (B, C, T, H, W)
-#         bev_cache = raw_bev_cache.view(B, C, T, H, W)
-        
-#         # Compute cumulative deltas for each timestep t
-#         if T > 1:
-#             reversed_cumsum = torch.flip(delta_ego_motion, dims=[1]).cumsum(dim=1)
-#             reversed_cumsum = torch.flip(reversed_cumsum, dims=[1])
-#             # Pad with zeros for the current frame (t=T-1)
-#             cumulative_deltas = torch.cat([
-#                 reversed_cumsum,
-#                 torch.zeros((B, 1, 3), device=delta_ego_motion.device)
-#             ], dim=1)
-#         else:
-#             # If T=1, no historical frames, return original
-#             cumulative_deltas = torch.zeros((B, 1, 3), device=delta_ego_motion.device)
-        
-#         # Extract components
-#         dx = cumulative_deltas[..., 0]  # (B, T)
-#         dy = cumulative_deltas[..., 1]
-#         dyaw = cumulative_deltas[..., 2]
-        
-#         # Compute cos and sin of yaw
-#         cos_theta = torch.cos(dyaw)
-#         sin_theta = torch.sin(dyaw)
-        
-#         # Compute translation components after rotation
-#         tx = -dx * cos_theta - dy * sin_theta
-#         ty = dx * sin_theta - dy * cos_theta
-        
-#         # Construct affine transformation matrices (B, T, 2, 3)
-#         theta = torch.zeros(B, T, 2, 3, device=bev_cache.device)
-#         theta[:, :, 0, 0] = cos_theta
-#         theta[:, :, 0, 1] = sin_theta
-#         theta[:, :, 0, 2] = tx
-#         theta[:, :, 1, 0] = -sin_theta
-#         theta[:, :, 1, 1] = cos_theta
-#         theta[:, :, 1, 2] = ty
-        
-#         # Reshape theta for affine_grid (B*T, 2, 3)
-#         theta = theta.view(B * T, 2, 3)
-        
-#         # Generate sampling grid
-#         grid = F.affine_grid(
-#             theta,
-#             size=(B * T, C, H, W),
-#             align_corners=False
-#         )
-        
-#         # Prepare BEV features for grid_sample (B*T, C, H, W)
-#         bev_reshaped = bev_cache.permute(0, 2, 1, 3, 4).contiguous().view(B * T, C, H, W)
-        
-#         # Sample using grid
-#         sampled = F.grid_sample(
-#             bev_reshaped,
-#             grid,
-#             padding_mode='zeros',
-#             align_corners=False
-#         )
-        
-#         # Reshape back to (B, C, T, H, W)
-#         sampled = sampled.view(B, T, C, H, W).permute(0, 2, 1, 3, 4).contiguous()
-        
-#         # Flatten spatial dimensions
-#         cropped_bev = sampled.view(B, C, T, H * W)
-        
-#         return cropped_bev
+        plt.close()

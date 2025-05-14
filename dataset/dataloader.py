@@ -29,7 +29,7 @@ class ParkingDataModule(pl.LightningDataModule):
         val_set = CarlaDataset(data_root, 0, self.cfg)
         self.train_loader = DataLoader(dataset=train_set,
                                        batch_size=self.cfg.batch_size,
-                                       shuffle=True,
+                                       shuffle=False,
                                        num_workers=16,
                                        pin_memory=True,
                                        worker_init_fn=seed_worker,

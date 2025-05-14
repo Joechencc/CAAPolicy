@@ -625,6 +625,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         # Indicator for temporal fusion intialization
         if is_start_of_task:
             data['restart'] = True
+            print('Restart index check', index)
         else:
             data['restart'] = False
         if is_end_of_task:
@@ -636,7 +637,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         data['delta_ego_pos'] = torch.from_numpy(self.delta_ego_pos[index])
         data['task_offsets'] = torch.from_numpy(self.task_offsets)
-
+        # print("dataloading order check: ", index)
         return data
 
 

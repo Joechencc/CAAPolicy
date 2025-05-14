@@ -63,6 +63,10 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.parking_model = ParkingModel(self.cfg)
 
+    def on_train_epoch_start(self):
+        if not self.trainer.sanity_checking:
+            self.parking_model.temporal_fusion.is_sanity_checking = False
+
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
