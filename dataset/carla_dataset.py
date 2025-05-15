@@ -250,9 +250,10 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.control = []
 
-        self.velocity = []
-        self.acc_x = []
-        self.acc_y = []
+        self.velocity_forward = []
+        self.velocity_lateral = []
+        self.acc_forward = []
+        self.acc_lateral = []
 
         self.throttle_brake = []
         self.steer = []
@@ -271,7 +272,56 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.plot_y = []
         self.plot_yaw = []
         self.get_data()
+    def world_to_ego_velocity(self, speed_x, speed_y, speed_z, roll, pitch, yaw):
+        """
+        Convert velocity from the world coordinate frame to the vehicle’s egocentric frame.
 
+        Parameters:
+            speed_x, speed_y, speed_z : float
+                Velocity components in the world frame [m/s].
+            roll, pitch, yaw : float
+                Vehicle orientation angles in degrees.
+
+        Returns:
+            v_ego : ndarray, shape (3,)
+                Velocity in the vehicle frame:
+                [v_forward, v_right, v_up] in m/s.
+        """
+        # 1. Convert angles from degrees to radians
+        r = np.deg2rad(roll)
+        p = np.deg2rad(pitch)
+        y = np.deg2rad(yaw)
+
+        # 2. Build rotation matrices for each axis
+        # Rotation around X-axis (roll)
+        Rx = np.array([
+            [1,          0,           0],
+            [0, np.cos(r), -np.sin(r)],
+            [0, np.sin(r),  np.cos(r)]
+        ])
+        # Rotation around Y-axis (pitch)
+        Ry = np.array([
+            [ np.cos(p), 0, np.sin(p)],
+            [         0, 1,         0],
+            [-np.sin(p), 0, np.cos(p)]
+        ])
+        # Rotation around Z-axis (yaw)
+        Rz = np.array([
+            [ np.cos(y), -np.sin(y), 0],
+            [ np.sin(y),  np.cos(y), 0],
+            [         0,          0, 1]
+        ])
+
+        # 3. Combine rotations: from vehicle (ego) frame to world frame
+        R_ego_to_world = Rz @ Ry @ Rx
+
+        # 4. World-frame velocity vector
+        v_world = np.array([speed_x, speed_y, speed_z])
+
+        # 5. Transform world velocity into vehicle frame (inverse rotation)
+        v_ego = R_ego_to_world.T @ v_world
+
+        return v_ego
     def init_camera_config(self):
         cam_config = {'width': 400, 'height': 300, 'fov': 100}
         with open('./config/sensor_specs.yaml', 'r') as file:
@@ -368,9 +418,19 @@ class CarlaDataset(torch.utils.data.Dataset):
                                             carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
 
                 # motion
-                self.velocity.append(data['speed'])
-                self.acc_x.append(data['acc_x'])
-                self.acc_y.append(data['acc_y'])
+                veloctiy_x_world = data['speed_x']
+                veloctiy_y_world = data['speed_y']
+                velocity_z_world = data['speed_z']
+                velocity_ego = self.world_to_ego_velocity(veloctiy_x_world,veloctiy_y_world,velocity_z_world, data['roll'], data['pitch'], data['yaw'])
+                self.velocity_forward.append(velocity_ego[0])
+                self.velocity_lateral.append(velocity_ego[1])
+
+                acc_x_world = data['acc_x']
+                acc_y_world = data["acc_y"]
+                acc_z_world = 0
+                acc_ego = self.world_to_ego_velocity(acc_x_world,acc_y_world,acc_z_world, data['roll'], data['pitch'], data['yaw'])
+                self.acc_forward.append(acc_ego[0])
+                self.acc_lateral.append(acc_ego[1])
 
                 # control
                 controls = []
@@ -494,9 +554,10 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.topdown = np.array(self.topdown).astype(np.string_)
 
-        self.velocity = np.array(self.velocity).astype(np.float32)
-        self.acc_x = np.array(self.acc_x).astype(np.float32)
-        self.acc_y = np.array(self.acc_y).astype(np.float32)
+        self.velocity_forward = np.array(self.velocity_forward).astype(np.float32)
+        self.velocity_lateral = np.array(self.velocity_lateral).astype(np.float32)
+        self.acc_forward = np.array(self.acc_forward).astype(np.float32)
+        self.acc_lateral = np.array(self.acc_lateral).astype(np.float32)
 
         self.control = np.array(self.control).astype(np.int64)
         self.waypoint = np.array(self.waypoint).astype(np.int64)
@@ -552,7 +613,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
-        ego_motion = np.column_stack((self.velocity[index], self.acc_x[index], self.acc_y[index]))
+        ego_motion = np.column_stack((self.velocity_forward[index],self.velocity_lateral[index], self.acc_forward[index], self.acc_lateral[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
 
         # gt control token
