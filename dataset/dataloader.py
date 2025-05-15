@@ -30,14 +30,14 @@ class ParkingDataModule(pl.LightningDataModule):
         self.train_loader = DataLoader(dataset=train_set,
                                        batch_size=self.cfg.batch_size,
                                        shuffle=False,
-                                       num_workers=16,
+                                       num_workers=24,
                                        pin_memory=True,
                                        worker_init_fn=seed_worker,
                                        drop_last=True)
         self.val_loader = DataLoader(dataset=val_set,
                                      batch_size=self.cfg.batch_size,
                                      shuffle=False,
-                                     num_workers=16,
+                                     num_workers=24,
                                      pin_memory=True,
                                      worker_init_fn=seed_worker,
                                      drop_last=True)

@@ -5,10 +5,10 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=24
 #SBATCH --time=48:00:00
-#SBATCH --mem=100GB
-#SBATCH --gres=gpu:rtx8000:2
-#SBATCH --job-name=spatial-temporal
-#SBATCH --output=temporal_fusion_2gpu.out
+#SBATCH --mem=80GB
+#SBATCH --gres=gpu:a100:1
+#SBATCH --job-name=temporal
+#SBATCH --output=temporal_fusion_reduced_bs_1gpu.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=rs9193@nyu.edu
 

@@ -14,9 +14,17 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         self.task_offsets_iter = None # Shape: (B, 2)
         self.T = 10 # Number of time steps to align
         self.tasks_offsets = None
-        self.is_sanity_checking = True # Flag to indicate if the model is in sanity checking mode
+        self.reset_flag = True # Flag to indicate if the model needs reset
+   
+    def reset_state(self):
+        self.bev_cache = None
+        self.delta_ego_pose_cache = None
+        self.cur_idx = 0
+        self.cur_start_idx = None
+        self.task_offsets_iter = None
+        self.tasks_offsets = None
         self.reset_flag = False
-    
+
     def forward(self, fuse_feature, data): # delta_xy, delta_yaw, restart_idx = True)
         '''
         Input:
@@ -27,16 +35,14 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         Updated BEV cache with all T steps projected to the current ego-centric BEV range.
         '''
         restart_idx = data['restart'] # Shape: (B, 1)
+        B = len(restart_idx) # Batch size
         data['delta_ego_pos'] # Shape: (B, 3)
         temporal_bevs = []  # List to store the aligned BEV features for each time step and each data sample in the batch
-        if not self.is_sanity_checking and not self.reset_flag:
-            print("Resetting task counter")
-            # Reset the iterator after sanity check
-            self.task_offsets_iter = iter(data['task_offsets'][0,:,:].detach().tolist())
-            # Reset the cur_idx counter
-            self.cur_idx = 0
+        if self.reset_flag:
+            print("Resetting task counter, iterator")
+            self.reset_state()
             print("task_offsets: ", data['task_offsets'][0,:,:].detach().tolist())
-            self.reset_flag = True
+            self.reset_flag = False
             # import pdb; pdb.set_trace()
 
         if self.delta_ego_pose_cache == None:
@@ -52,7 +58,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
             self.bev_cache = torch.cat((self.bev_cache.to(fuse_feature.device), fuse_feature), dim=0)  # Shape: (B+T, 256, 264), e.g.: (30, 256, 264)
         
         # idx is the index of the current frame in the batch
-        for idx in range(len(restart_idx)):
+        for idx in range(B):
             # print("idx: ", idx)
             # if this is the first frame of the task, reinitialize the BEV cache
             if restart_idx[idx]: # No need to iterate if the task just starts
@@ -73,7 +79,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
             # import pdb; pdb.set_trace()
             self.plot_bev_features(temporal_bevs, title_prefix="Aligned BEV Feature")
 
-        temporal_bevs = temporal_bevs.reshape(self.T, 10, 256, 264)  # Shape: (B, T=10, 16, 16, 264)
+        temporal_bevs = temporal_bevs.reshape(B, self.T, 256, 264)  # Shape: (B, T=10, 16, 16, 264)
         B, T, L, C = temporal_bevs.shape  # B: batch size, L: feature length, T: time steps, C: channels
 
         # plot the BEV features for debugging
@@ -87,7 +93,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
 
         # Flatten the BEV features for self-attention
         flattened_bev = temporal_bevs.reshape(B, T, L * C)  # Shape: (B, T, L * C)
-
+        temporal_bevs = temporal_bevs.detach()
         # Compute self-attention scores
         attention_scores = torch.bmm(flattened_bev, flattened_bev.transpose(1, 2))  # Shape: (B, T, T)
         attention_scores = F.softmax(attention_scores, dim=-1)  # Normalize scores along the time dimension
@@ -113,6 +119,8 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         Align the egocentric BEV image at all T steps by aligning the first T-1 channels to the Tth channel.
         Fill blank areas with 0s. Fill invalid steps/frames with 0s. Use the delta_ego_motion cache to align the BEV features.
         '''
+        if self.cur_start_idx is None:
+            print(f"[DEBUG] cur_idx={self.cur_idx}, cur_start_idx=None at idx={idx}")
         # The num_past_frames is the number of past bev features to add to the BEV cache
         num_valid_past_frames = min(9, self.cur_idx - self.cur_start_idx)
         # Extract the relevant delta_ego_pose for alignment
