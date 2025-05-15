@@ -1,9 +1,8 @@
 import torch
 import pytorch_lightning as pl
 from torch import nn
-from torch.utils.data import DataLoader
 # from model.dynamics_model import DynamicsModel
-from model.dynamics_model import DynamicsModel as DynamicsModel 
+from model.dynamics_model import DynamicsModel
 from tool.config import Configuration
 
 

@@ -73,8 +73,8 @@ def train():
         accelerator='gpu',
         devices=1,
         max_epochs=cfg.epochs,
-        log_every_n_steps=cfg.log_every_n_steps,
-        check_val_every_n_epoch=cfg.check_val_every_n_epoch,
+        log_every_n_steps=1, #batch_size can be very large so log every 1 step
+        check_val_every_n_epoch=2,
         profiler='simple',
         callbacks=[early_stopping, model_checkpoint]  # Add callbacks here
     )

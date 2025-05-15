@@ -9,3 +9,4 @@ Bench2DriveZoo/
 PWU.egg-info
 carla
 .out
+*.log
