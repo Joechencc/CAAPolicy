@@ -67,7 +67,6 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
                 
                 # Save Waypoints
                 self.ego_pos.append(ego_pos)
-
                 # ego_motion
                 self.ego_motion.append([data['speed_x'], data['speed_y'], data['acc_x'], data['acc_y']])
                 # raw control will be used to predict next ego_pose
@@ -77,7 +76,6 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
             start_index += num_valid_frames
 
         self.ego_motion = np.array(self.ego_motion).astype(np.float32)
-
         self.ego_pos = np.array(self.ego_pos).astype(np.float32)
         # Convert lists to tensors
         self.task_offsets = np.array(self.task_offsets).astype(np.int32)

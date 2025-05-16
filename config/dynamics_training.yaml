@@ -27,16 +27,17 @@ parking_model:
   log_every_n_steps: 10
   check_val_every_n_epoch: 3
 
-  epochs: 155
+  epochs: 2000
   learning_rate: 0.0001
   weight_decay: 0.0001
   batch_size: 40000
-
-  training_map: /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
+# Note: Before training, the val_dataset must contain more than 1 batch of data, 
+# Otherwise, the validation will not be performed, no ckpt will be saved.
+  training_map: /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
   # validation_map: /vast/rs9193/Town_Opt_1000_small # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
-  validation_map: /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
+  validation_map: /scratch/rs9193/dynamics_dataset/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
   future_frame_nums: 1
-  hist_frame_nums: 0
+  hist_frame_nums: 10
   token_nums: 204
   image_crop: 256
 

@@ -10,3 +10,5 @@ PWU.egg-info
 carla
 .out
 *.log
+*.out
+dynamic_prediction/
