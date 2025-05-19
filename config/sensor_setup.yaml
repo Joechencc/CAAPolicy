@@ -1,35 +1,35 @@
 cam_specs: {
-  'depth_front_us': {
+  'depth_front': {
     'x': 2.36, 'y': 0.0, 'z': 1.5,
     'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
     'type': 'sensor.camera.depth',
   },
-  'depth_front_left_us': {
+  'depth_front_left': {
     'x': 2.36, 'y': -0.792, 'z': 1.5,
     'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
     'type': 'sensor.camera.depth',
   },
-  'depth_front_right_us': {
+  'depth_front_right': {
     'x': 2.36, 'y': 0.792, 'z': 1.5,
     'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
     'type': 'sensor.camera.depth',
   },
-  'depth_back_us': {
+  'depth_back': {
     'x': -2.36, 'y': 0.0, 'z': 1.55,
     'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
     'type': 'sensor.camera.depth',
   },
-  'depth_back_left_us': {
+  'depth_back_left': {
     'x': -2.36, 'y': -0.792, 'z': 1.55,
     'roll': 0, 'pitch': 0.0, 'yaw': -110,
     'type': 'sensor.camera.depth',
   },
-  'depth_back_right_us': {
+  'depth_back_right': {
     'x': -2.36, 'y': 0.792, 'z': 1.55,
     'roll': 0, 'pitch': 0.0, 'yaw': 110,
     'type': 'sensor.camera.depth',
   },
-  'camera_front_us': {
+  'camera_front': {
     'x': 2.36, 'y': 0.0, 'z': 1.5,
     'fov': 100,
     'roll': 0, 'pitch': 0, 'yaw': 0,
@@ -37,7 +37,7 @@ cam_specs: {
     'width': 400,
     'height': 300,
   },
-  'camera_front_left_us': {
+  'camera_front_left': {
     'x': 2.36, 'y': -0.792, 'z': 1.5,
     'fov': 100,
     'roll': 0.0, 'pitch': 0.0, 'yaw': -55.0,
@@ -45,7 +45,7 @@ cam_specs: {
     'width': 400,
     'height': 300,
   },
-  'camera_front_right_us': {
+  'camera_front_right': {
     'x': 2.36, 'y': 0.792, 'z': 1.5,
     'fov': 100,
     'roll': 0.0, 'pitch': 0.0, 'yaw': 55.0,
@@ -53,7 +53,7 @@ cam_specs: {
     'width': 400,
     'height': 300,
   },
-  'camera_back_us': {
+  'camera_back': {
     'x': -2.36, 'y': 0.0, 'z': 1.55,
     'fov': 100,
     'roll': 0.0, 'pitch': 0.0, 'yaw': -180.0,
@@ -61,7 +61,7 @@ cam_specs: {
     'width': 400,
     'height': 300,
   },
-  'camera_back_left_us': {
+  'camera_back_left': {
     'x': -2.36, 'y': -0.792, 'z': 1.55,
     'fov': 100,
     'roll': 0, 'pitch': 0.0, 'yaw': -110,
@@ -69,7 +69,7 @@ cam_specs: {
     'width': 400,
     'height': 300,
   },
-  'camera_back_right_us': {
+  'camera_back_right': {
     'x': -2.36, 'y': 0.792, 'z': 1.55,
     'fov': 100,
     'roll': 0, 'pitch': 0.0, 'yaw': 110,
@@ -85,46 +85,7 @@ cam_specs: {
     'width': 1600,
     'height': 900,
   },
-  'camera_front_e2e': {
-    'x': 1.5, 'y': 0.0, 'z': 1.5,
-    'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-    'type': 'sensor.camera.rgb',
-  },
-  'camera_left_e2e': {
-    'x': 0.0, 'y': -0.8, 'z': 1.5,
-    'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-    'type': 'sensor.camera.rgb',
-  },
-  'camera_right_e2e': {
-    'x': 0.0, 'y': 0.8, 'z': 1.5,
-    'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-    'type': 'sensor.camera.rgb',
-  },
-  'camera_rear_e2e': {
-    'x': -2.2, 'y': 0.0, 'z': 1.5,
-    'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-    'type': 'sensor.camera.rgb',
-  },
-  'depth_front_e2e': {
-    'x': 1.5, 'y': 0.0, 'z': 1.5,
-    'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-    'type': 'sensor.camera.depth',
-  },
-  'depth_left_e2e': {
-    'x': 0.0, 'y': -0.8, 'z': 1.5,
-    'roll': 0.0, 'pitch': -40.0, 'yaw': -90.0,
-    'type': 'sensor.camera.depth',
-  },
-  'depth_right_e2e': {
-    'x': 0.0, 'y': 0.8, 'z': 1.5,
-    'roll': 0.0, 'pitch': -40.0, 'yaw': 90.0,
-    'type': 'sensor.camera.depth',
-  },
-  'depth_rear_e2e': {
-    'x': -2.2, 'y': 0.0, 'z': 1.5,
-    'roll': 0.0, 'pitch': -30.0, 'yaw': 180.0,
-    'type': 'sensor.camera.depth',
-  },
+
 }
 lidar_specs: {
   'lidar_01': {

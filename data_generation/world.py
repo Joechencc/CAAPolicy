@@ -287,8 +287,8 @@ class World(object):
 
         for key, value in self._cam_specs.items():
             self.spawn_rgb_camera(key, value)
-        for key, value in self._lidar_specs.items():
-            self.spawn_semantic_lidar(key, value)
+        # for key, value in self._lidar_specs.items():
+        #     self.spawn_semantic_lidar(key, value)
 
         # intrinsic
         w = self._cam_config['width']

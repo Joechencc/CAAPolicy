@@ -206,7 +206,7 @@ class DataGenerator:
         cur_save_path = pathlib.Path(self._save_path) / ('task' + str(self._task_index))
         cur_save_path.mkdir(parents=True, exist_ok=True)
         (cur_save_path / 'measurements').mkdir()
-        (cur_save_path / 'voxel').mkdir()
+        #(cur_save_path / 'voxel').mkdir()
         (cur_save_path / 'parking_goal').mkdir()
         (cur_save_path / 'topdown').mkdir()
         for sensor in self._batch_data_frames[0].keys():
@@ -254,19 +254,19 @@ class DataGenerator:
         process_num = thread_num
         frames_for_process = total_frames // process_num
         # Create and start processes
-        for p_idx in range(process_num):
-            start = p_idx * frames_for_process
-            if p_idx == process_num - 1:
-                end = total_frames  # Ensure the last process handles any remaining frames
-            else:
-                end = (p_idx + 1) * frames_for_process
-            p = Process(target=self.worker, args=(start, end, cur_save_path, self.lidar_specs))
-            p.start()
-            process_list.append(p)
+        # for p_idx in range(process_num):
+        #     start = p_idx * frames_for_process
+        #     if p_idx == process_num - 1:
+        #         end = total_frames  # Ensure the last process handles any remaining frames
+        #     else:
+        #         end = (p_idx + 1) * frames_for_process
+        #     p = Process(target=self.worker, args=(start, end, cur_save_path, self.lidar_specs))
+        #     p.start()
+        #     process_list.append(p)
 
-        # Wait for all processes to complete
-        for process in process_list:
-            process.join()
+        # # Wait for all processes to complete
+        # for process in process_list:
+        #     process.join()
         logging.info('saved sensor data for task %d in %s', self._task_index, str(cur_save_path))
 
     def save_unit_data(self, start, end, cur_save_path):
@@ -302,6 +302,9 @@ class DataGenerator:
                 'yaw': vehicle_transform.rotation.yaw,
                 'roll': vehicle_transform.rotation.roll,
                 'speed': (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)),
+                'speed_x':3.6 * vehicle_velocity.x,
+                'speed_y':3.6 * vehicle_velocity.y,
+                'speed_z':3.6 * vehicle_velocity.z,
                 'Throttle': vehicle_control.throttle,
                 'Steer': vehicle_control.steer,
                 'Brake': vehicle_control.brake,
