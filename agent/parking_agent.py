@@ -483,7 +483,56 @@ class ParkingAgent:
         if self.boot_step > 10 or self.trans_control.brake > 1e-5:  # 1s
             self.boot_step = 0
             self.boost = False
+    def world_to_ego_velocity(self, speed_x, speed_y, speed_z, roll, pitch, yaw):
+        """
+        Convert velocity from the world coordinate frame to the vehicle’s egocentric frame.
 
+        Parameters:
+            speed_x, speed_y, speed_z : float
+                Velocity components in the world frame [m/s].
+            roll, pitch, yaw : float
+                Vehicle orientation angles in degrees.
+
+        Returns:
+            v_ego : ndarray, shape (3,)
+                Velocity in the vehicle frame:
+                [v_forward, v_right, v_up] in m/s.
+        """
+        # 1. Convert angles from degrees to radians
+        r = np.deg2rad(roll)
+        p = np.deg2rad(pitch)
+        y = np.deg2rad(yaw)
+
+        # 2. Build rotation matrices for each axis
+        # Rotation around X-axis (roll)
+        Rx = np.array([
+            [1,          0,           0],
+            [0, np.cos(r), -np.sin(r)],
+            [0, np.sin(r),  np.cos(r)]
+        ])
+        # Rotation around Y-axis (pitch)
+        Ry = np.array([
+            [ np.cos(p), 0, np.sin(p)],
+            [         0, 1,         0],
+            [-np.sin(p), 0, np.cos(p)]
+        ])
+        # Rotation around Z-axis (yaw)
+        Rz = np.array([
+            [ np.cos(y), -np.sin(y), 0],
+            [ np.sin(y),  np.cos(y), 0],
+            [         0,          0, 1]
+        ])
+
+        # 3. Combine rotations: from vehicle (ego) frame to world frame
+        R_ego_to_world = Rz @ Ry @ Rx
+
+        # 4. World-frame velocity vector
+        v_world = np.array([speed_x, speed_y, speed_z])
+
+        # 5. Transform world velocity into vehicle frame (inverse rotation)
+        v_ego = R_ego_to_world.T @ v_world
+
+        return  v_ego
     def get_model_data(self, data_frame):
 
         vehicle_transform = data_frame['veh_transfrom'] # world frame
@@ -540,12 +589,29 @@ class ParkingAgent:
         data['extrinsics'] = self.extrinsic.unsqueeze(0)
         data['intrinsics'] = self.intrinsic_crop.unsqueeze(0)
 
-        velocity = (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)) #km/h
-        data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
+        #velocity = (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)) #km/h
+
+        roll = data_frame["veh_transfrom"].rotation.roll
+        pitch = data_frame["veh_transfrom"].rotation.pitch
+        yaw = data_frame["veh_transfrom"].rotation.yaw
+
+        velocity_ego = self.world_to_ego_velocity(vehicle_velocity.x, vehicle_velocity.y, vehicle_velocity.z, roll,
+                                                  pitch, yaw)
+        acc_ego = self.world_to_ego_velocity(data_frame["imu"].accelerometer.x, data_frame["imu"].accelerometer.y,
+                                             data_frame["imu"].accelerometer.z,
+                                             roll,pitch, yaw)
+
+        velocity_ego_forword = 3.6*velocity_ego[0]
+        velocity_ego_lateral = 3.6*velocity_ego[1]
+
+        acc_ego_forword = acc_ego[0]
+        acc_ego_lateral = acc_ego[1]
+
+        data['ego_motion'] = torch.tensor([velocity_ego_forword,velocity_ego_lateral,acc_ego_forword,acc_ego_lateral],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking"]
-        target_type = target_types[1]
+        target_type = target_types[2]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
