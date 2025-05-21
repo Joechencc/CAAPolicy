@@ -1,15 +1,15 @@
 parking_model:
   # train
   data_dir: '/'
-  log_dir: './log/'
-  checkpoint_dir: './ckpt'
+  log_dir: '/scratch/rs9193/e2e/log/al0.005-2' # ./log
+  checkpoint_dir: '/scratch/rs9193/e2e/ckpt/al0.005-2' # ./ckpt
   log_every_n_steps: 10
   check_val_every_n_epoch: 3
 
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 32
+  batch_size: 16
 
   training_map: "/vast/rs9193/Town_Opt_1000"
   validation_map: "/scratch/rs9193/Town_Opt_1000_Val"

@@ -8,3 +8,5 @@ ckpt
 Bench2DriveZoo/
 PWU.egg-info
 carla
+*.out
+*.err

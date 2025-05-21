@@ -94,7 +94,7 @@ def main():
         help='Gamma correction of the camera (default: 0.0)')
     argparser.add_argument(
         '--model_path',
-        default='./ckpt/last.ckpt',
+        default='/scratch/rs9193/e2e/ckpt/al0.005-2/last.ckpt',
         help='path to model.ckpt')
     argparser.add_argument(
         '--model_config_path',
@@ -141,7 +141,7 @@ def main():
         choices=['cpu', 'cuda'])
     argparser.add_argument(
         '--show_eva_imgs',
-        default=True,
+        default=False,
         type=str2bool,
         help='show eva figure in eva model (default: False)')
     argparser.add_argument(

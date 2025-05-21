@@ -36,8 +36,8 @@ class AttentionLoss(nn.Module):
         # Plot heatmaps for debugging
         # xattention.shape = (B,16,16)
         # mask.shape = (B,16,16)
-        # TODO: Enable the plot when resume the training on a good model to visualize the attention guidance.
-        self.plot_heatmaps(mask.squeeze(1)[0,:,:], xattention.squeeze(1)[0,:,:])
+        # # TODO: Enable the plot when resume the training on a good model to visualize the attention guidance.
+        # self.plot_heatmaps(mask.squeeze(1)[0,:,:], xattention.squeeze(1)[0,:,:])
         xattention = xattention.to(mask.device)
         # Compute KL-Divergence: sum(mask * log(mask/xattention))
         loss = F.kl_div(
