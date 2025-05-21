@@ -164,27 +164,29 @@ class World(object):
         blueprints = self._world.get_blueprint_library().filter('vehicle')
         blueprints = [x for x in blueprints if self.valid_vehicle(x)]
         # TODO: set to 64 to fully fill the parking lot
-        static_vehicle_num = 64
+        # static_vehicle_num = 64
         # spawn npc vehicles
-        pass_target = False
+        # pass_target = False
         for index in range(static_vehicle_num):
             spawn_point = parking_points_copy[index]
             if spawn_point == target_parking_goal:
                 self._all_parking_goals.append(spawn_point)
-                pass_target = True
+                # pass_target = True
                 continue
-            if pass_target:
-                # TODO: modify the spawn point to add some randomness for testing
-                spawn_point_rand = carla.Location(
-                    x=spawn_point.x,
-                    y=spawn_point.y + 0.7 , #random.uniform(-0.4, 0.4)
-                    z=spawn_point.z)
-            else:
-                spawn_point_rand = carla.Location(
-                    x=spawn_point.x,
-                    y=spawn_point.y - 0.7, #random.uniform(-0.4, 0.4)
-                    z=spawn_point.z)
-            npc_transform = carla.Transform(spawn_point_rand, rotation=random.choice(parking_vehicle_rotation))
+            npc_transform = carla.Transform(spawn_point, 
+                rotation=random.choice(parking_vehicle_rotation))
+            # if pass_target:
+            #     # TODO: modify the spawn point to add some randomness for testing
+            #     spawn_point_rand = carla.Location(
+            #         x=spawn_point.x,
+            #         y=spawn_point.y + 0.7 , #random.uniform(-0.4, 0.4)
+            #         z=spawn_point.z)
+            # else:
+            #     spawn_point_rand = carla.Location(
+            #         x=spawn_point.x,
+            #         y=spawn_point.y - 0.7, #random.uniform(-0.4, 0.4)
+            #         z=spawn_point.z)
+            # npc_transform = carla.Transform(spawn_point_rand, rotation=random.choice(parking_vehicle_rotation))
             npc_bp = random.choice(blueprints)
             npc = self._world.try_spawn_actor(npc_bp, npc_transform)
             if npc is not None:
