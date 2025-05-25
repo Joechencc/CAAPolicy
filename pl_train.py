@@ -53,6 +53,7 @@ def train():
                               devices=num_gpus,
                               max_epochs=cfg.epochs,
                               log_every_n_steps=cfg.log_every_n_steps,
+                              num_sanity_val_steps=0,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
 

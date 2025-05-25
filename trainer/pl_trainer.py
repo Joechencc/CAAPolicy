@@ -65,7 +65,9 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def on_train_epoch_start(self):
         if not self.trainer.sanity_checking:
+            print("Epoch Start")
             self.parking_model.temporal_fusion.reset_flag = True  # <-- Request Reset at every epoch start
+            self.parking_model.temporal_fusion.is_train = True
         
 
     def training_step(self, batch, batch_idx):

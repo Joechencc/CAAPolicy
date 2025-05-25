@@ -586,6 +586,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
+        # data['segmentation'].shape: [1, 200, 200])
         
         # target_point
         data['target_point'] = torch.from_numpy(self.target_point[index])
