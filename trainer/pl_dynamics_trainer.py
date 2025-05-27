@@ -30,7 +30,15 @@ class DynamicsTrainingModule(pl.LightningModule):
         delta_mean, log_var, _, _ = self.model(data)
 
         # Compute loss
-        loss = self.nll_loss(delta_mean, log_var, next_ego_pos[:, :2]- ego_pos[:, :2])
+        loss_per_sample = self.nll_loss(delta_mean, log_var, next_ego_pos[:, :2]- ego_pos[:, :2])
+
+        # Apply weighting based on speed
+        speed = torch.norm(batch['ego_motion'][:, :2], dim=1)
+        low_speed_mask = speed < 0.001  # e.g., threshold = 0.1
+        weights = torch.ones_like(speed)
+        weights[low_speed_mask] = 10  # e.g., higher_weight = 10
+
+        loss = (loss_per_sample * weights).mean()
 
         # Log training loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)

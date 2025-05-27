@@ -69,7 +69,10 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         # TODO: check if inputs needs to stored as float64
         # Pass through the MLP
         feat = self.mlp(inputs)
-        delta_mean = self.mean_head(feat)
-        logvar = torch.exp(self.std_head(feat))  # 输出正数std
+        # delta_mean: [dx, dy]
+        delta_mean = self.mean_head(feat)  
+        # logvar: [var_x, var_y]
+        # exp: 输出正数std
+        logvar = torch.exp(self.std_head(feat))  
 
         return delta_mean, logvar, displacement_x_world, displacement_y_world

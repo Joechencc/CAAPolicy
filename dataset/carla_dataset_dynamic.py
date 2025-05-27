@@ -8,7 +8,7 @@ import yaml
 
 from PIL import Image
 from loguru import logger
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 class CarlaDatasetDynamic(torch.utils.data.Dataset):
     def __init__(self, root_dir, is_train, config):
@@ -27,6 +27,27 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
         self.task_offsets = []
 
         self.get_data()
+
+    def plot_imu_statistics(self):
+        ego_motion = np.array(self.ego_motion)
+        names = ['speed_x', 'speed_y', 'acc_x', 'acc_y']
+        bins = np.logspace(-7, 1, 50)  # From 1e-7 to 1e1
+
+        os.makedirs('./dynamic_prediction', exist_ok=True)
+
+        for i, name in enumerate(names):
+            data = np.abs(ego_motion[:, i])
+            plt.figure(figsize=(7, 5))
+            plt.hist(data, bins=bins, alpha=0.7, log=True, color='C0')
+            plt.xscale('log')
+            plt.xlabel(f'{name} (abs, log scale)')
+            plt.ylabel('Count')
+            plt.title(f'Distribution of {name}')
+            plt.grid(True, which="both", ls="--")
+            plt.tight_layout()
+            plt.savefig(f'./dynamic_prediction/{name}_distribution.png')
+            plt.close()
+            print(f"{name} statistics plot saved to ./dynamic_prediction/{name}_distribution.png")
 
     def get_data(self):
         val_towns = self.cfg.validation_map
@@ -80,6 +101,9 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
         # Convert lists to tensors
         self.task_offsets = np.array(self.task_offsets).astype(np.int32)
         logger.info('Preloaded {} sequences', str(len(self.ego_motion)))
+
+        # Plot and save IMU statistics
+        # self.plot_imu_statistics()
 
     def __len__(self):
 
