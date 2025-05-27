@@ -48,7 +48,7 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
                 all_tasks.append(task_path)
         start_index = 0  # Initialize the start index for the first task
 
-        for task_path in all_tasks[:300]:
+        for task_path in all_tasks:
             total_frames = len(os.listdir(task_path + "/measurements/"))
             # Record the number of valid frames for offset calculation
             num_valid_frames = total_frames - self.cfg.hist_frame_nums - self.cfg.future_frame_nums

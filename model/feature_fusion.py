@@ -28,7 +28,7 @@ class FeatureFusion(nn.Module):
         ).to(self.cfg.device)
 
         self.target_encoder = nn.Sequential(
-            nn.Linear(self.cfg.tf_en_motion_length, uint_dim*2),
+            nn.Linear(self.cfg.tf_en_target_length, uint_dim*2),
             nn.ReLU(inplace=True),
             nn.Linear(uint_dim*2, uint_dim * 2),
             nn.ReLU(inplace=True),
@@ -52,10 +52,8 @@ class FeatureFusion(nn.Module):
         bev_feature = bev_feature.transpose(1, 2)
         # bev_feature.shape
         # torch.Size([1, 256, 256])
-
         motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
         target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 4)
-
         # motion_feature.shape
         # torch.Size([1, 256, 2])
 

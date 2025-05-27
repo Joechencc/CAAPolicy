@@ -250,7 +250,8 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.control = []
 
-        self.velocity = []
+        self.velocity_x = []
+        self.velocity_y = []
         self.acc_x = []
         self.acc_y = []
 
@@ -368,7 +369,8 @@ class CarlaDataset(torch.utils.data.Dataset):
                                             carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
 
                 # motion
-                self.velocity.append(data['speed'])
+                self.velocity_x.append(data['speed_x'])
+                self.velocity_y.append(data['speed_y'])
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
 
@@ -494,7 +496,8 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.topdown = np.array(self.topdown).astype(np.string_)
 
-        self.velocity = np.array(self.velocity).astype(np.float32)
+        self.velocity_x = np.array(self.velocity_x).astype(np.float32)
+        self.velocity_y = np.array(self.velocity_y).astype(np.float32)
         self.acc_x = np.array(self.acc_x).astype(np.float32)
         self.acc_y = np.array(self.acc_y).astype(np.float32)
 
@@ -552,7 +555,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
-        ego_motion = np.column_stack((self.velocity[index], self.acc_x[index], self.acc_y[index]))
+        ego_motion = np.column_stack((self.velocity_x[index], self.velocity_y[index], self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
 
         # gt control token
