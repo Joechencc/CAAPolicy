@@ -2,8 +2,7 @@ import torch
 import pytorch_lightning as pl
 from torch import nn
 from torch.utils.data import DataLoader
-# from model.dynamics_model import DynamicsModel
-from model.dynamics_model import DynamicsModel as DynamicsModel 
+from model.dynamics_model import DynamicsModel
 from tool.config import Configuration
 
 
@@ -31,6 +30,13 @@ class DynamicsTrainingModule(pl.LightningModule):
         delta_mean, log_var, _, _ = self.model(data)
 
         # Compute loss
+        # loss_per_sample = self.nll_loss(delta_mean, log_var, next_ego_pos[:, :2]- ego_pos[:, :2])
+        # # Apply weighting based on speed
+        # speed = torch.norm(batch['ego_motion'][:, :2], dim=1)
+        # low_speed_mask = speed < 0.001  # e.g., threshold = 0.1
+        # weights = torch.ones_like(speed)
+        # weights[low_speed_mask] = 10  # e.g., higher_weight = 10
+        # loss = (loss_per_sample * weights).mean()
         loss = self.nll_loss(delta_mean, log_var, next_ego_pos[:, :2]- ego_pos[:, :2])
 
         # Log training loss

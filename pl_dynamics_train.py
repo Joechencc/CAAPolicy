@@ -79,8 +79,14 @@ def train():
         callbacks=[early_stopping, model_checkpoint]  # Add callbacks here
     )
 
-    # Train the model
-    trainer.fit(dynamics_model, datamodule=parking_datamodule)
+    # Optionally, set the path to your checkpoint
+    resume_ckpt_path = cfg.resume_ckpt_path if hasattr(cfg, "resume_ckpt_path") else None
+    if resume_ckpt_path and not os.path.exists(resume_ckpt_path):
+        logger.warning(f"Checkpoint path {resume_ckpt_path} does not exist. Starting from scratch.")
+        resume_ckpt_path = None
+
+    # Train the model (resume from checkpoint if provided)
+    trainer.fit(dynamics_model, datamodule=parking_datamodule, ckpt_path=resume_ckpt_path)
 
 
 if __name__ == '__main__':
