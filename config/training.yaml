@@ -11,8 +11,8 @@ parking_model:
   weight_decay: 0.0001
   batch_size: 16
 
-  training_map: "/vast/rs9193/Town_Opt_1000"
-  validation_map: "/scratch/rs9193/Town_Opt_1000_Val"
+  training_map: /Town_Opt_1000 #"/vast/rs9193/Town_Opt_1000"
+  validation_map: /Town_Opt_1000_Val # "/scratch/rs9193/Town_Opt_1000_Val"
   future_frame_nums: 4
   hist_frame_nums: 10
   token_nums: 204

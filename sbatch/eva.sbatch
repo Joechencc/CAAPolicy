@@ -47,7 +47,7 @@ singularity exec --nv \
 SERVER_PID=$!
 echo "CARLA server PID: $SERVER_PID"
 echo "Sleeping 3 min to let the server warm up…"
-sleep 200
+sleep 100
 
 echo "[$(date)] Running parking evaluation"
 
