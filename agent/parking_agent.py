@@ -486,7 +486,6 @@ class ParkingAgent:
             self.boost = False
 
     def get_model_data(self, data_frame):
-
         vehicle_transform = data_frame['veh_transfrom'] # world frame
         imu_data = data_frame['imu'] # ego frame
         vehicle_velocity = data_frame['veh_velocity'] #m/s
