@@ -34,10 +34,10 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         cos = torch.cos(yaw)
         sin = torch.sin(yaw)
         # Transform accelerations to the world frame
-        accel_x_world = ego_motion[:, 2]
-        accel_y_world = ego_motion[:, 3]
-        # accel_x_world = ego_motion[:, 2] * torch.cos(yaw) - ego_motion[:, 3] * torch.sin(yaw)
-        # accel_y_world = ego_motion[:, 2] * torch.sin(yaw) + ego_motion[:, 3] * torch.cos(yaw)
+        accel_x = ego_motion[:, 2]
+        accel_y = ego_motion[:, 3]
+        accel_x_world = ego_motion[:, 2] * torch.cos(yaw) - ego_motion[:, 3] * torch.sin(yaw)
+        accel_y_world = ego_motion[:, 2] * torch.sin(yaw) + ego_motion[:, 3] * torch.cos(yaw)
 
 
         # Convert speed from km/h to m/s
@@ -58,8 +58,8 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         # inputs.shape = torch.size[26,3]
         inputs = torch.cat((vehicle_velocity_x.reshape(-1,1), 
                             vehicle_velocity_y.reshape(-1,1), 
-                            accel_x_world.reshape(-1,1), 
-                            accel_y_world.reshape(-1,1),
+                            accel_x.reshape(-1,1), 
+                            accel_y.reshape(-1,1),
                             throttle.reshape(-1,1), 
                             brake.reshape(-1,1), 
                             steer.reshape(-1,1), 
