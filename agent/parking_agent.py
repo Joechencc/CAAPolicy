@@ -6,6 +6,7 @@ import torch
 import logging
 import time
 import pygame
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,6 +22,8 @@ from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
+from model.dynamics_model import DynamicsModel
+from copy import deepcopy
 
 
 # convert location in ego centric to world frame
@@ -228,6 +231,7 @@ class ParkingAgent:
         self.device = None
 
         self.cfg = Configuration()
+        self.dynamic_cfg = Configuration()
         self.load_cfg(args)
 
         self.log_path = pathlib.Path(self.cfg.log_dir)
@@ -258,7 +262,7 @@ class ParkingAgent:
 
         self.save_output = SaveOutput()
         self.hook_handle = None
-        self.load_model(args.model_path)
+        self.load_model(args.model_path, args.model_path_dynamic)
 
         self.stop_count = 0
         self.boost = False
@@ -266,8 +270,13 @@ class ParkingAgent:
 
         self.relative_target = [0,0]
         self.ego_xy = []
+        self.ego_xy_dynamic=[]
+        self.gt_traj =[]
+        self.track_traj = []
+        self.dynamic_traj = []
 
         self.init_agent()
+        self.draw_img = True
 
         plt.ion()
 
@@ -280,8 +289,16 @@ class ParkingAgent:
                 logging.exception('Invalid YAML Config file {}', args.config)
         self.cfg = get_cfg(cfg_yaml)
 
-    def load_model(self, parking_pth_path):
+        with open(args.dynamic_model_config_path, 'r') as dynamic_config_file:
+            try:
+                dynamic_cfg_yaml = (yaml.safe_load(dynamic_config_file))
+            except yaml.YAMLError:
+                logging.exception('Invalid YAML Config file {}', args.dynamic_cfg)
+        self.dynamic_cfg = get_cfg(dynamic_cfg_yaml)
+
+    def load_model(self, parking_pth_path, dynamic_parking_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        ###################
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
@@ -294,6 +311,15 @@ class ParkingAgent:
             self.save_output)
 
         logging.info('Load E2EParkingModel from %s', parking_pth_path)
+        ######################
+        ###################
+        self.dynamic_model = DynamicsModel()
+        dynamic_ckpt = torch.load(dynamic_parking_pth_path, map_location='cuda:0')
+        dynamic_state_dict = OrderedDict([(k.replace('model.', ''), v) for k, v in dynamic_ckpt['state_dict'].items()])
+        self.dynamic_model.load_state_dict(dynamic_state_dict)
+        self.dynamic_model.to(self.device)
+        self.dynamic_model.eval()
+        ###################
 
     def save_seg_img(self, pred_segmentation):
         pred_segmentation = pred_segmentation[0]
@@ -371,6 +397,11 @@ class ParkingAgent:
         self.step = -1
         self.pre_target_point = None
         self.ego_xy=[]
+        self.ego_xy_dynamic=[]
+        self.gt_traj =[]
+        self.track_traj = []
+        self.dynamic_traj = []
+
 
     def save_atten_avg_map(self, data):
         atten = self.save_output.outputs[0].detach().cpu()
@@ -385,6 +416,15 @@ class ParkingAgent:
         return grid_image, atten_avg
 
     def tick(self):
+        # if next_flag == True:
+        #     self.step=-1
+        #     self.relative_target = [0,0]
+        #     self.ego_xy = []
+        #     self.ego_xy_dynamic=[]
+        #     self.gt_traj =[]
+        #     self.track_traj = []
+        #     self.dynamic_traj = []
+
         if self.net_eva.agent_need_init:
             self.init_agent()
             self.net_eva.agent_need_init = False
@@ -407,6 +447,51 @@ class ParkingAgent:
             imu_data = data_frame['imu']
 
             data = self.get_model_data(data_frame)
+            # print("self.ego_position::",self.ego_position)
+            # print("self.ego_xy::",self.ego_xy)
+            # print("self.ego_xy_dynamic::",self.ego_xy_dynamic)
+            # if self.step % 300 ==0:
+            #     import pdb; pdb.set_trace()
+            
+            self.gt_traj.append(self.ego_position)
+            self.track_traj.append(deepcopy(self.ego_xy))
+            self.dynamic_traj.append(deepcopy(self.ego_xy_dynamic))
+
+            if self.draw_img:
+                if self.step % 200 == 0:
+                    ##########
+                    x_gt = [p[0] for p in self.gt_traj]
+                    y_gt = [p[1] for p in self.gt_traj]
+                    x_track = [p[0] for p in self.track_traj]
+                    y_track = [p[1] for p in self.track_traj]
+                    x_dynamic = [p[0].item() for p in self.dynamic_traj]
+                    y_dynamic = [p[1].item() for p in self.dynamic_traj]
+
+                    # Create an isolated figure
+                    fig, ax = plt.subplots(figsize=(6, 6))
+
+                    ax.plot(x_gt, y_gt, 'ro-', label='GT', linewidth=1.5, markersize=3, zorder=1)
+                    ax.plot(x_track, y_track, 'bs--', label='Track', linewidth=1.5, markersize=3, zorder=2)
+                    ax.plot(x_dynamic, y_dynamic, 'g^:', label='Dynamic', linewidth=1.5, markersize=3, zorder=3)
+
+                    ax.set_xlabel('X')
+                    ax.set_ylabel('Y')
+                    ax.set_title('Trajectory Plot')
+                    ax.legend()
+                    ax.grid(True)
+                    ax.axis('equal')
+                    fig.tight_layout()
+
+                    # Ensure directory exists
+                    # os.makedirs(self.save_dir, exist_ok=True)
+                    save_path = os.path.join('trajectory.png')
+                    fig.savefig(save_path, dpi=300)
+
+                    # Optional: Comment out if running in batch/headless mode
+                    # plt.show()
+
+                    # Clean up
+                    plt.close(fig)
 
             self.model.eval()
             with torch.no_grad():
@@ -496,14 +581,19 @@ class ParkingAgent:
         #print("\n")
         data = {}
         data["ego_position"] = [vehicle_transform.location.x, vehicle_transform.location.y, vehicle_transform.location.z]
+        self.ego_position = data["ego_position"]
         target_point = convert_slot_coord(vehicle_transform, self.net_eva.eva_parking_goal)
+        self.target_point = target_point
 
         # Compute using speed
         if not self.ego_xy: # read only once after initilization
             self.ego_xy = [vehicle_transform.location.x, vehicle_transform.location.y] 
+            self.ego_xy_dynamic = [vehicle_transform.location.x, vehicle_transform.location.y] 
             #print('self.ego_xy initialization:', self.ego_xy)
         parking_goal_world = self.net_eva.eva_parking_goal[:2]
         #print('This is target under global frame', parking_goal_world)
+
+        ############# Tracking #################
         dt = 0.1  
 
         yaw = np.deg2rad(vehicle_transform.rotation.yaw)  # Convert yaw to radians
@@ -523,6 +613,30 @@ class ParkingAgent:
 
         relative_x_ego = relative_x_world * np.cos(yaw) + relative_y_world * np.sin(yaw)
         relative_y_ego = -relative_x_world * np.sin(yaw) + relative_y_world * np.cos(yaw)
+        ############################################3
+        ##############Dynamic ####################
+        ego_pos_torch = deepcopy(self.ego_xy_dynamic)
+        ego_pos_torch.append(vehicle_transform.rotation.yaw)
+        ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
+        ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y, accel_x_world, accel_y_world],
+                                        dtype=torch.float).to(self.device)
+        raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
+
+        input_data = {
+            # 'yaw'
+            'ego_pos': ego_pos_torch.unsqueeze(0),  # Shape: (1, 3)
+            'ego_motion': ego_motion_torch.view(1,-1),  # Shape: (1, 4)
+            'raw_control': raw_control_torch.view(1,-1), # Shape: (4,)
+        }
+        delta_mean, log_var, x_displacement_track, y_displacement_track = self.dynamic_model(input_data)
+        self.ego_xy_dynamic[0] += delta_mean.squeeze(0)[0].detach()
+        self.ego_xy_dynamic[1] += delta_mean.squeeze(0)[1].detach()
+        relative_x_world_dynamic = parking_goal_world[0] - self.ego_xy_dynamic[0]
+        relative_y_world_dynamic = parking_goal_world[1] - self.ego_xy_dynamic[1]
+
+        relative_x_ego_dynamic = relative_x_world_dynamic * np.cos(yaw) + relative_y_world_dynamic * np.sin(yaw)
+        relative_y_ego_dynamic = -relative_x_world_dynamic * np.sin(yaw) + relative_y_world_dynamic * np.cos(yaw)
+        ###########################################
 
         data['relative_target'] = torch.tensor([relative_x_ego,relative_y_ego], dtype=torch.float).unsqueeze(0)
         #print("This is relative_target:", data['relative_target'])
@@ -544,8 +658,8 @@ class ParkingAgent:
         data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
-        target_types = ["gt","predicted","tracking"]
-        target_type = target_types[2]
+        target_types = ["gt","predicted","tracking","dynamics"]
+        target_type = target_types[3]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
@@ -553,12 +667,20 @@ class ParkingAgent:
         elif target_type == "gt":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
         elif target_type == "predicted":
-       
             if self.pre_target_point is not None:
                 target_point = [self.pre_target_point[0], self.pre_target_point[1], target_point[2]]
                 data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             else:
                 data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+        elif target_type == "dynamics":
+            data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+            # print("relative[0]::::",data["relative_target"][0][0])
+            # print("relative[1]::::",data["relative_target"][0][1])
+            # print("x_displacement_track::::",relative_x_ego_dynamic)
+            # print("y_displacement_track::::",relative_y_ego_dynamic)
+            # import pdb; pdb.set_trace()
+            data["target_point"][0][0] = relative_x_ego_dynamic
+            data["target_point"][0][1] = relative_y_ego_dynamic
 
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         data['gt_waypoint'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)

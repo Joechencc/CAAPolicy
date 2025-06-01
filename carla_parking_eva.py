@@ -12,6 +12,7 @@ def game_loop(args):
     pygame.init()
     pygame.font.init()
     network_evaluator = None
+    next_flag = True
 
     try:
         client = carla.Client(args.host, args.port)
@@ -97,9 +98,17 @@ def main():
         default='./ckpt/last.ckpt',
         help='path to model.ckpt')
     argparser.add_argument(
+        '--model_path_dynamic',
+        default='./ckpt/dynamic_model.ckpt',
+        help='path to dynamic_model.ckpt')
+    argparser.add_argument(
         '--model_config_path',
         default='./config/training.yaml',
         help='path to model training.yaml')
+    argparser.add_argument(
+        '--dynamic_model_config_path',
+        default='./config/dynamics_training.yaml',
+        help='path to model dynamics_training.yaml')
     argparser.add_argument(
         '--eva_epochs',
         default=4,
@@ -141,7 +150,7 @@ def main():
         choices=['cpu', 'cuda'])
     argparser.add_argument(
         '--show_eva_imgs',
-        default=True,
+        default=False,
         type=str2bool,
         help='show eva figure in eva model (default: False)')
     argparser.add_argument(
