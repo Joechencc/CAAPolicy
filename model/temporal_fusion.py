@@ -16,10 +16,10 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         self.tasks_offsets = None
         self.reset_flag = True # Flag to indicate if the model needs reset
         self.is_train = False # Flag to indicate if the model is in training mode
-
+        
         #########################
         self.gt_bev_cache = None # Shape (B + T, 200, 200, 1) e.g.: (30, 200, 200, 1)
-    
+        self.ego_pose_cache = None # Shape (B + T, 3) e.g.: (30,3)
     def reset_state(self):
         
         self.bev_cache = None
@@ -35,6 +35,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         self.task_offsets_iter2 =None
         self.cur_idx2 = 0
         self.cur_start_idx2 = None
+        self.ego_pose_cache = None # Shape (B + T, 3) e.g.: (30,3)
 
     def forward(self, fuse_feature, data): # delta_xy, delta_yaw, restart_idx = True)
         '''
@@ -280,8 +281,8 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         # [delta pose 1st to cur, delta pose 2nd to cur, ..., delta pose (T-1)th to cur]
         # Compute reverse cumulative sum for each row (sum from i to end)
         cumulative_ego_pose = [valid_delta_ego_pose[i:].sum(dim=0) for i in range(valid_delta_ego_pose.shape[0])]
-        # if self.cur_idx2 == 179:
-        #     import pdb; pdb.set_trace()
+        if self.cur_idx2 == 100:
+            import pdb; pdb.set_trace()
         
         # import pdb; pdb.set_trace()
         # Initialize the aligned BEV cache with zeros
@@ -297,7 +298,6 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
             # import pdb; pdb.set_trace()
             # TODO: Review the index calculation(for the BEV cache)
             bev_feature = self.gt_bev_cache[idx + self.T - t].unsqueeze(0).squeeze(2) # torch.Size([1, 1, 200, 200])
-            # import pdb; pdb.set_trace()
             # Extract cumulative ego pose for this frame
             delta_x, delta_y, delta_yaw = cumulative_ego_pose[-t]
             import math
@@ -372,6 +372,13 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         ]
         cumulative_ego_pose = [
             valid_delta_ego_pose[i:].sum(dim=0) for i in range(valid_delta_ego_pose.shape[0])
+        ]
+        print(f"num_valid_past_frames: {num_valid_past_frames}")
+
+        # Now use self.ego_pose cache to align bev semantics to the current ego pose
+        # valid_ego_pose is the corresponding ego pose for the bev caches to be aligned
+        valid_ego_pose = self.ego_pose_cache[
+            idx + self.T - num_valid_past_frames : idx + self.T + 1
         ]
 
         # ------------------------------------------------------------------ #
@@ -496,25 +503,29 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         
         temporal_bevs_semantics = []  # List to store the aligned BEV features for each time step and each data sample in the batch
         not_aligned_temporal_bevs_semantics = []
+        ############################################################
         if self.reset_flag:
             print("Resetting task counter, iterator")
             self.reset_state()
             print("task_offsets: ", data['task_offsets'][0,:,:].detach().tolist())
             self.reset_flag = False
             # import pdb; pdb.set_trace()
+        ############################################################
 
         if self.delta_ego_pose_cache == None:
             # Initialize the task offsets
             self.task_offsets_iter2 = iter(data['task_offsets'][0,:,:].detach().tolist())
             # Initialize the delta_ego_pose_cache with T zeros tensors cat with data['delta_ego_pos']
             self.delta_ego_pose_cache = torch.cat((torch.zeros((self.T, 3)).to(data['ego_pos'].device), (data['ego_pos_next'] - data['ego_pos'])), dim = 0)  # Shape: (B+T, 3), e.g.: (30, 3)
+            self.ego_pose_cache = torch.cat((torch.zeros((self.T, 3)).to(data['ego_pos'].device), data['ego_pos']), dim=0)  # Shape: (B+T, 3), e.g.: (30, 3)
             # import pdb; pdb.set_trace()
             # Initialize the BEV cache with T zeros tensors cat with fuse_feature
             self.gt_bev_cache = torch.cat((torch.zeros((self.T, 1, 200, 200)).to(data['segmentation'] .device), data['segmentation'] ), dim=0)  # Shape: (B+self.T, 200, 200, 1), e.g.: (30, 200, 200, 1)
         else:
             self.delta_ego_pose_cache = torch.cat((self.delta_ego_pose_cache.to(data['ego_pos'].device), (data['ego_pos_next'] - data['ego_pos'])), dim = 0)
+            self.ego_pose_cahce = torch.cat((self.ego_pose_cache.to(data['ego_pos'].device), data['ego_pos']), dim=0)  # Shape: (B+T, 3), e.g.: (30, 3)
             self.gt_bev_cache = torch.cat((self.gt_bev_cache.to(data['segmentation'] .device)[-self.T:,:,:,:], data['segmentation'] ), dim=0)  # Shape: (B+self.T, 200, 200, 1), e.g.: (30, 200, 200, 1)
-        
+            self.yaw_cache
         # idx is the index of the current frame in the batch
         for idx in range(B):
             # print("idx: ", idx)
@@ -526,7 +537,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
             # Update the temporal BEV cache with the current frame and the valid past frames
             temporal_bevs_semantics.append(self.align_gt_bev_semantics(idx)[0])
             not_aligned_temporal_bevs_semantics.append(self.align_gt_bev_semantics(idx)[1])
-            if self.cur_idx2 == 100:
+            if self.cur_idx2 == 70:
                 self.padded_align_bev(idx)
             # import pdb; pdb.set_trace()
             # Print the tracked current index and the start index of the current task
@@ -538,7 +549,7 @@ class TemporalFusion(nn.Module):  # Added nn.Module inheritance
         temporal_bevs_semantics = torch.stack(temporal_bevs_semantics)  # Convert list to tensor
         not_aligned_temporal_bevs_semantics = torch.stack(not_aligned_temporal_bevs_semantics)  # Convert list to tensor
         # Plot the aligned BEV features for debugging
-        if self.cur_idx2 == 100:
+        if self.cur_idx2 == 180:
             # import pdb; pdb.set_trace()
             self.plot_fused_bev_semantics(temporal_bevs_semantics, title_prefix="Aligned GT BEV Semantics")
             # Plot the not aligned BEV features for debugging
