@@ -1,0 +1,75 @@
+# General settings
+log_dir: ./logs/dynamics_model  # Directory to save logs and checkpoints
+train_data_dir: /scratch/rs9193/dynamics_dataset/  # /scratch/rs9193/Town_Opt_1   # Path to the training dataset
+val_data_dir: /scratch/rs9193/dynamics_dataset/ # /scratch/rs9193/Town_Opt_1        # Path to the validation dataset
+
+# Training settings
+batch_size: 220                  # Batch size for training and validation
+num_workers: 20                  # Number of workers for data loading
+learning_rate: 0.001            # Learning rate for the optimizer
+epochs: 100                      # Number of training epochs
+log_every_n_steps: 1           # Log metrics every N steps
+check_val_every_n_epoch: 10      # Run validation every N epochs
+
+# Model checkpoint settings
+checkpoint_dir: ./ckpt/dynamics_model  # Directory to save model checkpoints
+save_top_k: 2                    # Number of best checkpoints to save
+monitor: val_loss                # Metric to monitor for saving checkpoints
+mode: min                        # Save checkpoints with the minimum value of the monitored metric
+
+resume_ckpt_path: ./ckpt/dynamics_model/exp_2025_5_27_17_15_34/last.ckpt #null #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint
+
+parking_model:
+  # train
+  data_dir: '/'
+  log_dir: './log/dynamics_model'
+  checkpoint_dir: './ckpt/dynamics_model'
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 3
+
+  epochs: 20000
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  batch_size: 1024
+
+  training_map: /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
+  validation_map: /scratch/rs9193/dynamics_dataset/ # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
+  future_frame_nums: 1
+  hist_frame_nums: 0
+  token_nums: 204
+  image_crop: 256
+
+  # bev encoder
+  bev_encoder_in_channel: 64
+  bev_encoder_out_channel: 264  # 256 + 4 + 4
+
+  # bev model
+  bev_x_bound: [-10.0, 10.0, 0.1]
+  bev_y_bound: [-10.0, 10.0, 0.1]
+  bev_z_bound: [-10.0, 10.0, 20.0]
+  d_bound: [0.5, 12.5, 0.25]
+  final_dim: [256, 256]
+  bev_down_sample: 8
+  use_depth_distribution: 1
+  backbone: "efficientnet-b4"
+
+  # segmentation
+  seg_classes: 3
+  seg_vehicle_weights: [1.0, 2.0, 2.0]
+
+  # transformer encoder
+  tf_en_dim: 264
+  tf_en_heads: 6
+  tf_en_layers: 4
+  tf_en_dropout: 0.05
+  tf_en_bev_length: 256
+  tf_en_motion_length: 4
+  tf_en_target_length: 3
+
+  # transformer decoder
+  tf_de_dim: 264
+  tf_de_heads: 6
+  tf_de_layers: 4
+  tf_de_dropout: 0.05
+  tf_de_tgt_dim: 15
+  hybrid_ckpt_path: "/scratch/rs9193/e2e_temporal_spatial/ParkWithUncertainty/ckpt/last.ckpt"
