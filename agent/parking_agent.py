@@ -267,6 +267,8 @@ class ParkingAgent:
         self.relative_target = [0,0]
         self.ego_xy = []
 
+        self.control_buffer = [] 
+
         self.init_agent()
 
         plt.ion()
@@ -408,25 +410,37 @@ class ParkingAgent:
 
             data = self.get_model_data(data_frame)
 
-            self.model.eval()
-            with torch.no_grad():
+            self.model.eval()  # Set the model to evaluation mode
+            with torch.no_grad():  # Disable gradient calculation for inference
                 start_time = time.time()
 
+                # Perform inference
                 pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
 
                 self.save_prev_target(pred_segmentation)
-                control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
 
-                self.trans_control.throttle = control_signal[0]
-                self.trans_control.brake = control_signal[1]
-                self.trans_control.steer = control_signal[2]
-                self.trans_control.reverse = control_signal[3]
+                control_signal_next_step = pred_controls[0].tolist()
+                acc = control_signal_next_step[0]
+                #print("This is acc:", acc)
+                steer = control_signal_next_step[1]
+                reverse_logit = control_signal_next_step[2]
+                reverse = 1 if reverse_logit > 0.5 else 0
+                if reverse == 0:
+                    throttle, brake = (acc, 0.0) if acc >= 0 else (0.0, -acc)
+                else:
+                    throttle, brake = (-acc, 0.0) if acc <= 0 else (0.0, acc)
+
+                self.trans_control.throttle = throttle
+                self.trans_control.brake = brake
+                self.trans_control.steer = steer
+                self.trans_control.reverse = reverse
 
                 self.speed_limit(data_frame)
 
+                # Optionally save images for visualization
                 if self.show_eva_imgs:
                     self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
                     self.save_seg_img(pred_segmentation)
@@ -434,21 +448,88 @@ class ParkingAgent:
                     self.display_imgs()
                 self.save_output.clear()
 
-                # draw waypoint WP1, WP2, WP3, WP4
-                for i in range(0,4):
-                    #waypoint : [x,y,yaw] in egocentric
-                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
-                    #convert to world frame
+                # Draw waypoints on the map (WP1, WP2, WP3, WP4)
+                for i in range(0, 4):
+                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i * 3 + 1:i * 3 + 4], self.cfg.token_nums)
                     waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
-                    waypoint[-1] = 0.3 #z=0.3
+                    waypoint[-1] = 0.3  # z = 0.3
                     location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
                     self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
                                                         color=carla.Color(255, 0, 0))
             self.prev_xy_thea = [vehicle_transform.location.x,
-                                 vehicle_transform.location.y,
-                                 imu_data.compass if np.isnan(imu_data.compass) else 0]
+                                vehicle_transform.location.y,
+                                imu_data.compass if np.isnan(imu_data.compass) else 0]
 
         self.player.apply_control(self.trans_control)
+
+    # def tick(self):
+    #     if self.net_eva.agent_need_init:
+    #         self.init_agent()
+    #         self.net_eva.agent_need_init = False
+
+    #     self.step += 1
+
+    #     if self.step < 30:
+    #         self.player.apply_control(carla.VehicleControl())
+    #         self.player.set_transform(self.net_eva.ego_transform)
+    #         return
+
+    #     # --- 1. 如果 buffer 空，且当前是 process_frequency 帧数，调用模型预测 ---
+    #     if len(self.control_buffer) == 0 and self.step % self.process_frequency == 0:
+    #         data_frame = self.world.sensor_data_frame
+    #         if not data_frame:
+    #             return
+
+    #         data = self.get_model_data(data_frame)
+
+    #         vehicle_transform = data_frame['veh_transfrom']
+    #         imu_data = data_frame['imu']
+
+    #         self.model.eval()
+    #         with torch.no_grad():
+    #             pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+    #             print("pred_waypoints:",pred_waypoints)
+    #             self.save_prev_target(pred_segmentation)
+
+    #             controls = pred_controls[0].tolist()
+    #             self.control_buffer = [controls[i:i+3] for i in range(0, pred_controls.shape[1], 3)]
+    #             #Optionally save images for visualization
+    #             if self.show_eva_imgs:
+    #                 self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+    #                 self.save_seg_img(pred_segmentation)
+    #                 self.save_target_bev_img(target_bev)
+    #                 self.display_imgs()
+    #             self.save_output.clear()
+    #             # Draw waypoints on the map (WP1, WP2, WP3, WP4)
+    #             for i in range(0, 8):
+    #                 waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i * 3 + 1:i * 3 + 4], self.cfg.token_nums)
+    #                 waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+    #                 waypoint[-1] = 0.3  # z = 0.3
+    #                 location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
+    #                 self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+    #                                                     color=carla.Color(255, 0, 0))
+    #             self.prev_xy_thea = [vehicle_transform.location.x,
+    #                                 vehicle_transform.location.y,
+    #                                 imu_data.compass if np.isnan(imu_data.compass) else 0]
+    #             #print("self.control_buffer:", self.control_buffer)
+
+    #     # --- 2. 如果 buffer 还有内容，就拿出一帧控制执行 ---
+    #     if len(self.control_buffer) > 0:
+    #         acc, steer, reverse_logit = self.control_buffer.pop(0)
+    #         reverse = 1 if reverse_logit > 0.5 else 0
+    #         throttle, brake = (acc, 0.0) if acc >= 0 else (0.0, -acc)
+    #         # print("throttle",throttle)
+    #         # print("brake",brake)
+    #         # print("steer",steer)
+    #         # print("reverse",reverse)
+
+    #         self.trans_control.throttle = float(throttle)
+    #         self.trans_control.brake = float(brake)
+    #         self.trans_control.steer = float(steer)
+    #         self.trans_control.reverse = int(reverse)
+    #     self.player.apply_control(self.trans_control)
+
+    #         # --- 3. 无论如何，每一帧都执行控制（即便 buffer 是空的，也继续上一个控制）---
 
     def speed_limit(self, data_frame):
         # if vehicle stops at initialization, give throttle until Gear turns to 1
@@ -458,12 +539,12 @@ class ParkingAgent:
         speed = (3.6 * math.sqrt(
             data_frame['veh_velocity'].x ** 2 + data_frame['veh_velocity'].y ** 2 + data_frame['veh_velocity'].z ** 2))
 
-        # limit the vehicle speed within 15km/h when reverse is False
-        if not self.trans_control.reverse and speed >= 12:
+        # limit the vehicle speed within 9/h when reverse is False
+        if not self.trans_control.reverse and speed >= 9:
             self.trans_control.throttle = 0.0
 
-        # limit the vehicle speed within 8km/h when reverse is True
-        if self.trans_control.reverse and speed >= 10:
+        # limit the vehicle speed within 7.5km/h when reverse is True
+        if self.trans_control.reverse and speed >= 7.5:
             self.trans_control.throttle = 0.0
 
         # if brake and throttle both not on, and speed < 2 for more than 2 seconds, give it a small throttle for 1

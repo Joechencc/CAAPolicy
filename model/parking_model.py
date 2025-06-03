@@ -89,19 +89,18 @@ class ParkingModel(nn.Module):
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
         fuse_feature_copy = fuse_feature.clone()
-        pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
+        pred_control = self.control_predict(fuse_feature)
         pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
         return pred_control, pred_waypoint, pred_segmentation, pred_depth
 
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
-        pred_multi_controls = data['gt_control'].cuda()
+        pred_multi_controls = self.control_predict.predict(fuse_feature) #[B,8*3]
+
         pred_multi_waypoints = data['gt_waypoint'].cuda()
         fuse_feature_copy = fuse_feature.clone()
-        for i in range(3):
-            pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls)
-            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-        for i in range(12):
+        for i in range(24):
             pred_waypoint = self.waypoint_predict.predict(fuse_feature_copy, pred_multi_waypoints)
             pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
+
         return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target

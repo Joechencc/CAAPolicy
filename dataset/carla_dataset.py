@@ -259,6 +259,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.steer = []
         self.reverse = []
 
+        self.gt_control = []
+
         self.target_point = []
 
         self.topdown = []
@@ -443,6 +445,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                         data = json.load(read_file)
                     controls.append(
                         tokenize_control(data['Throttle'], data["Brake"], data["Steer"], data["Reverse"], self.cfg.token_nums))
+                    
                     add_raw_control(data, throttle_brakes, steers, reverse)
 
                 controls = [item for sublist in controls for item in sublist]
@@ -454,6 +457,28 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.throttle_brake.append(throttle_brakes)
                 self.steer.append(steers)
                 self.reverse.append(reverse)
+
+                # 加入 BOS 控制信号
+                gt_control = [self.BOS_token]  # 初始包含 BOS
+
+                for i in range(self.cfg.future_frame_nums):
+                    with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
+                        data = json.load(read_file)
+
+                    if data['Brake'] != 0.0:
+                        speed = -data['Brake']
+                    else:
+                        speed = data['Throttle']
+
+                    if data['Reverse'] == 1:
+                        speed *= -1
+
+                    # 将控制信号添加到 gt_control 中
+                    gt_control.append(speed)
+                    gt_control.append(data["Steer"])
+                    gt_control.append(data['Reverse'])
+
+                self.gt_control.append(gt_control)
 
                 # waypoint
                 with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
@@ -562,6 +587,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.control = np.array(self.control).astype(np.int64)
         self.waypoint = np.array(self.waypoint).astype(np.int64)
 
+        self.gt_control = np.array(self.gt_control).astype(np.float32)
+
         self.throttle_brake = np.array(self.throttle_brake).astype(np.float32)
         self.steer = np.array(self.steer).astype(np.float32)
         self.reverse = np.array(self.reverse).astype(np.int64)
@@ -605,7 +632,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=300,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
@@ -617,7 +644,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['ego_motion'] = torch.from_numpy(ego_motion)
 
         # gt control token
-        data['gt_control'] = torch.from_numpy(self.control[index])
+        data['gt_control'] = torch.from_numpy(self.gt_control[index])
 
         # gt control raw
         data['gt_acc'] = torch.from_numpy(self.throttle_brake[index])

@@ -9,15 +9,26 @@ class ControlPredict(nn.Module):
     def __init__(self, cfg: Configuration):
         super().__init__()
         self.cfg = cfg
-        self.pad_idx = self.cfg.token_nums - 1
+        self.tf_de_tgt_dim = self.cfg.future_frame_nums  #  T=8
 
-        self.embedding = nn.Embedding(self.cfg.token_nums, self.cfg.tf_de_dim)
         self.pos_drop = nn.Dropout(self.cfg.tf_de_dropout)
-        self.pos_embed = nn.Parameter(torch.randn(1, self.cfg.tf_de_tgt_dim - 1, self.cfg.tf_de_dim) * .02)
+        self.pos_embed = nn.Parameter(
+            torch.randn(1, self.tf_de_tgt_dim, self.cfg.tf_de_dim) * .02
+        )
 
-        tf_layer = nn.TransformerDecoderLayer(d_model=self.cfg.tf_de_dim, nhead=self.cfg.tf_de_heads)
-        self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
-        self.output = nn.Linear(self.cfg.tf_de_dim, self.cfg.token_nums)
+        tf_layer = nn.TransformerDecoderLayer(
+            d_model=self.cfg.tf_de_dim, nhead=self.cfg.tf_de_heads
+        )
+        self.tf_decoder = nn.TransformerDecoder(
+            tf_layer, num_layers=self.cfg.tf_de_layers
+        )
+
+        #self.input_proj = nn.Linear(self.cfg.tf_de_dim, self.cfg.tf_de_dim)
+        self.reg_head = nn.Sequential(
+            nn.Linear(self.cfg.tf_de_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 3)  # [acc, steer, reverse]
+        )
 
         self.init_weights()
 
@@ -29,47 +40,26 @@ class ControlPredict(nn.Module):
                 nn.init.xavier_uniform_(p)
         trunc_normal_(self.pos_embed, std=.02)
 
-    def create_mask(self, tgt):
-        # tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.shape[1]).cuda()
-        tgt_mask = (torch.triu(torch.ones((tgt.shape[1], tgt.shape[1]), device=self.cfg.device)) == 1).transpose(0, 1)
-        tgt_mask = tgt_mask.float().masked_fill(tgt_mask == 0, float('-inf')).masked_fill(tgt_mask == 1, float(0.0))
-        tgt_padding_mask = (tgt == self.pad_idx)
-        return tgt_mask, tgt_padding_mask
+    def decoder(self, encoder_out, tgt_embedding):
+        encoder_out = encoder_out.transpose(0, 1)      # [S, B, D]
+        tgt_embedding = tgt_embedding.transpose(0, 1)  # [T, B, D]
+        output = self.tf_decoder(tgt=tgt_embedding, memory=encoder_out)
+        return output.transpose(0, 1)  # [B, T, D]
 
-    def decoder(self, encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask):
-        encoder_out = encoder_out.transpose(0, 1)
-        tgt_embedding = tgt_embedding.transpose(0, 1)
-        pred_controls = self.tf_decoder(tgt=tgt_embedding,
-                                        memory=encoder_out,
-                                        tgt_mask=tgt_mask,
-                                        tgt_key_padding_mask=tgt_padding_mask)
-        pred_controls = pred_controls.transpose(0, 1)
-        return pred_controls
+    def forward(self, encoder_out):
+        B = encoder_out.size(0)
+        T = self.tf_de_tgt_dim
 
-    def forward(self, encoder_out, tgt):
-        tgt = tgt[:, :-1]
-        tgt_mask, tgt_padding_mask = self.create_mask(tgt)
+        dummy_input = torch.zeros(B, T, self.cfg.tf_de_dim, device=encoder_out.device)
+        tgt_embedding = dummy_input + self.pos_embed[:, :T, :]
+        tgt_embedding = self.pos_drop(tgt_embedding)
 
-        tgt_embedding = self.embedding(tgt)
-        tgt_embedding = self.pos_drop(tgt_embedding + self.pos_embed)
+        decoder_out = self.decoder(encoder_out, tgt_embedding)
+        control_out = self.reg_head(decoder_out)  # [B, T, 3]
 
-        pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
-        pred_controls = self.output(pred_controls)
-        return pred_controls
+        control_out = control_out.view(B, T * 3)  # flatten to [B, T*3]
 
-    def predict(self, encoder_out, tgt):
-        length = tgt.size(1)
-        padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
-        tgt = torch.cat([tgt, padding], dim=1)
+        return control_out
 
-        tgt_mask, tgt_padding_mask = self.create_mask(tgt)
-
-        tgt_embedding = self.embedding(tgt)
-        tgt_embedding = tgt_embedding + self.pos_embed
-
-        pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
-        pred_controls = self.output(pred_controls)[:, length - 1, :]
-
-        pred_controls = torch.softmax(pred_controls, dim=-1)
-        pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
-        return pred_controls
+    def predict(self, encoder_out):
+        return self.forward(encoder_out)

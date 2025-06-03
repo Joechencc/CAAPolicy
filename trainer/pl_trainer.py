@@ -79,7 +79,13 @@ class ParkingTrainingModule(pl.LightningModule):
             "depth_loss": depth_loss
         })
 
-        train_loss = sum(loss_dict.values())
+        #train_loss = sum(loss_dict.values())
+        train_loss = (
+            10.0 * control_loss +
+            0.3 * waypoint_loss +
+            1.0 * segmentation_loss +
+            0.5 * depth_loss
+        )
         loss_dict.update({
             "train_loss": train_loss
         })
@@ -87,6 +93,9 @@ class ParkingTrainingModule(pl.LightningModule):
         self.log_dict(loss_dict)
         # self.log_segmentation(pred_segmentation, batch['segmentation'], 'segmentation')
         # self.log_depth(pred_depth, batch['depth'], 'depth')
+        if batch_idx % 20 == 0:
+            print("[Train step {}] ".format(batch_idx) +
+                ", ".join(f"{k}: {v.item():.4f}" for k, v in loss_dict.items()))
 
         return train_loss
 
@@ -94,10 +103,11 @@ class ParkingTrainingModule(pl.LightningModule):
         val_loss_dict = {}
         pred_control, pred_waypoint, pred_segmentation, pred_depth = self.parking_model(batch)
 
-        acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
+        acc_val_loss, steer_val_loss, reverse_gear_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
-            "acc_steer_val_loss": acc_steer_val_loss,
-            "reverse_val_loss": reverse_val_loss
+            "acc_val_loss": acc_val_loss,
+            "steer_val_loss": steer_val_loss,
+            "reverse_gear_val_loss": reverse_gear_val_loss
         })
 
         waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
@@ -115,7 +125,13 @@ class ParkingTrainingModule(pl.LightningModule):
             "depth_val_loss": depth_val_loss
         })
 
-        val_loss = sum(val_loss_dict.values())
+        #val_loss = sum(val_loss_dict.values())
+        val_loss = (
+            10.0 * (acc_val_loss + steer_val_loss + reverse_gear_val_loss) +
+            0.3 * waypoint_loss +
+            1.0 * segmentation_val_loss +
+            0.5 * depth_val_loss
+        )
         val_loss_dict.update({
             "val_loss": val_loss
         })
@@ -123,7 +139,9 @@ class ParkingTrainingModule(pl.LightningModule):
         self.log_dict(val_loss_dict)
         # self.log_segmentation(pred_segmentation, batch['segmentation'], 'segmentation_val')
         # self.log_depth(pred_depth, batch['depth'], 'depth_val')
-
+        if batch_idx % 20 == 0:
+            print("[VAL step {}] ".format(batch_idx) +
+                ", ".join(f"{k}: {v.item():.4f}" for k, v in val_loss_dict.items()))
         return val_loss
 
     def configure_optimizers(self):
