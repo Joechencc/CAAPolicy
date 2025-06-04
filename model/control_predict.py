@@ -23,7 +23,7 @@ class ControlPredict(nn.Module):
             tf_layer, num_layers=self.cfg.tf_de_layers
         )
 
-        #self.input_proj = nn.Linear(self.cfg.tf_de_dim, self.cfg.tf_de_dim)
+        self.input_proj = nn.Linear(self.cfg.tf_de_dim, self.cfg.tf_de_dim)
         self.reg_head = nn.Sequential(
             nn.Linear(self.cfg.tf_de_dim, 128),
             nn.ReLU(),
