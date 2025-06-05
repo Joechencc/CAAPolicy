@@ -459,7 +459,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.reverse.append(reverse)
 
                 # 加入 BOS 控制信号
-                gt_control = [self.BOS_token]  # 初始包含 BOS
+                gt_control = [] 
 
                 for i in range(self.cfg.future_frame_nums):
                     with open(task_path + f"/measurements/{str(frame + 1 + i).zfill(4)}.json", "r") as read_file:
@@ -473,7 +473,6 @@ class CarlaDataset(torch.utils.data.Dataset):
                     if data['Reverse'] == 1:
                         speed *= -1
 
-                    # 将控制信号添加到 gt_control 中
                     gt_control.append(speed)
                     gt_control.append(data["Steer"])
                     gt_control.append(data['Reverse'])
@@ -632,7 +631,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=300,
+        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
