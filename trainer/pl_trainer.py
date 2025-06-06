@@ -10,8 +10,9 @@ from loss.waypoint_loss import WaypointLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from model.parking_model import ParkingModel
+from model.dynamics_model import DynamicsModel
 import torch.nn.functional as F
-
+from collections import OrderedDict
 
 def setup_callbacks(cfg):
     callbacks = []
@@ -36,9 +37,9 @@ def setup_callbacks(cfg):
 
 
 class ParkingTrainingModule(pl.LightningModule):
-    def __init__(self, cfg: Configuration, model_path=None):
+    def __init__(self, cfg: Configuration, model_path=None, model_path_dynamics=None):
         super(ParkingTrainingModule, self).__init__()
-        self.save_hyperparameters(ignore=['model_path'])
+        self.save_hyperparameters(ignore=['model_path','model_path_dynamics'])
 
         self.cfg = cfg
 
@@ -55,10 +56,35 @@ class ParkingTrainingModule(pl.LightningModule):
         self.depth_loss_func = DepthLoss(self.cfg)
 
         self.parking_model = ParkingModel(self.cfg)
+        self.dynamic_model = DynamicsModel()
+        self.load_models(model_path, model_path_dynamics)
+
+    def load_models(self, model_path, model_path_dynamics):
+        if model_path is not None:
+            ckpt = torch.load(model_path, map_location='cuda:0')
+            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
+            self.parking_model.load_state_dict(state_dict, strict=False)
+        ##########
+        if model_path_dynamics is not None:
+            dynamic_ckpt = torch.load(model_path_dynamics, map_location='cuda:0')
+            dynamic_state_dict = OrderedDict([(k.replace('model.', ''), v) for k, v in dynamic_ckpt['state_dict'].items()])
+            self.dynamic_model.load_state_dict(dynamic_state_dict)
+            self.dynamic_model.eval()
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
+        ego_pos_torch = batch['ego_pos']
+        ego_motion_torch = batch['ego_motion']
+        raw_control_torch = batch['raw_control']
+        input_data = {
+            # 'yaw'
+            'ego_pos': ego_pos_torch,  # Shape: (1, 3)
+            'ego_motion': ego_motion_torch.view(-1,3),  # Shape: (1, 4)
+            'raw_control': raw_control_torch.view(-1,4), # Shape: (4,)
+        }
+        delta_mean, log_var, _, _ = self.dynamic_model(input_data)
+
+        pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch, delta_mean, log_var)
 
         control_loss = self.control_loss_func(pred_control, batch)
         # loss_dict.update({
@@ -114,7 +140,17 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
+            ego_pos_torch = batch['ego_pos']
+            ego_motion_torch = batch['ego_motion']
+            raw_control_torch = batch['raw_control']
+            input_data = {
+                # 'yaw'
+                'ego_pos': ego_pos_torch,  # Shape: (1, 3)
+                'ego_motion': ego_motion_torch.view(-1,3),  # Shape: (1, 4)
+                'raw_control': raw_control_torch.view(-1,4), # Shape: (4,)
+            }
+            delta_mean, log_var, _, _ = self.dynamic_model(input_data)
+            pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch, delta_mean, log_var)
 
             control_loss = self.control_loss_func(pred_control, batch)
             waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)

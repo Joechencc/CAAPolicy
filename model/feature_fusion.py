@@ -36,6 +36,24 @@ class FeatureFusion(nn.Module):
             nn.ReLU(inplace=True),
         ).to(self.cfg.device)
 
+        self.mean_encoder = nn.Sequential(
+            nn.Linear(self.cfg.tf_en_mean_length, uint_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(uint_dim*2, uint_dim * 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(uint_dim * 2, self.cfg.tf_en_bev_length),
+            nn.ReLU(inplace=True),
+        ).to(self.cfg.device)
+
+        self.var_encoder = nn.Sequential(
+            nn.Linear(self.cfg.tf_en_var_length, uint_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(uint_dim*2, uint_dim * 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(uint_dim * 2, self.cfg.tf_en_bev_length),
+            nn.ReLU(inplace=True),
+        ).to(self.cfg.device)
+
         self.init_weights()
 
     def init_weights(self):
@@ -46,20 +64,19 @@ class FeatureFusion(nn.Module):
                 nn.init.xavier_uniform_(p)
         trunc_normal_(self.pos_embed, std=.02)
 
-    def forward(self, bev_feature, ego_motion,target_point):
-
-
+    def forward(self, bev_feature, ego_motion,target_point, delta_mean, log_var):
         bev_feature = bev_feature.transpose(1, 2)
         # bev_feature.shape
         # torch.Size([1, 256, 256])
-
         motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
         target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 4)
+        mean_feature = self.mean_encoder(delta_mean.unsqueeze(1)).transpose(1, 2).expand(-1, -1, 3)
+        var_feature = self.var_encoder(log_var.unsqueeze(1)).transpose(1, 2).expand(-1, -1, 3)
 
         # motion_feature.shape
         # torch.Size([1, 256, 2])
 
-        fuse_feature = torch.cat([bev_feature, motion_feature,target_feature], dim=2)
+        fuse_feature = torch.cat([bev_feature, motion_feature,target_feature, mean_feature, var_feature], dim=2)
 
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
 

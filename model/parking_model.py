@@ -30,6 +30,7 @@ class ParkingModel(nn.Module):
         self.grad_approx = GradientApproximator(self.cfg.bev_encoder_out_channel)
 
         self.segmentation_head = SegmentationHead(self.cfg)
+
     def adjust_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
         bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
@@ -68,7 +69,7 @@ class ParkingModel(nn.Module):
         bev_feature = torch.cat([bev_feature, bev_target], dim=1)
         return bev_feature, bev_target
 
-    def encoder(self, data):
+    def encoder(self, data, delta_mean, log_var):
         images = data['image'].to(self.cfg.device, non_blocking=True)
         intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
@@ -82,14 +83,14 @@ class ParkingModel(nn.Module):
         bev_down_sample = self.bev_encoder(bev_feature)
 
         target_point = target_point.unsqueeze(1)
-        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
+        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point, delta_mean, log_var)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
 
         return fuse_feature, pred_segmentation, pred_depth, bev_target
 
-    def forward(self, data):
-        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+    def forward(self, data, delta_mean, log_var):
+        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data, delta_mean, log_var)
         # if not self.training:
         #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
         #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
@@ -115,7 +116,7 @@ class ParkingModel(nn.Module):
         
     def predict(self, data):
         # with torch.enable_grad():
-        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
+        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data, delta_mean, log_var)
         pred_multi_controls = data['gt_control'].cuda()
         pred_multi_waypoints = data['gt_waypoint'].cuda()
         fuse_feature_copy = fuse_feature.clone()

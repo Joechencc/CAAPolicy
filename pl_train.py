@@ -26,6 +26,10 @@ def train():
         '--model_path',
         default=None,
         help='path to model.ckpt')
+    arg_parser.add_argument(
+        '--model_path_dynamics',
+        default=None,
+        help='path to dynamic_model_speed.ckpt')
     args = arg_parser.parse_args()
 
     with open(args.config, 'r') as yaml_file:
@@ -35,6 +39,7 @@ def train():
             logger.exception("Open {} failed!", args.config)
     cfg = get_cfg(cfg_yaml)
     cfg.model_path = args.model_path
+    cfg.model_path_dynamics = args.model_path_dynamics
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)
     logger.add(sys.stderr, enqueue=True)
@@ -55,12 +60,12 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-    parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
+    parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path, model_path_dynamics=cfg.model_path_dynamics)
     parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(
         parking_model, 
-        datamodule=parking_datamodule, 
-        ckpt_path=cfg.model_path if cfg.model_path else None 
+        datamodule=parking_datamodule
+        # ckpt_path=cfg.model_path if cfg.model_path else None 
     )
 
 

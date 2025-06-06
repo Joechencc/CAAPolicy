@@ -303,13 +303,11 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.back_left_depth = []
         self.back_right_depth = []
 
-
+        self.ego_pos = []
 
         self.control = []
 
-        self.velocity_x = []
-        self.velocity_y = []
-        self.velocity_z = []
+        self.velocity = []
 
         self.acc_x = []
         self.acc_y = []
@@ -317,6 +315,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.throttle_brake = []
         self.steer = []
         self.reverse = []
+        
+        self.raw_control = []
 
         self.target_point = []
 
@@ -433,14 +433,14 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # # apply transformation
                 # speed_ego = world_vector_to_ego(speed_world, ego_trans)
                 # accel_ego = world_vector_to_ego(accel_world, ego_trans)
-                self.velocity_x.append(data['speed_x'])
-                self.velocity_y.append(data['speed_y'])
-                self.velocity_z.append(data['speed_z'])
+                self.velocity.append(data['speed'])
 
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
 
                 # control
+                self.raw_control.append([data['Throttle'],data['Brake'],data['Steer'], data['Reverse']])
+
                 controls = []
                 throttle_brakes = []
                 steers = []
@@ -469,6 +469,8 @@ class CarlaDataset(torch.utils.data.Dataset):
                     cur_x = data['x']
                     cur_y = data['y']
                     cur_yaw = data['yaw']
+                    ego_pos = [cur_x, cur_y, cur_yaw]
+                    self.ego_pos.append(ego_pos)
                 waypoints = []
                 xs = []
                 ys = []
@@ -562,18 +564,20 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.topdown = np.array(self.topdown).astype(np.string_)
 
-        self.velocity_x = np.array(self.velocity_x).astype(np.float32)
-        self.velocity_y = np.array(self.velocity_y).astype(np.float32)
-        self.velocity_z = np.array(self.velocity_z).astype(np.float32)
+        self.velocity = np.array(self.velocity).astype(np.float32)
         self.acc_x = np.array(self.acc_x).astype(np.float32)
         self.acc_y = np.array(self.acc_y).astype(np.float32)
 
         self.control = np.array(self.control).astype(np.int64)
         self.waypoint = np.array(self.waypoint).astype(np.int64)
 
+        self.raw_control = np.array(self.raw_control).astype(np.float32)
+
         self.throttle_brake = np.array(self.throttle_brake).astype(np.float32)
         self.steer = np.array(self.steer).astype(np.float32)
         self.reverse = np.array(self.reverse).astype(np.int64)
+
+        self.ego_pos = np.array(self.ego_pos).astype(np.float32)
 
         self.delta_x_values = np.array(self.delta_x_values).astype(np.float32)
         self.delta_y_values = np.array(self.delta_y_values).astype(np.float32)
@@ -589,7 +593,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         data = {}
-        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
+        keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'ego_pos', 'segmentation',
                 'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
         for key in keys:
             data[key] = []
@@ -622,9 +626,15 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
-        speed = np.float32(3.6 * math.sqrt(self.velocity_x[index] ** 2 + self.velocity_y[index] ** 2 +self.velocity_z[index] ** 2))
+        speed = self.velocity[index]
         ego_motion = np.column_stack((speed, self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
+
+        # ego_pos
+        data['ego_pos'] = torch.from_numpy(self.ego_pos[index])
+
+        # raw_control
+        data['raw_control'] = torch.from_numpy(self.raw_control[index])
 
         # gt control token
         data['gt_control'] = torch.from_numpy(self.control[index])

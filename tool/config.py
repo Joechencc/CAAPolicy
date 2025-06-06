@@ -46,6 +46,8 @@ class Configuration:
     tf_en_dropout = None
     tf_en_bev_length = None
     tf_en_motion_length = None
+    tf_en_mean_length = None
+    tf_en_var_length = None
 
     tf_de_dim = None
     tf_de_heads = None
@@ -103,6 +105,8 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_en_dropout = config['tf_en_dropout']
     cfg.tf_en_bev_length = config['tf_en_bev_length']
     cfg.tf_en_motion_length = config['tf_en_motion_length']
+    cfg.tf_en_mean_length = config['tf_en_mean_length']
+    cfg.tf_en_var_length = config['tf_en_var_length']
 
     cfg.tf_de_dim = config['tf_de_dim']
     cfg.tf_de_heads = config['tf_de_heads']
