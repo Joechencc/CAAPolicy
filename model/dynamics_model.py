@@ -15,7 +15,7 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         
         # Define the MLP model with LayerNorm
         self.mlp = nn.Sequential(
-            nn.Linear(11, hidden_dim),
+            nn.Linear(10, hidden_dim),
             nn.LayerNorm(hidden_dim),  # Replace BatchNorm1d with LayerNorm
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -40,17 +40,19 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         sin_yaw = torch.sin(yaw)
 
         # Transform accelerations to the world frame
-        accel_x_world = ego_motion[:, 3] * cos_yaw + ego_motion[:, 4] * sin_yaw
-        accel_y_world = -ego_motion[:, 3] * sin_yaw + ego_motion[:, 4] * cos_yaw
+        accel_x_world = ego_motion[:, 1] * cos_yaw + ego_motion[:, 2] * sin_yaw
+        accel_y_world = -ego_motion[:, 1] * sin_yaw + ego_motion[:, 2] * cos_yaw
 
         # Convert speed from km/h to m/s
         reverse = data['raw_control'][:, 3]
 
         # Recover vehicle velocity components in the world frame
-        vehicle_velocity_x = data['ego_motion'][:,0] / 3.6
-        vehicle_velocity_y = data['ego_motion'][:,1] / 3.6
-        vehicle_velocity_z = data['ego_motion'][:,2] / 3.6
-        speed = torch.sqrt(vehicle_velocity_x ** 2 + vehicle_velocity_y ** 2 + vehicle_velocity_z ** 2)
+        speed = data['ego_motion'][:,0] 
+        reverse = data['raw_control'][:,3]
+        
+        speed = 2*(reverse-0.5) *speed # normalize reverse and vectorize speed
+        vehicle_velocity_x = speed * cos_yaw
+        vehicle_velocity_y = speed * sin_yaw
 
         # Compute displacements for reference only km/h -> m/s
         displacement_x_world_track = vehicle_velocity_x * dt + 0.5 * accel_x_world * dt**2

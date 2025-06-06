@@ -73,5 +73,5 @@ parking_model:
   tf_de_tgt_dim: 15
   hybrid_ckpt_path: "/scratch/rs9193/e2e_temporal_spatial/ParkWithUncertainty/ckpt/last.ckpt"
 
-  resume_ckpt_path: ckpt/dynamics_model/exp_2025_6_5_22_15_55/last.ckpt #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint
+  resume_ckpt_path: ckpt/dynamics_model/exp_2025_6_6_0_39_24/last.ckpt #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint
 

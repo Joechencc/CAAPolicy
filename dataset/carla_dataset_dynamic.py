@@ -5,6 +5,7 @@ import torch.utils.data
 import numpy as np
 import torchvision.transforms
 import yaml
+import math
 
 from PIL import Image
 from loguru import logger
@@ -70,7 +71,9 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
                 # Save Waypoints
                 self.ego_pos.append(ego_pos)
                 # ego_motion
-                self.ego_motion.append([data['speed_x'], data['speed_y'], data['speed_z'], data['acc_x'], data['acc_y']])
+                velocity_x, velocity_y, velocity_z = data['speed_x']/ 3.6, data['speed_y']/ 3.6, data['speed_z']/ 3.6
+                speed = math.sqrt(velocity_x ** 2 + velocity_y ** 2 + velocity_z ** 2)
+                self.ego_motion.append([speed, data['acc_x'], data['acc_y']])
                 # current control will be used to predict next ego_pose
                 self.raw_control.append([data['Throttle'],data['Brake'],data['Steer'], data['Reverse']])
 

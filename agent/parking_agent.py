@@ -601,8 +601,19 @@ class ParkingAgent:
         accel_x_world = imu_data.accelerometer.x * np.cos(yaw) + imu_data.accelerometer.y * np.sin(yaw)
         accel_y_world = -imu_data.accelerometer.x * np.sin(yaw) + imu_data.accelerometer.y * np.cos(yaw)
 
-        displacement_x_world = vehicle_velocity.x * dt + 0.5 * accel_x_world * dt**2
-        displacement_y_world = vehicle_velocity.y * dt + 0.5 * accel_y_world * dt**2
+        reverse = data_frame['veh_control'].reverse
+        if not reverse:
+            speed = math.sqrt(
+                data_frame['veh_velocity'].x ** 2 + data_frame['veh_velocity'].y ** 2 + data_frame['veh_velocity'].z ** 2)
+        else:
+            speed = -math.sqrt(
+                data_frame['veh_velocity'].x ** 2 + data_frame['veh_velocity'].y ** 2 + data_frame['veh_velocity'].z ** 2)
+        vehicle_velocity_x = speed * np.cos(yaw)
+        vehicle_velocity_y = speed * np.sin(yaw)
+
+        displacement_x_world = vehicle_velocity_x * dt + 0.5 * accel_x_world * dt**2
+        displacement_y_world = vehicle_velocity_y * dt + 0.5 * accel_y_world * dt**2
+        
         self.ego_xy[0] += displacement_x_world
         self.ego_xy[1] += displacement_y_world
         #print('this is egox', self.ego_xy[0])
@@ -618,7 +629,8 @@ class ParkingAgent:
         ego_pos_torch = deepcopy(self.ego_xy_dynamic)
         ego_pos_torch.append(vehicle_transform.rotation.yaw)
         ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
-        ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y, imu_data.accelerometer.x, imu_data.accelerometer.y],
+        speed = torch.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)
+        ego_motion_torch = torch.tensor([speed, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                         dtype=torch.float).to(self.device)
         raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
 
