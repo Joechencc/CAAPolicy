@@ -1,7 +1,7 @@
 # General settings
 log_dir: ./logs/dynamics_model  # Directory to save logs and checkpoints
-train_data_dir: /scratch/rs9193/dynamics_dataset/  # /scratch/rs9193/Town_Opt_1   # Path to the training dataset
-val_data_dir: /scratch/rs9193/dynamics_dataset/ # /scratch/rs9193/Town_Opt_1        # Path to the validation dataset
+train_data_dir: /scratch/rs9193/carla_parking_eva_collect/  # /scratch/rs9193/Town_Opt_1   # Path to the training dataset
+val_data_dir: /vast/cc7287/Town_dynamic/ # /scratch/rs9193/Town_Opt_1        # Path to the validation dataset
 
 # Training settings
 batch_size: 220                  # Batch size for training and validation
@@ -17,7 +17,6 @@ save_top_k: 2                    # Number of best checkpoints to save
 monitor: val_loss                # Metric to monitor for saving checkpoints
 mode: min                        # Save checkpoints with the minimum value of the monitored metric
 
-resume_ckpt_path: ./ckpt/dynamics_model/exp_2025_5_27_17_15_34/last.ckpt #null #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint
 
 parking_model:
   # train
@@ -32,8 +31,8 @@ parking_model:
   weight_decay: 0.0001
   batch_size: 1024
 
-  training_map: /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
-  validation_map: /scratch/rs9193/dynamics_dataset/ # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
+  training_map: /scratch/rs9193/carla_parking_eva_collect/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
+  validation_map: /vast/cc7287/Town_dynamic/ # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
   future_frame_nums: 1
   hist_frame_nums: 0
   token_nums: 204
@@ -73,3 +72,6 @@ parking_model:
   tf_de_dropout: 0.05
   tf_de_tgt_dim: 15
   hybrid_ckpt_path: "/scratch/rs9193/e2e_temporal_spatial/ParkWithUncertainty/ckpt/last.ckpt"
+
+  resume_ckpt_path: ckpt/dynamics_model/exp_2025_6_5_22_15_55/last.ckpt #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint
+

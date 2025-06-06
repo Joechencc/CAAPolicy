@@ -55,7 +55,6 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-
     parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
     parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(

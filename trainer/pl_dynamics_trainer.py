@@ -11,7 +11,7 @@ class DynamicsTrainingModule(pl.LightningModule):
         super(DynamicsTrainingModule, self).__init__()
         self.cfg = cfg
         self.model = DynamicsModel()
-        # self.criterion = nn.MSELoss()
+        self.criterion = nn.MSELoss()
 
     def training_step(self, batch, batch_idx):
         # Extract inputs and targets from the batch
@@ -37,6 +37,7 @@ class DynamicsTrainingModule(pl.LightningModule):
         # weights = torch.ones_like(speed)
         # weights[low_speed_mask] = 10  # e.g., higher_weight = 10
         # loss = (loss_per_sample * weights).mean()
+        # loss = self.criterion(delta_mean, next_ego_pos[:, :2]- ego_pos[:, :2])
         loss = self.nll_loss(delta_mean, log_var, next_ego_pos[:, :2]- ego_pos[:, :2])
 
         # Log training loss
@@ -58,6 +59,7 @@ class DynamicsTrainingModule(pl.LightningModule):
         }
         delta_mean, log_var, _, _= self.model(data)
         # Compute loss
+        # loss = self.criterion(delta_mean, next_ego_pos[:, :2]- ego_pos[:, :2])
         loss = self.nll_loss(delta_mean, log_var, next_ego_pos[:, :2]- ego_pos[:, :2])
 
         # Compute loss for coarse_prediction (comparison only)

@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+import math
 
 class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
 
@@ -31,7 +32,6 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         # Extract x, y, and yaw
         ego_pos = data['ego_pos']  # [x, y, yaw]
         ego_motion = data['ego_motion'] # vel_x, vel_y, accel_x, accel_y
-
         x, y, yaw = ego_pos[:, 0], ego_pos[:, 1], ego_pos[:, 2]
 
         # Convert yaw to radians
@@ -40,8 +40,8 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         sin_yaw = torch.sin(yaw)
 
         # Transform accelerations to the world frame
-        accel_x_world = ego_motion[:, 2] * torch.cos(yaw) + ego_motion[:, 3] * torch.sin(yaw)
-        accel_y_world = -ego_motion[:, 2] * torch.sin(yaw) + ego_motion[:, 3] * torch.cos(yaw)
+        accel_x_world = ego_motion[:, 3] * cos_yaw + ego_motion[:, 4] * sin_yaw
+        accel_y_world = -ego_motion[:, 3] * sin_yaw + ego_motion[:, 4] * cos_yaw
 
         # Convert speed from km/h to m/s
         reverse = data['raw_control'][:, 3]
@@ -49,6 +49,8 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         # Recover vehicle velocity components in the world frame
         vehicle_velocity_x = data['ego_motion'][:,0] / 3.6
         vehicle_velocity_y = data['ego_motion'][:,1] / 3.6
+        vehicle_velocity_z = data['ego_motion'][:,2] / 3.6
+        speed = torch.sqrt(vehicle_velocity_x ** 2 + vehicle_velocity_y ** 2 + vehicle_velocity_z ** 2)
 
         # Compute displacements for reference only km/h -> m/s
         displacement_x_world_track = vehicle_velocity_x * dt + 0.5 * accel_x_world * dt**2
@@ -61,8 +63,7 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         dt_torch = torch.tensor(dt).to(throttle.device).unsqueeze(0).unsqueeze(0).expand(throttle.shape[0], 1)
         # Concatenate all inputs into a single tensor
         # inputs.shape = torch.size[26,3]
-        inputs = torch.cat((vehicle_velocity_x.reshape(-1,1), 
-                            vehicle_velocity_y.reshape(-1,1), 
+        inputs = torch.cat((speed.reshape(-1,1), 
                             accel_x_world.reshape(-1,1), 
                             accel_y_world.reshape(-1,1),
                             throttle.reshape(-1,1), 

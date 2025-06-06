@@ -9,7 +9,64 @@ import yaml
 from PIL import Image
 from loguru import logger
 #import matplotlib.pyplot as plt
+import math
 
+def rotation_to_matrix(rotation: carla.Rotation):
+    """Convert CARLA Rotation (degrees) to a 3×3 rotation matrix."""
+    pitch = math.radians(rotation.pitch)
+    yaw = math.radians(rotation.yaw)
+    roll = math.radians(rotation.roll)
+
+    Rx = np.array([
+        [1, 0, 0],
+        [0, math.cos(roll), -math.sin(roll)],
+        [0, math.sin(roll), math.cos(roll)]
+    ])
+    Ry = np.array([
+        [math.cos(pitch), 0, math.sin(pitch)],
+        [0, 1, 0],
+        [-math.sin(pitch), 0, math.cos(pitch)]
+    ])
+    Rz = np.array([
+        [math.cos(yaw), -math.sin(yaw), 0],
+        [math.sin(yaw), math.cos(yaw), 0],
+        [0, 0, 1]
+    ])
+
+    # Roll (X) -> Pitch (Y) -> Yaw (Z)
+    return Rz @ Ry @ Rx
+
+def rotate_vector(vec: carla.Vector3D, rotation: carla.Rotation):
+    """Rotate a vector using carla.Rotation."""
+    R = rotation_to_matrix(rotation)
+    v = np.array([vec.x, vec.y, vec.z])
+    v_rot = R @ v
+    return carla.Vector3D(*v_rot)
+
+def get_inverse_transform(transform: carla.Transform):
+    """Manually compute inverse of a Transform (rotation + translation)."""
+    inv_rot = carla.Rotation(
+        pitch=-transform.rotation.pitch,
+        yaw=-transform.rotation.yaw,
+        roll=-transform.rotation.roll
+    )
+
+    R = rotation_to_matrix(inv_rot)
+    t = np.array([-transform.location.x, -transform.location.y, -transform.location.z])
+    t_rot = R @ t
+    inv_loc = carla.Location(x=t_rot[0], y=t_rot[1], z=t_rot[2])
+
+    return carla.Transform(inv_loc, inv_rot)
+
+def world_vector_to_ego(vector: carla.Vector3D, ego_transform: carla.Transform):
+    """Convert a world-frame vector (e.g., speed or acceleration) to ego-frame."""
+    inv_transform = get_inverse_transform(ego_transform)
+    return rotate_vector(vector, inv_transform.rotation)
+
+def world_location_to_ego(location: carla.Location, ego_transform: carla.Transform):
+    """Convert a world-frame location to ego-frame location."""
+    inv_transform = get_inverse_transform(ego_transform)
+    return inv_transform.transform(location)
 
 def convert_slot_coord(ego_trans, target_point):
     """
@@ -250,7 +307,10 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.control = []
 
-        self.velocity = []
+        self.velocity_x = []
+        self.velocity_y = []
+        self.velocity_z = []
+
         self.acc_x = []
         self.acc_y = []
 
@@ -366,9 +426,17 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # ego position
                 ego_trans = carla.Transform(carla.Location(x=data['x'], y=data['y'], z=data['z']),
                                             carla.Rotation(yaw=data['yaw'], pitch=data['pitch'], roll=data['roll']))
+                # # motion
+                # speed_world = carla.Vector3D(x=data['speed_x'], y=data['speed_y'], z=data['speed_z'])
+                # accel_world = carla.Vector3D(x=data['acc_x'], y=data['acc_y'], z=data['acc_z'])
 
-                # motion
-                self.velocity.append(data['speed'])
+                # # apply transformation
+                # speed_ego = world_vector_to_ego(speed_world, ego_trans)
+                # accel_ego = world_vector_to_ego(accel_world, ego_trans)
+                self.velocity_x.append(data['speed_x'])
+                self.velocity_y.append(data['speed_y'])
+                self.velocity_z.append(data['speed_z'])
+
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
 
@@ -494,7 +562,9 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.topdown = np.array(self.topdown).astype(np.string_)
 
-        self.velocity = np.array(self.velocity).astype(np.float32)
+        self.velocity_x = np.array(self.velocity_x).astype(np.float32)
+        self.velocity_y = np.array(self.velocity_y).astype(np.float32)
+        self.velocity_z = np.array(self.velocity_z).astype(np.float32)
         self.acc_x = np.array(self.acc_x).astype(np.float32)
         self.acc_y = np.array(self.acc_y).astype(np.float32)
 
@@ -552,7 +622,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
-        ego_motion = np.column_stack((self.velocity[index], self.acc_x[index], self.acc_y[index]))
+        speed = np.float32(3.6 * math.sqrt(self.velocity_x[index] ** 2 + self.velocity_y[index] ** 2 +self.velocity_z[index] ** 2))
+        ego_motion = np.column_stack((speed, self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
 
         # gt control token

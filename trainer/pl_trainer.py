@@ -71,7 +71,7 @@ class ParkingTrainingModule(pl.LightningModule):
         # })
         # grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
         grads = []
-        for b in range(pred_control.shape[0]):
+        for b in range(pred_control.shape[0]): # B,12,256
             grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
             grads.append(grad[b])
         grad_gt = torch.stack(grads, dim=0)

@@ -21,7 +21,6 @@ def train():
         type=str,
         help='path to dynamics_training.yaml (default: ./config/dynamics_training.yaml)')
     args = arg_parser.parse_args()
-
     # Load configuration
     with open(args.config, 'r') as yaml_file:
         try:
@@ -53,7 +52,7 @@ def train():
         monitor="val_loss",          # Metric to monitor
         min_delta=0.001,             # Minimum change to qualify as improvement
         mode="min",                  # Minimize the monitored metric
-        stopping_threshold=1e-9,    # Stop only if val_loss is below 0.001
+        stopping_threshold=1e-12,    # Stop only if val_loss is below 0.001
         patience=float('inf'),
         verbose=True
     )

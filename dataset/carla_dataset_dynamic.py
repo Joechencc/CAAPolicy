@@ -70,7 +70,7 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
                 # Save Waypoints
                 self.ego_pos.append(ego_pos)
                 # ego_motion
-                self.ego_motion.append([data['speed_x'], data['speed_y'], data['acc_x'], data['acc_y']])
+                self.ego_motion.append([data['speed_x'], data['speed_y'], data['speed_z'], data['acc_x'], data['acc_y']])
                 # current control will be used to predict next ego_pose
                 self.raw_control.append([data['Throttle'],data['Brake'],data['Steer'], data['Reverse']])
 

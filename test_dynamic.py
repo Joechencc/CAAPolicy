@@ -40,7 +40,7 @@ def test_hybrid_dynamics_model(ckpt_path, dataset_path, config, task_index=10):
 
     # Load the trained model
     model = DynamicsModel()
-    checkpoint = torch.load("./ckpt/dynamics_model/exp_2025_5_27_17_15_34/last.ckpt")
+    checkpoint = torch.load("./ckpt/dynamics_model/exp_2025_6_5_12_57_27/best-dynamics-epoch=116-val_loss=0.3837.ckpt")
     # Remove "model." prefix from keys in the state_dict
     state_dict = checkpoint['state_dict']
     new_state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
