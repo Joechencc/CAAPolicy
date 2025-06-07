@@ -11,6 +11,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from dataset.dataloader import ParkingDataModule
 from tool.config import get_cfg
+import torch
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 
@@ -50,6 +52,8 @@ def train():
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
     num_gpus = 4
+
+    torch.set_float32_matmul_precision('medium')
 
     parking_trainer = Trainer(callbacks=parking_callbacks,
                               logger=tensor_logger,

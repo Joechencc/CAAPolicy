@@ -62,8 +62,22 @@ class ParkingTrainingModule(pl.LightningModule):
     def load_models(self, model_path, model_path_dynamics):
         if model_path is not None:
             ckpt = torch.load(model_path, map_location='cuda:0')
-            state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-            self.parking_model.load_state_dict(state_dict, strict=False)
+            ckpt_state_dict = ckpt['state_dict']
+
+            new_state_dict = OrderedDict()
+            model_state_dict = self.parking_model.state_dict()
+
+            for k, v in ckpt_state_dict.items():
+                k_clean = k.replace('parking_model.', '') 
+                if k_clean in model_state_dict:
+                    if v.shape == model_state_dict[k_clean].shape:
+                        new_state_dict[k_clean] = v
+                    else:
+                        print(f"Skip loading {k_clean}: shape mismatch ({v.shape} vs {model_state_dict[k_clean].shape})")
+                else:
+                    print(f"Skip loading {k_clean}: not in current model")
+
+            self.parking_model.load_state_dict(new_state_dict, strict=False)
         ##########
         if model_path_dynamics is not None:
             dynamic_ckpt = torch.load(model_path_dynamics, map_location='cuda:0')
@@ -96,11 +110,22 @@ class ParkingTrainingModule(pl.LightningModule):
         #     "waypoint_loss": waypoint_loss
         # })
         # grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
-        grads = []
-        for b in range(pred_control.shape[0]): # B,12,256
-            grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
-            grads.append(grad[b])
-        grad_gt = torch.stack(grads, dim=0)
+        # grads = []
+        # for b in range(pred_control.shape[0]):
+        #     grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature[b], create_graph=True, retain_graph=True)[0]
+        #     grads.append(grad)
+        # grad_gt = torch.stack(grads, dim=0)
+
+        grad_gt = torch.autograd.grad(
+            outputs=pred_control[:, 1:13, :].mean(dim=(1, 2)),
+            inputs=fuse_feature,
+            grad_outputs=torch.ones_like(pred_control[:, 1:13, :].mean(dim=(1, 2))),  # shape [B]
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=True
+        )[0]
+
+
         refined_feature = approx_grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
         control_loss_2 = self.control_loss_func(pred_control_2, batch)
@@ -154,11 +179,14 @@ class ParkingTrainingModule(pl.LightningModule):
 
             control_loss = self.control_loss_func(pred_control, batch)
             waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-            grads = []
-            for b in range(pred_control.shape[0]):
-                grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
-                grads.append(grad[b])
-            grad_gt = torch.stack(grads, dim=0)
+            grad_gt = torch.autograd.grad(
+                outputs=pred_control[:, 1:13, :].mean(dim=(1, 2)),
+                inputs=fuse_feature,
+                grad_outputs=torch.ones_like(pred_control[:, 1:13, :].mean(dim=(1, 2))),  # shape [B]
+                create_graph=True,
+                retain_graph=True,
+                allow_unused=True
+            )[0]
             # grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
             refined_feature = approx_grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
