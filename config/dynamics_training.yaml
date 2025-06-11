@@ -40,7 +40,7 @@ parking_model:
 
   # bev encoder
   bev_encoder_in_channel: 64
-  bev_encoder_out_channel: 264  # 256 + 4 + 4
+  bev_encoder_out_channel: 270  # 256 + 4 + 4
 
   # bev model
   bev_x_bound: [-10.0, 10.0, 0.1]
@@ -57,16 +57,18 @@ parking_model:
   seg_vehicle_weights: [1.0, 2.0, 2.0]
 
   # transformer encoder
-  tf_en_dim: 264
+  tf_en_dim: 270
   tf_en_heads: 6
   tf_en_layers: 4
   tf_en_dropout: 0.05
   tf_en_bev_length: 256
   tf_en_motion_length: 4
   tf_en_target_length: 3
+  tf_en_mean_length: 2
+  tf_en_var_length: 2
 
   # transformer decoder
-  tf_de_dim: 264
+  tf_de_dim: 270
   tf_de_heads: 6
   tf_de_layers: 4
   tf_de_dropout: 0.05

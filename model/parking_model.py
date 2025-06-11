@@ -114,7 +114,7 @@ class ParkingModel(nn.Module):
 
         return pred_control, pred_waypoint
         
-    def predict(self, data):
+    def predict(self, data, delta_mean, log_var):
         # with torch.enable_grad():
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data, delta_mean, log_var)
         pred_multi_controls = data['gt_control'].cuda()
