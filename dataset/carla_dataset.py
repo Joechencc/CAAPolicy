@@ -626,7 +626,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
-        speed = self.velocity[index]
+        speed = self.velocity[index] /np.float32(3.6)
+
         ego_motion = np.column_stack((speed, self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
 

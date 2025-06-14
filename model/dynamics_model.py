@@ -50,9 +50,9 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         speed = data['ego_motion'][:,0] 
         reverse = data['raw_control'][:,3]
         
-        speed = 2*(reverse-0.5) *speed # normalize reverse and vectorize speed
-        vehicle_velocity_x = speed * cos_yaw
-        vehicle_velocity_y = speed * sin_yaw
+        speed_direction = 2*(reverse-0.5) *speed # normalize reverse and vectorize speed
+        vehicle_velocity_x = speed_direction * cos_yaw
+        vehicle_velocity_y = speed_direction * sin_yaw
 
         # Compute displacements for reference only km/h -> m/s
         displacement_x_world_track = vehicle_velocity_x * dt + 0.5 * accel_x_world * dt**2

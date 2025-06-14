@@ -68,8 +68,8 @@ def train():
     parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(
         parking_model, 
-        datamodule=parking_datamodule
-        # ckpt_path=cfg.model_path if cfg.model_path else None 
+        datamodule=parking_datamodule,
+        ckpt_path=cfg.model_path if cfg.model_path else None 
     )
 
 

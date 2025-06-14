@@ -64,7 +64,7 @@ class FeatureFusion(nn.Module):
                 nn.init.xavier_uniform_(p)
         trunc_normal_(self.pos_embed, std=.02)
 
-    def forward(self, bev_feature, ego_motion,target_point, delta_mean, log_var):
+    def forward(self, bev_feature, ego_motion, target_point, delta_mean, log_var):
         bev_feature = bev_feature.transpose(1, 2)
         # bev_feature.shape
         # torch.Size([1, 256, 256])
