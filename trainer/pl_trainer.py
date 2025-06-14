@@ -112,6 +112,14 @@ class ParkingTrainingModule(pl.LightningModule):
         #     allow_unused=True
         # )[0]
 
+        # grad_gt = torch.autograd.grad(
+        #     outputs=pred_control[:, 1:13, :].mean(dim=(1, 2)),
+        #     inputs=fuse_feature,
+        #     grad_outputs=torch.ones_like(pred_control[:, 1:13, :].mean(dim=(1, 2))),  # shape [B]
+        #     create_graph=True,
+        #     retain_graph=True,
+        #     allow_unused=True
+        # )[0]
         refined_feature = approx_grad*fuse_feature
         pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
         control_loss_2 = self.control_loss_func(pred_control_2, batch)

@@ -302,7 +302,7 @@ class ParkingAgent:
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-        self.model.load_state_dict(state_dict)
+        self.model.load_state_dict(state_dict,strict=False)
         self.model.to(self.device)
         self.model.eval()
 
@@ -446,7 +446,7 @@ class ParkingAgent:
             vehicle_transform = data_frame['veh_transfrom']
             imu_data = data_frame['imu']
 
-            data = self.get_model_data(data_frame)
+            data, delta_mean, log_var = self.get_model_data(data_frame)
             # print("self.ego_position::",self.ego_position)
             # print("self.ego_xy::",self.ego_xy)
             # print("self.ego_xy_dynamic::",self.ego_xy_dynamic)
@@ -497,7 +497,7 @@ class ParkingAgent:
             with torch.no_grad():
                 start_time = time.time()
 
-                pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data,  delta_mean, log_var)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -629,7 +629,7 @@ class ParkingAgent:
         ego_pos_torch = deepcopy(self.ego_xy_dynamic)
         ego_pos_torch.append(vehicle_transform.rotation.yaw)
         ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
-        speed = torch.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)
+        speed = torch.sqrt(torch.tensor(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2))
         ego_motion_torch = torch.tensor([speed, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                         dtype=torch.float).to(self.device)
         raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
@@ -705,7 +705,7 @@ class ParkingAgent:
             seg_gt[seg_gt == 2] = 255
             data['segmentation'] = Image.fromarray(seg_gt)
         data["ego_trans"] = vehicle_transform
-        return data
+        return data, delta_mean, log_var
 
     # def draw_waypoints(self, waypoints):
     #     ego_t = self.world.player.get_transform()
