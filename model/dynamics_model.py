@@ -15,7 +15,7 @@ class DynamicsModel(nn.Module):  # Fixed typo in nn.module -> nn.Module
         
         # Define the MLP model with LayerNorm
         self.mlp = nn.Sequential(
-            nn.Linear(11, hidden_dim),
+            nn.Linear(10, hidden_dim),
             nn.LayerNorm(hidden_dim),  # Replace BatchNorm1d with LayerNorm
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
