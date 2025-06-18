@@ -307,10 +307,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.control = []
 
-        self.velocity_x = []
-        self.velocity_y = []
-        self.velocity_z = []
-
+        self.speed = []
         self.acc_x = []
         self.acc_y = []
 
@@ -433,9 +430,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # # apply transformation
                 # speed_ego = world_vector_to_ego(speed_world, ego_trans)
                 # accel_ego = world_vector_to_ego(accel_world, ego_trans)
-                self.velocity_x.append(data['speed_x'])
-                self.velocity_y.append(data['speed_y'])
-                self.velocity_z.append(data['speed_z'])
+                self.speed.append(data['speed'])
 
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
@@ -562,9 +557,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         self.topdown = np.array(self.topdown).astype(np.string_)
 
-        self.velocity_x = np.array(self.velocity_x).astype(np.float32)
-        self.velocity_y = np.array(self.velocity_y).astype(np.float32)
-        self.velocity_z = np.array(self.velocity_z).astype(np.float32)
+        self.speed = np.array(self.speed).astype(np.float32)
         self.acc_x = np.array(self.acc_x).astype(np.float32)
         self.acc_y = np.array(self.acc_y).astype(np.float32)
 
@@ -622,7 +615,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['target_point'] = torch.from_numpy(self.target_point[index])
 
         # ego_motion
-        speed = np.float32(3.6 * math.sqrt(self.velocity_x[index] ** 2 + self.velocity_y[index] ** 2 +self.velocity_z[index] ** 2))
+        speed = self.speed[index]
         ego_motion = np.column_stack((speed, self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
 

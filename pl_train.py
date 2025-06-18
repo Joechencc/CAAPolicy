@@ -11,6 +11,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from dataset.dataloader import ParkingDataModule
 from tool.config import get_cfg
+import torch
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 
@@ -26,6 +28,10 @@ def train():
         '--model_path',
         default=None,
         help='path to model.ckpt')
+    # arg_parser.add_argument(
+    #     '--model_path_dynamics',
+    #     default=None,
+    #     help='path to dynamic_model_speed.ckpt')
     args = arg_parser.parse_args()
 
     with open(args.config, 'r') as yaml_file:
@@ -35,6 +41,7 @@ def train():
             logger.exception("Open {} failed!", args.config)
     cfg = get_cfg(cfg_yaml)
     cfg.model_path = args.model_path
+    # cfg.model_path_dynamics = args.model_path_dynamics
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)
     logger.add(sys.stderr, enqueue=True)
@@ -45,6 +52,8 @@ def train():
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
     num_gpus = 4
+
+    torch.set_float32_matmul_precision('medium')
 
     parking_trainer = Trainer(callbacks=parking_callbacks,
                               logger=tensor_logger,
@@ -59,7 +68,7 @@ def train():
     parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(
         parking_model, 
-        datamodule=parking_datamodule, 
+        datamodule=parking_datamodule,
         ckpt_path=cfg.model_path if cfg.model_path else None 
     )
 
