@@ -9,12 +9,14 @@ class FeatureFusion(nn.Module):
     def __init__(self, cfg: Configuration):
         super().__init__()
         self.cfg = cfg
+        
+        tf_en_dim = self.cfg.tf_en_dim
 
-        tf_layer = nn.TransformerEncoderLayer(d_model=self.cfg.tf_en_dim, nhead=self.cfg.tf_en_heads)
+        tf_layer = nn.TransformerEncoderLayer(d_model=tf_en_dim, nhead=self.cfg.tf_en_heads)
         self.tf_encoder = nn.TransformerEncoder(tf_layer, num_layers=self.cfg.tf_en_layers)
-
+        
         total_length = self.cfg.tf_en_bev_length
-        self.pos_embed = nn.Parameter(torch.randn(1, total_length, self.cfg.tf_en_dim) * .02)
+        self.pos_embed = nn.Parameter(torch.randn(1, total_length, tf_en_dim) * .02)
         self.pos_drop = nn.Dropout(self.cfg.tf_en_dropout)
 
         uint_dim = int(self.cfg.tf_en_bev_length / 4)
@@ -52,14 +54,18 @@ class FeatureFusion(nn.Module):
         bev_feature = bev_feature.transpose(1, 2)
         # bev_feature.shape
         # torch.Size([1, 256, 256])
+        if self.cfg.ttm_module:
+            motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
+        
+            target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 4)
 
-        motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
-        target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 4)
+            # motion_feature.shape
+            # torch.Size([1, 256, 2])
 
-        # motion_feature.shape
-        # torch.Size([1, 256, 2])
-
-        fuse_feature = torch.cat([bev_feature, motion_feature,target_feature], dim=2)
+            fuse_feature = torch.cat([bev_feature, motion_feature,target_feature], dim=2)
+        else:
+            motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 8)
+            fuse_feature = torch.cat([bev_feature, motion_feature], dim=2)
 
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
 

@@ -20,6 +20,9 @@ class Configuration:
 
     training_map = None
     validation_map = None
+    ttm_module = None
+    caa_module = None
+    waypoints_module = None
     future_frame_nums = None
     hist_frame_nums = None
     token_nums = None
@@ -58,14 +61,14 @@ def get_cfg(cfg_yaml: dict):
     today = datetime.now()
     today_str = "{}_{}_{}_{}_{}_{}".format(today.year, today.month, today.day,
                                            today.hour, today.minute, today.second)
-    exp_name = "exp_{}".format(today_str)
+    exp_name = "{}".format(today_str)
 
     config = cfg_yaml['parking_model']
     cfg = Configuration()
 
     cfg.data_dir = config['data_dir']
-    cfg.log_dir = os.path.join(config['log_dir'], exp_name)
-    cfg.checkpoint_dir = os.path.join(config['checkpoint_dir'], exp_name)
+    cfg.log_dir = config['log_dir']
+    cfg.checkpoint_dir = config['checkpoint_dir']
     cfg.resume_ckpt_path = config['resume_ckpt_path']
     cfg.log_every_n_steps = config['log_every_n_steps']
     cfg.check_val_every_n_epoch = config['check_val_every_n_epoch']
@@ -77,6 +80,9 @@ def get_cfg(cfg_yaml: dict):
 
     cfg.training_map = config['training_map']
     cfg.validation_map = config['validation_map']
+    cfg.ttm_module = config['ttm_module']
+    cfg.caa_module = config['caa_module']
+    cfg.waypoints_module = config['waypoints_module']
     cfg.future_frame_nums = config['future_frame_nums']
     cfg.hist_frame_nums = config['hist_frame_nums']
     cfg.token_nums = config['token_nums']

@@ -12,9 +12,10 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from dataset.dataloader import ParkingDataModule
 from tool.config import get_cfg
 import torch
+from datetime import datetime
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3' #
 
 
 def train():
@@ -28,6 +29,26 @@ def train():
         '--model_path',
         default=None,
         help='path to model.ckpt')
+    arg_parser.add_argument(
+        '--model',
+        default="baseline",
+        help='"baseline" or "TTM" or "waypoints_prediction" or "CAA"')
+    arg_parser.add_argument(
+        '--ttm',
+        action='store_true', 
+        help='Enable TTM')
+    arg_parser.add_argument(
+        '--caa', 
+        action='store_true', 
+        help='Enable CAA')
+    arg_parser.add_argument(
+        '--waypoints', 
+        action='store_true', 
+        help='Enable Waypoints')
+    arg_parser.add_argument(
+        '--exp_name',
+        default='exp'
+        help='name of the experiment, used for logging and saving checkpoints')   
     # arg_parser.add_argument(
     #     '--model_path_dynamics',
     #     default=None,
@@ -41,6 +62,16 @@ def train():
             logger.exception("Open {} failed!", args.config)
     cfg = get_cfg(cfg_yaml)
     cfg.model_path = args.model_path
+    cfg.ttm_module = args.ttm
+    cfg.caa_module = args.caa
+    cfg.waypoints_module = args.waypoints
+    
+    today = datetime.now()
+    today_str = "{}_{}_{}_{}_{}_{}".format(today.year, today.month, today.day,
+                                           today.hour, today.minute, today.second)
+    exp_name = args.exp_name + "_{}".format(today_str)
+    cfg.log_dir = os.path.join(cfg.log_dir, exp_name)
+    cfg.checkpoint_dir = os.path.join(cfg.checkpoint_dir, exp_name)
     # cfg.model_path_dynamics = args.model_path_dynamics
     logger.remove()
     logger.add(cfg.log_dir + '/training_{time}.log', enqueue=True, backtrace=True, diagnose=True)
@@ -55,17 +86,21 @@ def train():
 
     torch.set_float32_matmul_precision('medium')
 
-    parking_trainer = Trainer(callbacks=parking_callbacks,
-                              logger=tensor_logger,
-                              accelerator='gpu',
-                              strategy='ddp' if num_gpus > 1 else None,
-                              devices=num_gpus,
-                              max_epochs=cfg.epochs,
-                              log_every_n_steps=cfg.log_every_n_steps,
-                              check_val_every_n_epoch=cfg.check_val_every_n_epoch,
-                              profiler='simple')
-    parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
+    parking_trainer = Trainer(
+        callbacks=parking_callbacks,
+        logger=tensor_logger,
+        accelerator='gpu',
+        strategy='ddp' if num_gpus > 1 else None,
+        devices=num_gpus,
+        max_epochs=cfg.epochs,
+        log_every_n_steps=cfg.log_every_n_steps,
+        check_val_every_n_epoch=cfg.check_val_every_n_epoch,
+        profiler='simple',
+        auto_scale_batch_size=True
+    )
+    parking_model = ParkingTrainingModule(cfg, model_path=cfg.model_path)
     parking_datamodule = ParkingDataModule(cfg)
+
     parking_trainer.fit(
         parking_model, 
         datamodule=parking_datamodule,

@@ -33,6 +33,9 @@ parking_model:
 
   training_map: /scratch/rs9193/carla_parking_eva_collect/ # /vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # /scratch/rs9193/Town_Opt_1 # "/vast/rs9193/Town_Opt_1000"
   validation_map: /vast/cc7287/Town_dynamic/ # /scratch/rs9193/Town_Opt_1 # "/scratch/rs9193/Town_Opt_1000_Val"
+  ttm_module: False
+  caa_module: False
+  waypoints_module: False
   future_frame_nums: 1
   hist_frame_nums: 0
   token_nums: 204

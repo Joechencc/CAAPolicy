@@ -10,14 +10,16 @@ class WaypointPredict(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.pad_idx = self.cfg.token_nums - 1
+        
+        tf_de_dim = self.cfg.tf_de_dim
 
-        self.embedding = nn.Embedding(self.cfg.token_nums, self.cfg.tf_de_dim)
+        self.embedding = nn.Embedding(self.cfg.token_nums, tf_de_dim)
         self.pos_drop = nn.Dropout(self.cfg.tf_de_dropout)
-        self.pos_embed = nn.Parameter(torch.randn(1, self.cfg.tf_de_tgt_dim - 1, self.cfg.tf_de_dim) * .02)
+        self.pos_embed = nn.Parameter(torch.randn(1, self.cfg.tf_de_tgt_dim - 1, tf_de_dim) * .02)
 
-        tf_layer = nn.TransformerDecoderLayer(d_model=self.cfg.tf_de_dim, nhead=self.cfg.tf_de_heads)
+        tf_layer = nn.TransformerDecoderLayer(d_model=tf_de_dim, nhead=self.cfg.tf_de_heads)
         self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
-        self.output = nn.Linear(self.cfg.tf_de_dim, self.cfg.token_nums)
+        self.output = nn.Linear(tf_de_dim, self.cfg.token_nums)
 
         self.init_weights()
 

@@ -3,15 +3,20 @@ import torch.nn.functional as F
 
 from torch import nn
 from torchvision.models.resnet import resnet18
+from tool.config import Configuration
 
 
 class BevEncoder(nn.Module):
-    def __init__(self, in_channel):
+    def __init__(self, in_channel, cfg: Configuration):
         super().__init__()
+
+        self.cfg = cfg
+
         trunk = resnet18(pretrained=False, zero_init_residual=True)
 
         #self.conv1 = nn.Conv2d(in_channel + 1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False) if self.cfg.ttm_module else \
+            nn.Conv2d(in_channel + 1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = trunk.bn1
         self.relu = trunk.relu
         self.max_pool = trunk.maxpool

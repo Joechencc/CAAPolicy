@@ -288,6 +288,9 @@ class ParkingAgent:
             except yaml.YAMLError:
                 logging.exception('Invalid YAML Config file {}', args.config)
         self.cfg = get_cfg(cfg_yaml)
+        self.cfg.ttm_module = args.ttm
+        self.cfg.caa_module = args.caa
+        self.cfg.waypoints_module = args.waypoints
 
         with open(args.dynamic_model_config_path, 'r') as dynamic_config_file:
             try:
@@ -496,8 +499,10 @@ class ParkingAgent:
             self.model.eval()
             with torch.no_grad():
                 start_time = time.time()
-
-                pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+                if self.cfg.waypoints_module:
+                    pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+                else:
+                    pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -521,15 +526,17 @@ class ParkingAgent:
 
                 # import pdb; pdb.set_trace()
                 # draw waypoint WP1, WP2, WP3, WP4
-                for i in range(0,4):
-                    #waypoint : [x,y,yaw] in egocentric
-                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
-                    #convert to world frame
-                    waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
-                    waypoint[-1] = 0.3 #z=0.3
-                    location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
-                    self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
-                                                        color=carla.Color(255, 0, 0))
+                if self.cfg.waypoints_module:
+                    for i in range(0,4):
+                        
+                        #waypoint : [x,y,yaw] in egocentric
+                        waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                        #convert to world frame
+                        waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+                        waypoint[-1] = 0.3 #z=0.3
+                        location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
+                        self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+                                                            color=carla.Color(255, 0, 0))
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]

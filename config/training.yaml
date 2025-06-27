@@ -9,12 +9,17 @@ parking_model:
   epochs: 155
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 38
+  batch_size: 12
 
   training_map: "/Town_Opt_1000" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/vast/rs9193/Town_Opt_1000"
   validation_map: "/Town_Opt_1000_Val" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/scratch/rs9193/Town_Opt_1000_Val"
-  # training_map: "/scratch/rs9193/dynamics_1/" #/scratch/rs9193/dynamics_1/ # "/vast/rs9193/Town_Opt_1000"
+  # training_map: "/scratch/rs9193/dynamics_1/" #/scratch/rs9193/dynamics_1/ # "/vast/rs9193/Town_Opt_1000_extra_small"
   # validation_map: "/scratch/rs9193/dynamics_1/" #/scratch/rs9193/dynamics_1/ # "/scratch/rs9193/Town_Opt_1000_Val"
+
+  ttm_module: False
+  caa_module: False
+  waypoints_module: False
+
   future_frame_nums: 4
   hist_frame_nums: 10
   token_nums: 204

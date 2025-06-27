@@ -99,7 +99,7 @@ def main():
         help='path to model.ckpt')
     argparser.add_argument(
         '--model_path_dynamic',
-        default='./ckpt/dynamic_model.ckpt',
+        default='./ckpt/dynamic_model_speed.ckpt',
         help='path to dynamic_model.ckpt')
     argparser.add_argument(
         '--model_config_path',
@@ -141,7 +141,7 @@ def main():
         help='shuffle weather between tasks (default: False)')
     argparser.add_argument(
         '--random_seed',
-        default=66,
+        default=88,
         help='random seed to initialize env; if sets to 0, use current timestamp as seed (default: 0)')
     argparser.add_argument(
         '--bev_render_device',
@@ -157,6 +157,19 @@ def main():
         '--eva_result_path',
         default='./eva_result',
         help='path to save eva csv file')
+    argparser.add_argument(
+        '--ttm',
+        action='store_true', 
+        help='Enable TTM module')
+    argparser.add_argument(
+        '--caa', 
+        action='store_true', 
+        help='Enable CAA module')
+    argparser.add_argument(
+        '--waypoints', 
+        action='store_true', 
+        help='Enable Waypoints module')
+    
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
