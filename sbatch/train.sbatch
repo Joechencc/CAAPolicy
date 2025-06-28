@@ -7,9 +7,9 @@
 #SBATCH --time=48:00:00
 #SBATCH --mem=350GB
 #SBATCH --gres=gpu:rtx8000:4
-#SBATCH --job-name=baseline
-#SBATCH --output=baseline%j.out
-#SBATCH --error=baseline%j.err
+#SBATCH --job-name=waypoints
+#SBATCH --output=waypoints%j.out
+#SBATCH --error=waypoints%j.err
 
 module purge
 IMG=$SCRATCH/carla-0.9.11.sif
@@ -35,6 +35,7 @@ singularity exec --nv \
     export LD_LIBRARY_PATH=/opt/e2e_carla/lib:\$LD_LIBRARY_PATH
 
     # 2) run your evaluation script
-    cd /scratch/rs9193/park_test/ParkWithUncertainty/ && python3 pl_train.py --model_path ckpt/baseline_and_waypoints/E2EParking-epoch=20-val_loss=1.25.ckpt --exp_name baseline
+    cd /scratch/rs9193/park_test/ParkWithUncertainty/ && python3 pl_train.py --exp_name waypoints --waypoints
   "
 #--caa --ttm --waypoints
+# --model_path

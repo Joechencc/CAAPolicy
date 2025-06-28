@@ -47,7 +47,7 @@ def train():
         help='Enable Waypoints')
     arg_parser.add_argument(
         '--exp_name',
-        default='exp'
+        default='exp',
         help='name of the experiment, used for logging and saving checkpoints')   
     # arg_parser.add_argument(
     #     '--model_path_dynamics',

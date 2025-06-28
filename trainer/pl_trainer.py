@@ -106,6 +106,10 @@ class ParkingTrainingModule(pl.LightningModule):
             loss_dict.update({
                 "waypoint_loss": waypoint_loss
             })
+            control_loss = self.control_loss_func(pred_control, batch)
+            loss_dict.update({
+                "control_loss": control_loss
+            })
 
         else: # baseline
             pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
@@ -183,6 +187,10 @@ class ParkingTrainingModule(pl.LightningModule):
                 waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
                 val_loss_dict.update({
                     "waypoint_loss": waypoint_loss
+                })
+                control_loss = self.control_loss_func(pred_control, batch)
+                loss_dict.update({
+                    "control_loss": control_loss
                 })
 
             else: # baseline
