@@ -212,7 +212,8 @@ class ParkingAgent:
     def __init__(self, network_evaluator: NetworkEvaluator, args):
 
         self.show_eva_imgs = args.show_eva_imgs
-
+        self.target_choice = args.target_choice
+        
         self.atten_avg = None
         self.grid_image = None
 
@@ -666,7 +667,7 @@ class ParkingAgent:
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking","dynamics"]
-        target_type = target_types[3]
+        target_type = target_types[self.target_choice]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]

@@ -169,6 +169,12 @@ def main():
         '--waypoints', 
         action='store_true', 
         help='Enable Waypoints module')
+    argparser.add_argument(
+        '--target_choice',
+        default=0,
+        type=int,
+        help='method to update target point, 0 for gt, 1 for predicted, 2 for tracking, 3 for dynamics(default: 0)',
+        choices=[0, 1, 2, 3])
     
     args = argparser.parse_args()
 
