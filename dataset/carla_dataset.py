@@ -605,7 +605,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['depth'] = depths
 
         # segmentation
-        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+        segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=300,  #训练的时候是200，为了避免inference出现和parking_agent.py一样的问题，改成了300
                                              target_slot=self.target_point[index])
         data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
 
