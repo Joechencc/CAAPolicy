@@ -562,3 +562,70 @@ class NetworkEvaluator:
     @property
     def ego_transform(self):
         return self._ego_transform
+
+    def record_out_of_bound_failure(self):
+        self._outbound_nums += 1
+        logging.info("parking outbound for task %s-%d (due to render error), outbound_num: %d",
+                     parking_position.slot_id[self._eva_task_idx],
+                     self._eva_parking_idx + 1, self._outbound_nums)
+        self.start_next_parking()
+
+    def set_scene(self, task_idx):
+        """
+        手动设置场景/任务
+        Args:
+            task_idx: 任务索引 (0-15)，对应不同的停车位
+                     0: '2-1', 1: '2-3', 2: '2-5', ..., 15: '3-15'
+        """
+        if not (0 <= task_idx <= 15):
+            logging.warning(f"Invalid task_idx {task_idx}, should be 0-15")
+            return False
+            
+        logging.info(f"Manually switching to task {parking_position.slot_id[task_idx]} (index: {task_idx})")
+        
+        # 设置任务索引
+        self._eva_task_idx = task_idx
+        
+        # 计算对应的停车位索引
+        if task_idx < 16:
+            self._parking_goal_index = 16 + task_idx * 2  # 对应奇数停车位
+        else:
+            self._parking_goal_index = 16
+        
+        # 软重置环境
+        self.soft_destroy()
+        
+        # 设置新的停车目标
+        self._parking_goal = parking_position.parking_vehicle_locations_Town04[self._parking_goal_index]
+        self._ego_transform_generator.update_eva_goal_y(self._parking_goal.y,
+                                                        self._eva_parking_nums,
+                                                        self._eva_parking_idx)
+        self._ego_transform = self._ego_transform_generator.get_eva_ego_transform(self._eva_parking_nums,
+                                                                                  self._eva_parking_idx)
+        self._world.player.set_transform(self._ego_transform)
+        
+        # 更新目标和重启世界
+        self._seed += 1
+        self._eva_parking_goal = [self._parking_goal.x, self._parking_goal.y, 180]
+        self._world.restart(self._seed, self._parking_goal_index, self._ego_transform)
+        
+        logging.info(f"Successfully switched to task {parking_position.slot_id[task_idx]} at position ({self._parking_goal.x:.2f}, {self._parking_goal.y:.2f})")
+        return True
+
+    def get_available_scenes(self):
+        """
+        获取所有可用的场景列表
+        Returns:
+            dict: {task_idx: slot_id} 的映射
+        """
+        return {i: parking_position.slot_id[i] for i in range(16)}
+
+    def get_current_scene(self):
+        """
+        获取当前场景信息
+        Returns:
+            tuple: (task_idx, slot_id, parking_goal_position)
+        """
+        return (self._eva_task_idx, 
+                parking_position.slot_id[self._eva_task_idx], 
+                (self._parking_goal.x, self._parking_goal.y))
