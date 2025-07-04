@@ -37,7 +37,15 @@ def game_loop(args):
             clock.tick_busy_loop(60)
             if controller.parse_events(client, network_evaluator.world, clock):
                 return
-            parking_agent.tick()
+
+            try:
+                parking_agent.tick()
+            except IndexError:
+                logging.error("Caught IndexError, likely due to out-of-bounds drawing. Recording as 'out of bound' failure and restarting task.")
+                network_evaluator.record_out_of_bound_failure()
+                parking_agent.init_agent()
+                continue
+
             network_evaluator.tick(clock)
             network_evaluator.render(display)
             show_control_info(display, parking_agent.get_eva_control(), steer_wheel_img,
@@ -97,6 +105,10 @@ def main():
         default='./ckpt/last.ckpt',
         help='path to model.ckpt')
     argparser.add_argument(
+        '--speed_model_path',
+        default='./ckpt/dynamic_control_speed.ckpt',
+        help='path to speed dynamics model.ckpt')
+    argparser.add_argument(
         '--model_config_path',
         default='./config/training.yaml',
         help='path to model training.yaml')
@@ -133,6 +145,7 @@ def main():
     argparser.add_argument(
         '--random_seed',
         default=66,
+        type=int,
         help='random seed to initialize env; if sets to 0, use current timestamp as seed (default: 0)')
     argparser.add_argument(
         '--bev_render_device',
