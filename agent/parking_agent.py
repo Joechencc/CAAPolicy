@@ -994,7 +994,7 @@ class ParkingAgent:
 
                 pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
 
-                if self.path is None or self.step % 100 == 0:
+                if self.path is None:
                     # 1. Generate obstacle point cloud from segmentation
                     self.point_cloud = self.generate_point_cloud_from_segmentation(pred_segmentation)
                     #logging.info(f"Generated point cloud with {len(self.point_cloud)} points on step {self.step}.")
