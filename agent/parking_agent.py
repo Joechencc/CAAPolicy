@@ -123,11 +123,11 @@ def analyze_and_split_path(path):
         # Reverse path: from split point to goal (index 0)
         reverse_path = [path_x[:split_index + 1], path_y[:split_index + 1]]
         
-        logging.info(f"Path split at index {split_index}: Forward={len(forward_path[0])} points, Reverse={len(reverse_path[0])} points")
+        # logging.info(f"Path split at index {split_index}: Forward={len(forward_path[0])} points, Reverse={len(reverse_path[0])} points")
         return forward_path, reverse_path, split_index
     else:
         # No clear split found, treat entire path as forward
-        logging.info("No clear forward/reverse split found, treating entire path as forward")
+        # logging.info("No clear forward/reverse split found, treating entire path as forward")
         return path, None, -1
 
 
@@ -592,6 +592,7 @@ class ParkingAgent:
         self.timestep_counter = 0
         
         self.init_agent()
+        # self.visualize = True
 
         plt.ion()
 
@@ -609,7 +610,7 @@ class ParkingAgent:
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-        self.model.load_state_dict(state_dict)
+        self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
 
@@ -854,6 +855,7 @@ class ParkingAgent:
         self.step = -1
         self.pre_target_point = None
         self.ego_xy=[]
+        self.ego_xy_dynamic=[]
         self.path_window_created = False  # Reset window flag on agent initialization
         self.initial_ego_pos = None  # Reset initial position
         self.accumulated_distance = 0.0  # Reset distance tracking
@@ -992,7 +994,7 @@ class ParkingAgent:
 
                 pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
 
-                if self.path is None:
+                if self.path is None or self.step % 100 == 0:
                     # 1. Generate obstacle point cloud from segmentation
                     self.point_cloud = self.generate_point_cloud_from_segmentation(pred_segmentation)
                     #logging.info(f"Generated point cloud with {len(self.point_cloud)} points on step {self.step}.")
@@ -1019,8 +1021,8 @@ class ParkingAgent:
                         rear_goal_world_y = goal_center_y - rear_axle_offset * math.sin(goal_yaw_rad)
 
                         #Convert these world coordinates to the vehicle's current ego-centric frame.
-                        current_x = data['ego_xy'][0]
-                        current_y = data['ego_xy'][1]
+                        current_x = data["ego_xy_dynamic"][0]
+                        current_y = data["ego_xy_dynamic"][1]
                         current_yaw_rad = np.deg2rad(vehicle_transform.rotation.yaw)
 
                         dx = rear_goal_world_x - current_x
@@ -1040,7 +1042,7 @@ class ParkingAgent:
 
                         # For visualization, use dynamic model position for consistency
                         vis_dynamic_transform = carla.Transform(
-                            carla.Location(x=data['ego_xy'][0], y=data['ego_xy'][1], z=vehicle_transform.location.z),
+                            carla.Location(x=data["ego_xy_dynamic"][0], y=data["ego_xy_dynamic"][1], z=vehicle_transform.location.z),
                             vehicle_transform.rotation
                         )
                         goal_ego_for_vis = convert_slot_coord(vis_dynamic_transform, self.net_eva.eva_parking_goal)
@@ -1056,7 +1058,7 @@ class ParkingAgent:
 
                         if path_result:
                             # Save initial position when path is first planned (always use current position)
-                            self.initial_ego_pos = [data['ego_xy'][0], data['ego_xy'][1], vehicle_transform.rotation.yaw]
+                            self.initial_ego_pos = [data["ego_xy_dynamic"][0], data["ego_xy_dynamic"][1], vehicle_transform.rotation.yaw]
                             # Save fixed goal position for visualization (use center-based goal for plotting)
                             self.fixed_goal_ego = goal_ego_for_vis.copy()
                                
@@ -1085,15 +1087,22 @@ class ParkingAgent:
                             self.forward_path, self.reverse_path, split_index = analyze_and_split_path(self.path)
                             
                             # Initialize phase tracking
-                            self.current_phase = 'forward'
-                            self.forward_completed = False
-                            self.current_target_index = None  # Reset target index
+                            if len(self.forward_path[0]) > 4:
+                                self.current_phase = 'forward'
+                                self.forward_completed = False
+                                self.current_target_index = None  # Reset target index
+                            else:
+                                self.current_phase = 'reverse'
+                                self.forward_completed = True
+                                self.current_target_index = None  # Reset target index
 
                             # Log path segmentation info
                             if self.forward_path is not None:
-                                logging.info(f"🟢 Forward path: {len(self.forward_path[0])} waypoints")
+                                # logging.info(f"🟢 Forward path: {len(self.forward_path[0])} waypoints")
+                                pass
                             if self.reverse_path is not None:
-                                logging.info(f"🔴 Reverse path: {len(self.reverse_path[0])} waypoints")
+                                # logging.info(f"🔴 Reverse path: {len(self.reverse_path[0])} waypoints")
+                                pass
                             else:
                                 logging.info("🟢 Forward-only path (no reverse segment)")
 
@@ -1104,8 +1113,8 @@ class ParkingAgent:
                 # Update path visualization with current ego position even if path already exists
                 if self.path is not None and self.show_eva_imgs and self.initial_ego_pos is not None:
                     # Calculate current position relative to initial position
-                    current_world_x = data['ego_xy'][0]
-                    current_world_y = data['ego_xy'][1]
+                    current_world_x = data["ego_xy_dynamic"][0]
+                    current_world_y = data["ego_xy_dynamic"][1]
                     current_world_yaw = np.deg2rad(vehicle_transform.rotation.yaw)
                     
                     initial_world_x, initial_world_y, initial_world_yaw = self.initial_ego_pos
@@ -1138,7 +1147,8 @@ class ParkingAgent:
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
 
-                self.save_prev_target(pred_segmentation)
+                if self.show_eva_imgs:
+                    self.save_prev_target(pred_segmentation)
                 
                 # Check if we should use continuous forward mode
                 if self.continuous_forward_mode:
@@ -1151,7 +1161,7 @@ class ParkingAgent:
                     # Check if we're getting closer to target - if so, try planning again
                     # Use dynamic model position for consistency
                     forward_dynamic_transform = carla.Transform(
-                        carla.Location(x=data['ego_xy'][0], y=data['ego_xy'][1], z=vehicle_transform.location.z),
+                        carla.Location(x=data["ego_xy_dynamic"][0], y=data["ego_xy_dynamic"][1], z=vehicle_transform.location.z),
                         vehicle_transform.rotation
                     )
                     goal_ego = convert_slot_coord(forward_dynamic_transform, self.net_eva.eva_parking_goal)
@@ -1187,7 +1197,7 @@ class ParkingAgent:
                     if current_path is not None:
                         # Get target waypoint from current path segment
                         waypoint, self.current_target_index = get_target_waypoint_from_path(
-                            current_path, vehicle_transform, data['ego_xy'], self.current_target_index, self.initial_ego_pos,
+                            current_path, vehicle_transform, data["ego_xy_dynamic"], self.current_target_index, self.initial_ego_pos,
                             direction=expected_direction
                         )
                         
@@ -1200,7 +1210,7 @@ class ParkingAgent:
                                 end_of_forward_path_y = current_path[1][0]
 
                                 # Get current vehicle REAR position in the initial ego frame
-                                vehicle_rear_x_ego, vehicle_rear_y_ego = _get_rear_axle_in_initial_ego_frame(vehicle_transform, self.initial_ego_pos, data['ego_xy'])
+                                vehicle_rear_x_ego, vehicle_rear_y_ego = _get_rear_axle_in_initial_ego_frame(vehicle_transform, self.initial_ego_pos, data["ego_xy_dynamic"])
 
                                 distance_to_forward_end = math.sqrt((end_of_forward_path_x - vehicle_rear_x_ego)**2 + 
                                                                     (end_of_forward_path_y - vehicle_rear_y_ego)**2)
@@ -1275,7 +1285,7 @@ class ParkingAgent:
                                 final_goal_y = current_path[1][0]
 
                                 # Calculate current rear position in the initial ego frame to compare with the path
-                                vehicle_rear_x_ego, vehicle_rear_y_ego = _get_rear_axle_in_initial_ego_frame(vehicle_transform, self.initial_ego_pos, data['ego_xy'])
+                                vehicle_rear_x_ego, vehicle_rear_y_ego = _get_rear_axle_in_initial_ego_frame(vehicle_transform, self.initial_ego_pos, data["ego_xy_dynamic"])
 
                                 distance_to_final_goal = math.sqrt((final_goal_x - vehicle_rear_x_ego)**2 + (final_goal_y - vehicle_rear_y_ego)**2)
 
@@ -1311,7 +1321,7 @@ class ParkingAgent:
                     if not self.continuous_forward_mode:
                         # Use dynamic model position for consistency
                         check_dynamic_transform = carla.Transform(
-                            carla.Location(x=data['ego_xy'][0], y=data['ego_xy'][1], z=vehicle_transform.location.z),
+                            carla.Location(x=data["ego_xy_dynamic"][0], y=data["ego_xy_dynamic"][1], z=vehicle_transform.location.z),
                             vehicle_transform.rotation
                         )
                         goal_ego = convert_slot_coord(check_dynamic_transform, self.net_eva.eva_parking_goal)
@@ -1345,8 +1355,8 @@ class ParkingAgent:
                     self.display_imgs()
                 self.save_output.clear()
 
-            self.prev_xy_thea = [data['ego_xy'][0],
-                                 data['ego_xy'][1],
+            self.prev_xy_thea = [data["ego_xy_dynamic"][0],
+                                 data["ego_xy_dynamic"][1],
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
         
         self.player.apply_control(self.trans_control)
@@ -1449,7 +1459,7 @@ class ParkingAgent:
         data = {}
 
         # Compute using speed - initialize first
-        if not self.ego_xy: # read only once after initilization
+        if not self.ego_xy_dynamic: # read only once after initilization
             self.ego_xy = [vehicle_transform.location.x, vehicle_transform.location.y]
             self.ego_xy_dynamic = [vehicle_transform.location.x, vehicle_transform.location.y]
             #print('self.ego_xy initialization:', self.ego_xy)
@@ -1544,14 +1554,10 @@ class ParkingAgent:
                                              data_frame["imu"].accelerometer.z,
                                              roll,pitch, yaw)
 
-        velocity_ego_forword = 3.6*velocity_ego[0]
-        velocity_ego_lateral = 3.6*velocity_ego[1]
-
-        acc_ego_forword = acc_ego[0]
-        acc_ego_lateral = acc_ego[1]
-
-        data['ego_motion'] = torch.tensor([velocity_ego_forword,velocity_ego_lateral,acc_ego_forword,acc_ego_lateral],
+        velocity = (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)) #km/h
+        data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
+
 
         target_types = ["gt","predicted","tracking","dynamics"]
         target_type = target_types[1]
@@ -1581,7 +1587,7 @@ class ParkingAgent:
             seg_gt[seg_gt == 2] = 255
             data['segmentation'] = Image.fromarray(seg_gt)
         data["ego_trans"] = vehicle_transform
-        data["ego_xy"] = self.ego_xy_dynamic
+        data["ego_xy_dynamic"] = self.ego_xy_dynamic
 
         # logging.info(
         #     f"Position Update - Ground Truth: ({vehicle_transform.location.x:.2f}, {vehicle_transform.location.y:.2f}), "

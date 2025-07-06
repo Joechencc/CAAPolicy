@@ -17,7 +17,7 @@ time.sleep(1)
 sys.path.append('.')
 sys.path.append('./carla/PythonAPI')
 sys.path.append('./carla/PythonAPI/carla')
-
+sys.path.append('./carla/PythonAPI/carla/agents/tools')
 
 import math
 
@@ -144,6 +144,7 @@ class VehiclePIDController():
         self._lon_controller = PIDLongitudinalController(self._vehicle, offset, **args_longitudinal)
         self._lat_controller = PIDLateralController(self._vehicle, offset, **args_lateral)
 
+    
     def run_step(self, target_speed, waypoint, direction = 1): ### add a direction to enable reverse tracking
         
         SPEED_LIMIT = 10
