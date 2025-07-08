@@ -161,12 +161,49 @@ class ParkingTrainingModule(pl.LightningModule):
 
         return val_loss
 
+    # def configure_optimizers(self):
+    #     optimizer = torch.optim.Adam(self.parameters(),
+    #                                  lr=self.cfg.learning_rate,
+    #                                  weight_decay=self.cfg.weight_decay)
+    #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=self.cfg.epochs)
+    #     return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
+
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.cfg.learning_rate,
-                                     weight_decay=self.cfg.weight_decay)
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=self.cfg.epochs)
-        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
+        base_lr = self.cfg.learning_rate
+        dino_lr = 0.1 * self.cfg.learning_rate  # ← add this to your config
+        weight_decay = self.cfg.weight_decay
+
+        # Separate DINOv2 parameters (in DinoCamEncoder) and the rest
+        dino_params = self.parking_model.bev_model.cam_encoder.parameters()
+        other_params = (
+            p for n, p in self.named_parameters()
+            if not n.startswith("parking_model.bev_model.cam_encoder")
+        )
+
+        # Parameter groups
+        param_groups = [
+            {"params": dino_params, "lr": dino_lr, "weight_decay": weight_decay},
+            {"params": other_params, "lr": base_lr, "weight_decay": weight_decay},
+        ]
+
+        # Optimizer
+        optimizer = torch.optim.Adam(param_groups)
+
+        # Scheduler (applies to both groups uniformly)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer=optimizer,
+            T_max=self.cfg.epochs
+        )
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": lr_scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+            }
+        }
+
 
     def log_segmentation(self, pred_segmentation, gt_segmentation, name):
         fig, ax = plt.subplots(1, 2, figsize=(20, 10))

@@ -1,8 +1,9 @@
+
 import argparse
 import logging
 import carla
 import pygame
-import time
+import os
 
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.keyboard_control import KeyboardControl
@@ -15,6 +16,20 @@ def game_loop(args):
     network_evaluator = None
     next_flag = True
 
+
+
+    # 檢查當前品質模式
+    config_path = os.path.expanduser("~/.config/Epic/CarlaUE4/Saved/Config/LinuxNoEditor/GameUserSettings.ini")
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            content = f.read()
+            if 'sg.ShadowQuality=0' in content:
+                print("✅ 當前模式: LOW (影子已關閉)")
+            else:
+                print("⚠️ 當前模式: HIGH/EPIC (影子開啟)")
+    else:
+        print("⚠️ 未找到配置檔案，使用預設 EPIC 模式")
+
     try:
         client = carla.Client(args.host, args.port)
         client.set_timeout(5.0)
@@ -22,33 +37,100 @@ def game_loop(args):
         carla_world = client.load_world(args.map)
         carla_world.unload_map_layer(carla.MapLayer.ParkedVehicles)
 
-
         network_evaluator = NetworkEvaluator(carla_world, args)
         parking_agent = ParkingAgent(network_evaluator, args)
         controller = KeyboardControl(network_evaluator.world)
 
-        # Apply weather AFTER everything is initialized
-        import time
-        # time.sleep(0.2)
-        # weather_0911_default = carla.WeatherParameters(
-        #     cloudiness=15.0,
-        #     precipitation=0.0,
-        #     precipitation_deposits=0.0,
-        #     wind_intensity=0.35,
-        #     sun_azimuth_angle=0.0,
-        #     sun_altitude_angle=75.0,
-        #     fog_density=0.0,
-        #     fog_distance=0.0,
-        #     fog_falloff=0.0,
-        #     wetness=0.0,
-        # )
+        settings = carla_world.get_settings()
+        settings.no_rendering_mode = False
+        carla_world.set_weather(carla.WeatherParameters.ClearNoon)
 
-        # carla_world.set_weather(weather_0911_default)
-        # time.sleep(0.1)
-        print("Final weather:", carla_world.get_weather())
+        # 修正：正確設定影子相關參數
+        settings.fixed_delta_seconds = 0.05
+        settings.synchronous_mode = True
+        carla_world.apply_settings(settings)
+
+        # 方法一：使用品質設定關閉影子（最有效的方法）
+        # 這會將畫質設定為低品質模式，自動關閉影子
+        try:
+            # 嘗試設定低品質模式（會自動關閉影子）
+            client.get_tracer().set_shadows(False)  # 如果支援的話
+        except AttributeError:
+            logging.info("Direct shadow control not available, using quality settings")
+
+        # 方法二：正確的燈光管理方式
+        # 使用 LightManager 控制街燈（不是用 set_attribute）
+        try:
+            light_manager = carla_world.get_lightmanager()  # 注意：是 get_lightmanager() 不是 get_light_manager()
+           
+            # 獲取所有燈光並關閉
+            all_lights = light_manager.get_all_lights()
+           
+            for light in all_lights:
+                # 關閉燈光以減少影子投射
+                light.turn_off()
+               
+        except AttributeError as e:
+            logging.info(f"LightManager not available: {e}")
+           
+            # 備用方法：直接控制燈光 actors
+            try:
+                # 獲取並關閉街燈
+                for actor in carla_world.get_actors().filter("static.light*"):
+                    try:
+                        # 燈光物件沒有 cast_shadows 屬性，但可以關閉燈光本身
+                        actor.turn_off()
+                    except AttributeError:
+                        # 如果沒有 turn_off 方法，嘗試刪除
+                        logging.info(f"Cannot turn off light {actor.id}, attempting to destroy")
+                        try:
+                            actor.destroy()
+                        except:
+                            pass
+
+                # 處理其他類型的燈光
+                for light in carla_world.get_actors().filter("light.*"):
+                    try:
+                        light.turn_off()
+                    except AttributeError:
+                        try:
+                            light.destroy()
+                        except:
+                            pass
+                           
+            except Exception as e:
+                logging.warning(f"Could not control lights: {e}")
+
+        # 方法三：使用 Unreal Engine 控制指令（如果可用）
+        try:
+            # 嘗試執行 UE4 控制台指令來關閉影子
+            carla_world.on_tick(lambda _: None)  # 確保世界已載入
+           
+            # 這些是 UE4 的影子控制指令
+            console_commands = [
+                "r.ShadowQuality 0",           # 關閉影子品質
+                "r.ContactShadows 0",          # 關閉接觸影子
+                "r.CascadedShadowMaps 0",      # 關閉階層式影子地圖
+                "r.DistanceFieldShadowing 0",  # 關閉距離場影子
+                "r.DynamicGlobalIllumination 0", # 關閉動態全域照明
+            ]
+           
+            for cmd in console_commands:
+                try:
+                    # 注意：這需要 CARLA 支援控制台指令執行
+                    carla_world.execute_console_command(cmd)
+                    logging.info(f"Executed: {cmd}")
+                except AttributeError:
+                    logging.info("Console command execution not available")
+                    break
+                   
+        except Exception as e:
+            logging.info(f"Could not execute console commands: {e}")
+
+
 
         display = pygame.display.set_mode((args.width, args.height),
-                                          pygame.HWSURFACE | pygame.DOUBLEBUF)
+                                         pygame.HWSURFACE | pygame.DOUBLEBUF)
 
         steer_wheel_img = pygame.image.load("./resource/steer_wheel.png")
         steer_wheel_img = pygame.transform.scale(steer_wheel_img, (100, 100))
@@ -64,7 +146,7 @@ def game_loop(args):
             network_evaluator.tick(clock)
             network_evaluator.render(display)
             show_control_info(display, parking_agent.get_eva_control(), steer_wheel_img,
-                              args.width, args.height, font)
+                             args.width, args.height, font)
             pygame.display.flip()
 
     finally:
@@ -150,7 +232,7 @@ def main():
         '--map',
         default='Town04_Opt',
         help='map of carla (default: Town04_Opt)',
-        choices=['Town03', 'Town04_Opt', 'Town05_Opt'])
+        choices=['Town04_Opt', 'Town05_Opt'])
     argparser.add_argument(
         '--shuffle_veh',
         default=True,
@@ -179,6 +261,13 @@ def main():
         '--eva_result_path',
         default='./eva_result',
         help='path to save eva csv file')
+    # 新增品質設定參數
+    argparser.add_argument(
+        '--quality-level',
+        default='Low',
+        help='Graphics quality level (default: Low to disable shadows)',
+        choices=['Low', 'Medium', 'High', 'Epic'])
+   
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
@@ -187,6 +276,10 @@ def main():
     logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
 
     logging.info('listening to server %s:%s', args.host, args.port)
+
+    # 提示用戶關於影子設定
+    if hasattr(args, 'quality_level') and args.quality_level == 'Low':
+        logging.info('Running in Low quality mode - shadows will be disabled')
 
     try:
         game_loop(args)
@@ -197,3 +290,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

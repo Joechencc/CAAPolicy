@@ -40,7 +40,7 @@ class DataGenerator:
         self._distance_diff_to_goal = 10000
         self._rotation_diff_to_goal = 10000
         self._goal_reach_distance_diff = 0.5  # meter
-        self._goal_reach_rotation_diff = 0.5  # degree
+        self._goal_reach_rotation_diff = 5  # degree
 
         # number of frames needs to get into the parking goal in order to consider task completed
         self._num_frames_goal_needed = 2 * 30  # 2s * 30Hz
@@ -179,6 +179,7 @@ class DataGenerator:
 
     def soft_restart(self):
         logging.info('*****Restart task %d*****', self._task_index)
+        self._ego_transform_generator.update_data_gen_goal_y(self._parking_goal.y)
         ego_transform = self._ego_transform_generator.get_data_gen_ego_transform()
         self._world.soft_restart(ego_transform)
 

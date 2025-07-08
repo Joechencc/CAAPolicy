@@ -30,6 +30,7 @@ class ParkingModel(nn.Module):
         self.grad_approx = GradientApproximator(self.cfg.bev_encoder_out_channel)
 
         self.segmentation_head = SegmentationHead(self.cfg)
+        
     def adjust_target_bev(self, bev_feature, target_point):
         b, c, h, w = bev_feature.shape
         bev_target = torch.zeros((b, 1, h, w), dtype=torch.float).to(self.cfg.device, non_blocking=True)
