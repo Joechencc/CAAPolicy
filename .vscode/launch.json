@@ -12,7 +12,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             // For training
-            "args": ["--config", "./config/dino_training.yaml"]
+            "args": ["--config", "./config/dino_training.yaml", "--model_path", "./ckpt/exp_2025_7_11_2_2_41/E2EParking-epoch=03-val_loss=1.73.ckpt"]
             // For testing
             // "args": ["--model_config_path", "./config/training.yaml", "--model_path", "./milestone/leanable_attention_best_20.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
         }

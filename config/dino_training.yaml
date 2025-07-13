@@ -1,15 +1,15 @@
 parking_model:
   # train
-  data_dir: '/home/intern2025/research/ParkWithUncertainty/'
+  data_dir: '/data_ssd'
   log_dir: './log/'
   checkpoint_dir: './ckpt'
-  log_every_n_steps: 10
-  check_val_every_n_epoch: 15
+  log_every_n_steps: 5
+  check_val_every_n_epoch: 1
 
-  epochs: 155
+  epochs: 26
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 6
+  batch_size: 4
 
   training_map: "e2e_parking/Town_Opt_1000" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/vast/rs9193/Town_Opt_1000"
   validation_map: "e2e_parking/Town_Opt_1000_Val" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/scratch/rs9193/Town_Opt_1000_Val"
@@ -36,7 +36,7 @@ parking_model:
 
   # segmentation
   seg_classes: 3
-  seg_vehicle_weights: [1.0, 2.0, 2.0]
+  seg_vehicle_weights: [1.5, 2.0, 5.0]
 
   # transformer encoder
   tf_en_dim: 264
@@ -56,5 +56,5 @@ parking_model:
   tf_de_tgt_dim: 15
   
   # dynamics model ckpt
-  resume_ckpt_path: "./ckpt/exp_2025_5_30_17_22_24/E2EParking-epoch=17-val_loss=1.37.ckpt"
-  hybrid_ckpt_path: "./ckpt/exp_2025_5_30_17_22_24/E2EParking-epoch=17-val_loss=1.37.ckpt"
+  resume_ckpt_path: "./ckpt/exp_2025_7_11_2_2_41/E2EParking-epoch=03-val_loss=1.73.ckpt"
+  hybrid_ckpt_path: "./ckpt/exp_2025_7_11_2_2_41/E2EParking-epoch=03-val_loss=1.73.ckpt"

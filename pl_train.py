@@ -51,10 +51,12 @@ def train():
 
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
-    num_gpus = 1
+    num_gpus = 4
 
     torch.set_float32_matmul_precision('medium')
 
+    parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
+    parking_datamodule = ParkingDataModule(cfg)
     parking_trainer = Trainer(callbacks=parking_callbacks,
                               logger=tensor_logger,
                               accelerator='gpu',
@@ -64,8 +66,6 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-    parking_model = ParkingTrainingModule(cfg,model_path=cfg.model_path)
-    parking_datamodule = ParkingDataModule(cfg)
     parking_trainer.fit(
         parking_model, 
         datamodule=parking_datamodule,
