@@ -32,7 +32,7 @@ parking_model:
   final_dim: [294, 294]
   bev_down_sample: 14
   use_depth_distribution: 1
-  backbone: "dinov2_vitl14_reg" # "dinov2_vitb14_reg"
+  backbone: "dinov2_vitb14_reg" # "dinov2_vitb14_reg", "dinov2_vitl14_reg"
 
   # segmentation
   seg_classes: 3

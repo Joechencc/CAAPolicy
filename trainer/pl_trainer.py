@@ -84,12 +84,12 @@ class ParkingTrainingModule(pl.LightningModule):
 
         grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
         loss_dict.update({
-            "grad_loss": 0.5*grad_loss
+            "grad_loss": grad_loss
         })
 
         waypoint_loss_2 = self.waypoint_loss_func(pred_waypoint_2, batch)
         loss_dict.update({
-            "waypoint_loss": 0.25*waypoint_loss_2
+            "waypoint_loss": waypoint_loss_2
         })
 
         segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
@@ -134,11 +134,11 @@ class ParkingTrainingModule(pl.LightningModule):
         })
         grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
         val_loss_dict.update({
-            "grad_loss": 0.5*grad_loss
+            "grad_loss": grad_loss
         })
         waypoint_loss = self.waypoint_loss_func(pred_waypoint_2, batch)
         val_loss_dict.update({
-            "waypoint_val_loss": 0.25*waypoint_loss,
+            "waypoint_val_loss": waypoint_loss,
         })
 
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
