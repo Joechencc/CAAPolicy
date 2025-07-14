@@ -14,7 +14,7 @@
             // For training
             "args": ["--config", "./config/dino_training.yaml"]
             // For testing
-            // "args": ["--model_config_path", "./config/training.yaml", "--model_path", "./milestone/leanable_attention_best_20.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
+            // "args": ["--model_config_path", "./config/dino_training.yaml", "--model_path", "./ckpt/exp_2025_7_13_18_38_16/E2EParking-epoch=00-val_loss=3.27.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
         }
     ]
 }
