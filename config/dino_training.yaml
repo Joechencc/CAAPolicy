@@ -36,7 +36,7 @@ parking_model:
 
   # segmentation
   seg_classes: 3
-  seg_vehicle_weights: [1.5, 2.0, 2.0]
+  seg_vehicle_weights: [1.0, 2.0, 2.0]
 
   # transformer encoder
   tf_en_dim: 264
