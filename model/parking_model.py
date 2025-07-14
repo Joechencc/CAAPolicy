@@ -84,7 +84,7 @@ class ParkingModel(nn.Module):
         bev_down_sample = self.bev_encoder(bev_feature)
 
         target_point = target_point.unsqueeze(1)
-        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
+        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion_pure_noise, target_point)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
         # pred_segmentation = self.segmentation_head(bev_feature)
