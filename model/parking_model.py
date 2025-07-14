@@ -75,6 +75,7 @@ class ParkingModel(nn.Module):
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
         target_point = data['target_point'].to(self.cfg.device, non_blocking=True) #已经是相对车的位置了
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
+        noise_ego_motion = torch.randn_like(ego_motion).to(self.cfg.device, non_blocking=True)
         bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
 
         # bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)

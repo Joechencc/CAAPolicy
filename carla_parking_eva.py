@@ -31,16 +31,16 @@ def game_loop(args):
         import time
         # time.sleep(0.2)
         # weather_0911_default = carla.WeatherParameters(
-        #     cloudiness=15.0,
-        #     precipitation=0.0,
-        #     precipitation_deposits=0.0,
+        #     cloudiness=35.0,
+        #     precipitation=30.0,
+        #     precipitation_deposits=20.0,
         #     wind_intensity=0.35,
-        #     sun_azimuth_angle=0.0,
-        #     sun_altitude_angle=75.0,
-        #     fog_density=0.0,
+        #     sun_azimuth_angle=20.0,
+        #     sun_altitude_angle=25.0,
+        #     fog_density=2.0,
         #     fog_distance=0.0,
         #     fog_falloff=0.0,
-        #     wetness=0.0,
+        #     wetness=20.0,
         # )
 
         # carla_world.set_weather(weather_0911_default)
