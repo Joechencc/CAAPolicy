@@ -19,7 +19,7 @@ class ParkingModel(nn.Module):
 
         self.bev_model = BevModel(self.cfg)
 
-        self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel) # extra target channel
+        self.bev_encoder = BevEncoder(self.cfg.bev_encoder_in_channel)
 
         self.feature_fusion = FeatureFusion(self.cfg)
 
@@ -73,9 +73,8 @@ class ParkingModel(nn.Module):
         images = data['image'].to(self.cfg.device, non_blocking=True)
         intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
-        target_point = data['target_point'].to(self.cfg.device, non_blocking=True)#已经是相对车的位置了
+        target_point = data['target_point'].to(self.cfg.device, non_blocking=True) #已经是相对车的位置了
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
-        # ego_motion_pure_noise = torch.randn_like(ego_motion)
         bev_feature, pred_depth = self.bev_model(images, intrinsics, extrinsics)
 
         # bev_feature, bev_target = self.add_target_bev(bev_feature, target_point)
@@ -87,7 +86,6 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
 
         pred_segmentation = self.segmentation_head(fuse_feature)
-        # pred_segmentation = self.segmentation_head(bev_feature)
 
         return fuse_feature, pred_segmentation, pred_depth, bev_target
 

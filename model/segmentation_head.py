@@ -12,12 +12,12 @@ class SegmentationHead(nn.Module):
         super(SegmentationHead, self).__init__()
         self.cfg = cfg
 
-        self.in_channel = self.cfg.bev_encoder_out_channel # self.cfg.bev_encoder_out_channel + 1
+        self.in_channel = self.cfg.bev_encoder_out_channel
         self.out_channel = self.cfg.bev_encoder_in_channel
         self.seg_classes = self.cfg.seg_classes
 
         self.relu = nn.ReLU(inplace=True)
-        self.up_sample = nn.Upsample(scale_factor=1, mode='bilinear', align_corners=False) # scale_factor=2
+        self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         self.c5_conv = nn.Conv2d(self.in_channel, self.out_channel, (1, 1))
         self.up_conv5 = nn.Conv2d(self.out_channel, self.out_channel, (1, 1))
         self.up_conv4 = nn.Conv2d(self.out_channel, self.out_channel, (1, 1))
@@ -43,6 +43,5 @@ class SegmentationHead(nn.Module):
         b, c, s = fuse_feature_t.shape
         fuse_bev = torch.reshape(fuse_feature_t, (b, c, int(math.sqrt(s)), -1))
         fuse_bev = self.top_down(fuse_bev)
-        # fuse_bev = self.top_down(fuse_feature)
         pred_segmentation = self.segmentation_head(fuse_bev)
         return pred_segmentation
