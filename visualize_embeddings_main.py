@@ -28,6 +28,7 @@ from pathlib import Path
 import umap.umap_ as umap
 import glob
 import cv2
+from torchvision import transforms
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -52,8 +53,8 @@ def load_cfg(config_file_path):
     return cfg
 
 def generate_umap(embedding_tensor, umap_3d, fit_transform = True):
-    width, height = embedding_tensor.shape[0], embedding_tensor.shape[1]
-    embedding_np = embedding_tensor.detach().cpu().numpy().reshape(-1,embedding_tensor.shape[-1])
+    width, height = int(embedding_tensor.shape[0]**0.5), int(embedding_tensor.shape[0]**0.5)
+    embedding_np = embedding_tensor.detach().cpu().numpy()
     if fit_transform:
         embedding_umap = umap_3d.fit_transform(embedding_np)
     else:
@@ -83,8 +84,17 @@ if __name__ == "__main__":
     parking_model = load_parking_model(parking_pth_path, cfg)
     print("Model has been loaded.")
 
+    dino_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14").cuda().eval()
+
     # INFO: Load camera images
-    image_process = ProcessImage(cfg.image_crop)
+    image_process_enet = ProcessImage(cfg.image_crop)
+    # image_process_dino = ProcessImage(294)
+    image_process_dino = transforms.Compose([
+            transforms.Resize((294, 294)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406],
+                                [0.229, 0.224, 0.225])
+        ])
 
     # Root directory that contains A/, B/, C/ ...
     root_dir = Path("./e2e_parking/Town_Opt_1000/time_12_17_12_16_08/task0/")
@@ -97,42 +107,72 @@ if __name__ == "__main__":
     image_files = sorted(ref_subfolder.glob("*.png"))
 
     # Get every 10th image filename
-    selected_filenames = image_files[::10]  # These are full Paths
+    selected_filenames = image_files[50::10]  # These are full Paths
 
     # Project features to RGB using UMAP
-    umap_3d = umap.UMAP(n_components=3, random_state=42)
+    umap_3d_enet = umap.UMAP(n_components=3, random_state=42)
+    umap_3d_dino = umap.UMAP(n_components=3, random_state=42)
+    fit_transform_enet = True
+    fit_transform_dino = True
+
+    intrinsics = torch.Tensor(np.load("./representation_analyze/intrinsics.npy")).to(device)
+    extrinsics = torch.Tensor(np.load("./representation_analyze/extrinsics.npy")).to(device)
 
     for filename_path in selected_filenames:
+        
         filename = filename_path.name  # e.g., '0000.png'
-        front_final = image_process(root_dir/subfolders[0]/filename)[0]
-        front_left_final = image_process(root_dir/subfolders[1]/filename)[0]
-        front_right_final = image_process(root_dir/subfolders[2]/filename)[0]
-        back_final = image_process(root_dir/subfolders[3]/filename)[0]
-        back_left_final = image_process(root_dir/subfolders[4]/filename)[0]
-        back_right_final = image_process(root_dir/subfolders[5]/filename)[0]
+        front_final_enet = image_process_enet(root_dir/subfolders[0]/filename)[0]
+        front_left_final_enet = image_process_enet(root_dir/subfolders[1]/filename)[0]
+        front_right_final_enet = image_process_enet(root_dir/subfolders[2]/filename)[0]
+        back_final_enet = image_process_enet(root_dir/subfolders[3]/filename)[0]
+        back_left_final_enet = image_process_enet(root_dir/subfolders[4]/filename)[0]
+        back_right_final_enet = image_process_enet(root_dir/subfolders[5]/filename)[0]
 
-        images = [front_final, front_left_final, front_right_final, back_final, back_left_final, back_right_final]
-        images = torch.cat(images, dim=0).unsqueeze(0).to(device)
+        # front_final_dino = image_process_dino((root_dir/subfolders[0]/filename))[0]
+        # front_left_final_dino = image_process_dino((root_dir/subfolders[1]/filename))[0]
+        # front_right_final_dino = image_process_dino((root_dir/subfolders[2]/filename))[0]
+        # back_final_dino = image_process_dino((root_dir/subfolders[3]/filename))[0]
+        # back_left_final_dino = image_process_dino((root_dir/subfolders[4]/filename))[0]
+        # back_right_final_dino = image_process_dino((root_dir/subfolders[5]/filename))[0]
 
-        intrinsics = torch.Tensor(np.load("./representation_analyze/intrinsics.npy")).to(device)
-        extrinsics = torch.Tensor(np.load("./representation_analyze/extrinsics.npy")).to(device)
+        front_final_dino = image_process_dino(Image.open(root_dir/subfolders[0]/filename).convert('RGB')).unsqueeze(0)
+        front_left_final_dino = image_process_dino(Image.open(root_dir/subfolders[1]/filename).convert('RGB')).unsqueeze(0)
+        front_right_final_dino = image_process_dino(Image.open(root_dir/subfolders[2]/filename).convert('RGB')).unsqueeze(0)
+        back_final_dino = image_process_dino(Image.open(root_dir/subfolders[3]/filename).convert('RGB')).unsqueeze(0)
+        back_left_final_dino = image_process_dino(Image.open(root_dir/subfolders[4]/filename).convert('RGB')).unsqueeze(0)
+        back_right_final_dino = image_process_dino(Image.open(root_dir/subfolders[5]/filename).convert('RGB')).unsqueeze(0)
 
-        cams_feature, depth, depth_bin_feature, bev_feature = parking_model.bev_model.get_intermidiate_layers(images, intrinsics, extrinsics)
+        images_enet = [front_final_enet, front_left_final_enet, front_right_final_enet, back_final_enet, back_left_final_enet, back_right_final_enet]
+        images_dino = [front_final_dino, front_left_final_dino, front_right_final_dino, back_final_dino, back_left_final_dino, back_right_final_dino]
+        images_enet = torch.cat(images_enet, dim=0).unsqueeze(0).to(device)
+        images_dino = torch.cat(images_dino, dim=0).to(device)
 
-        for i, cam_feature in enumerate(cams_feature):
-            cam_feature = cam_feature.permute(1,2,0)
-            embedding_umap = generate_umap(cam_feature, umap_3d, fit_transform = True)
+        cams_feature, depth, depth_bin_feature, bev_feature = parking_model.bev_model.get_intermidiate_layers(images_enet, intrinsics, extrinsics)
+        with torch.no_grad():
+            dino_features = dino_model.get_intermediate_layers(images_dino, n=1, reshape=False)[0]  # (1, num_patches, dim)
+
+        for i, (cam_feature, dino_feature) in enumerate(zip(cams_feature, dino_features)):
+            cam_feature, dino_feature = cam_feature.permute(1,2,0).reshape(-1,cam_feature.shape[0]), dino_feature
+            enet_embedding_umap = generate_umap(cam_feature, umap_3d_enet, fit_transform=fit_transform_enet)
+            dino_embedding_umap = generate_umap(dino_feature, umap_3d_dino, fit_transform=fit_transform_dino)
+            fit_transform_enet = False
+            fit_transform_dino = False
 
             # Plot results
             plt.figure(figsize=(15, 5))
-            plt.subplot(1, 2, 1)
+            plt.subplot(1, 3, 1)
             plt.title("Original Image")
-            plt.imshow(images[0, i].detach().cpu().numpy().transpose(1,2,0))
+            plt.imshow(images_enet[0, i].detach().cpu().numpy().transpose(1,2,0))
             plt.axis("off")
 
-            plt.subplot(1, 2, 2)
-            plt.title("Smooth UMAP RGB")
-            plt.imshow(embedding_umap)
+            plt.subplot(1, 3, 2)
+            plt.title("ENet UMAP RGB")
+            plt.imshow(enet_embedding_umap)
+            plt.axis("off")
+
+            plt.subplot(1, 3, 3)
+            plt.title("DinoV2 UMAP RGB")
+            plt.imshow(dino_embedding_umap)
             plt.axis("off")
 
             plt.tight_layout()

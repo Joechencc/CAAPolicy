@@ -1,6 +1,6 @@
 parking_model:
   # train
-  data_dir: '/data_ssd'
+  data_dir: '/home/intern2025/research/ParkWithUncertainty'
   log_dir: './log/'
   checkpoint_dir: './ckpt'
   log_every_n_steps: 5
@@ -36,7 +36,7 @@ parking_model:
 
   # segmentation
   seg_classes: 3
-  seg_vehicle_weights: [1.5, 2.0, 5.0]
+  seg_vehicle_weights: [1.5, 2.0, 2.0]
 
   # transformer encoder
   tf_en_dim: 264

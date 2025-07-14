@@ -126,8 +126,8 @@ class DinoCamEncoder(nn.Module):
             self.version,
             pretrained=True
         )
-        # for param in self.backbone.parameters():
-        #     param.requires_grad = False
+        for param in self.backbone.parameters():
+            param.requires_grad = False
         # self.backbone.eval()
 
         # DINOv2 ViT-L/14 outputs features of shape (B, C, H, W), typically C = 1024
