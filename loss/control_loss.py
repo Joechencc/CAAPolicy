@@ -21,19 +21,19 @@ class ControlLoss(nn.Module):
 
         ## INFO: New control loss
         # Step 1: Convert logits to probabilities
-        probs = F.softmax(pred_control, dim=-1)  # [B, T, 200]
+        # probs = F.softmax(pred_control, dim=-1)  # [B, T, 200]
 
         # Step 2: Create bin indices [0, 1, ..., 199]
-        bins = torch.arange(pred_control.shape[-1], device=pred.device).float()  # [200]
+        # bins = torch.arange(pred_control.shape[-1], device=pred.device).float()  # [200]
 
         # Step 3: Compute expected value over bins
-        expected = (probs * bins).sum(dim=-1)  # [B, T]
+        # expected = (probs * bins).sum(dim=-1)  # [B, T]
 
         # Step 4: Compute L1 or L2 loss against ground-truth labels
-        control_loss = (0.5 / self.valid_token) * self.l1_loss(expected, gt_control.float())  # or use F.mse_loss(expected, gt.float())
+        # control_loss = (0.5 / self.valid_token) * self.l1_loss(expected, gt_control.float())  # or use F.mse_loss(expected, gt.float())
 
         ## INFO: Old control loss
-        # control_loss = self.ce_loss(pred_control, gt_control)
+        control_loss = self.ce_loss(pred_control, gt_control)
 
         return control_loss
 
