@@ -11,7 +11,9 @@ class ControlLoss(nn.Module):
         super(ControlLoss, self).__init__()
         self.cfg = cfg
         self.pad_idx = self.cfg.token_nums - 1
+        self.valid_token = self.cfg.token_nums - 4
         self.ce_loss = nn.CrossEntropyLoss(ignore_index=self.pad_idx)
+        self.l1_loss = nn.SmoothL1Loss()
 
     def forward(self, pred, data):
         pred_control = pred.reshape(-1, pred.shape[-1])
@@ -22,13 +24,13 @@ class ControlLoss(nn.Module):
         probs = F.softmax(pred_control, dim=-1)  # [B, T, 200]
 
         # Step 2: Create bin indices [0, 1, ..., 199]
-        bins = torch.arange(pred_control.shape[-1]).float()  # [200]
+        bins = torch.arange(pred_control.shape[-1], device=pred.device).float()  # [200]
 
         # Step 3: Compute expected value over bins
         expected = (probs * bins).sum(dim=-1)  # [B, T]
 
         # Step 4: Compute L1 or L2 loss against ground-truth labels
-        control_loss = F.l1_loss(expected, gt_control.float())  # or use F.mse_loss(expected, gt.float())
+        control_loss = (0.5 / self.valid_token) * self.l1_loss(expected, gt_control.float())  # or use F.mse_loss(expected, gt.float())
 
         ## INFO: Old control loss
         # control_loss = self.ce_loss(pred_control, gt_control)
