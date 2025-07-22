@@ -73,3 +73,81 @@ class ControlPredict(nn.Module):
         pred_controls = torch.softmax(pred_controls_f, dim=-1)
         pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
         return pred_controls
+
+    def predict_logits(self, encoder_out, tgt):
+        length = tgt.size(1)
+        padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
+        tgt = torch.cat([tgt, padding], dim=1)
+
+        tgt_mask, tgt_padding_mask = self.create_mask(tgt)
+
+        tgt_embedding = self.embedding(tgt)
+        tgt_embedding = tgt_embedding + self.pos_embed
+
+        pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
+        pred_controls_f = self.output(pred_controls)[:, length - 1, :]
+
+        pred_controls = torch.softmax(pred_controls_f, dim=-1)
+        pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
+
+        return pred_controls, pred_controls_f
+
+class ControlPredictRL(nn.Module):
+    def __init__(self, cfg: Configuration):
+        super().__init__()
+        self.cfg = cfg
+        self.control_policy_rl = CNNMLPPolicy(self.cfg, input_channels=self.cfg.tf_de_dim, num_actions=3, bins_per_action=self.cfg.token_nums)
+
+    def forward(self, refined_feature):
+        logits = self.control_policy_rl(refined_feature)  # [1, 3, 200]
+        dists = [torch.distributions.Categorical(logits=logits[:, i]) for i in range(3)]
+        actions = torch.stack([d.sample() for d in dists], dim=1)  # [1, 3]
+        pred_multi_controls = torch.cat([pred_multi_controls, actions], dim=1)
+        return pred_controls
+
+    def predict(self, refined_feature):
+        logits = self.control_policy_rl(refined_feature)  # [1, 3, 200]
+        dists = [torch.distributions.Categorical(logits=logits[:, i]) for i in range(3)]
+        actions = torch.stack([d.sample() for d in dists], dim=1)  # [1, 3]
+        pred_multi_controls = torch.cat([pred_multi_controls, actions], dim=1)
+        return pred_controls
+
+
+class CNNMLPPolicy(nn.Module):
+    def __init__(self, cfg, input_channels=264, num_actions=3, bins_per_action=200):
+        super().__init__()
+
+        # reshape (B, 256, 264) -> (B, 264, 16, 16)
+        self.cfg = cfg
+        self.input_tokens = self.cfg.tf_en_bev_length
+        self.token_h = self.token_w = int(self.input_tokens**0.5)
+        self.feature_dim = input_channels
+
+        # CNN over 16x16 tokens
+        self.cnn = nn.Sequential(
+            nn.Conv2d(input_channels, 128, kernel_size=3, padding=1),  # [B, 128, 16, 16]
+            nn.ReLU(),
+            nn.Conv2d(128, 64, kernel_size=3, padding=1),              # [B, 64, 16, 16]
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1, 1))                               # [B, 64, 1, 1]
+        )
+
+        # MLP to output multi-discrete logits
+        self.mlp = nn.Sequential(
+            nn.Flatten(),  # [B, 64]
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_actions * bins_per_action)
+        )
+
+        self.num_actions = num_actions
+        self.bins_per_action = bins_per_action
+
+    def forward(self, x):  # x: [B, 256, 264]
+        B = x.shape[0]
+        x = x.view(B, self.token_h, self.token_w, self.feature_dim)   # [B, 16, 16, 264]
+        x = x.permute(0, 3, 1, 2)                                     # [B, 264, 16, 16]
+
+        x = self.cnn(x)                                               # [B, 64, 1, 1]
+        logits = self.mlp(x)                                          # [B, num_actions * bins]
+        return logits.view(B, self.num_actions, self.bins_per_action)  # [B, 3, 200]

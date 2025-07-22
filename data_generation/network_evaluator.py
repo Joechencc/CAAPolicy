@@ -13,6 +13,8 @@ from datetime import datetime
 from data_generation import parking_position
 from data_generation.world import World
 
+from enum import Enum
+
 
 class NetworkEvaluator:
     def __init__(self, carla_world, args):
@@ -562,3 +564,167 @@ class NetworkEvaluator:
     @property
     def ego_transform(self):
         return self._ego_transform
+
+
+class RewardType(Enum):
+    SUCCESSFUL_PARKING = 300
+    IN_SUCCESS_RANGE = 5
+    FAILED_PARKING = -300
+    OUT_OF_BOUND = -300
+    TIMEOUT = -300
+    COLLISION = -300
+    X_COEFF = -0.3
+    Y_COEFF = -0.3
+    ORIENTATION_COEFF = -0.005
+
+
+class NetworkEvaluatorRL(NetworkEvaluator):
+    def __init__(self, carla_world, args):
+        super().__init__(carla_world, args)
+
+    def tick(self, clock):
+        # update diff to world
+        self._world.distance_diff_to_goal = self._distance_diff_to_goal
+        self._world.rotation_diff_to_goal = self._orientation_diff_to_goal
+        self._world.x_diff_to_goal = self._x_diff_to_goal
+        self._world.y_diff_to_goal = self._y_diff_to_goal
+
+        self._num_frames_total += 1
+
+        # detect collision
+        is_collision = self._world.tick(clock, self._parking_goal_index)
+        if is_collision:
+            self._collision_nums += 1
+            logging.info("parking collision for task %s-%d, collision_num: %d",
+                         parking_position.slot_id[self._eva_task_idx],
+                         self._eva_parking_idx + 1, self._collision_nums)
+            self.start_next_parking()
+            return True, RewardType.COLLISION.value
+
+        if self._render_bev:
+            sensor_data_frame = self._world.sensor_data_frame
+            sensor_data_frame['topdown'] = self._world.render_BEV()
+
+        # detect timeout
+        if self._num_frames_total > self._num_frames_total_needed:
+            self._timeout_nums += 1
+            logging.info("parking timeout for task %s-%d, timeout_num: %d",
+                         parking_position.slot_id[self._eva_task_idx],
+                         self._eva_parking_idx + 1, self._timeout_nums)
+            self.start_next_parking()
+            return True, RewardType.TIMEOUT.value
+
+        # detect out of bound
+        ego_loc = self._world.ego_transform.location
+        if self.is_out_of_bound(ego_loc):
+            self._num_frames_outbound += 1
+        else:
+            self._num_frames_outbound = 0
+
+        if self._num_frames_outbound > self._num_frames_outbound_needed:
+            self._outbound_nums += 1
+            logging.info("parking outbound for task %s-%d, outbound_num: %d",
+                         parking_position.slot_id[self._eva_task_idx],
+                         self._eva_parking_idx + 1, self._outbound_nums)
+            self.start_next_parking()
+            return True, RewardType.OUT_OF_BOUND.value
+
+        next_episode, goal_reward = self.eva_check_goal()
+
+        return next_episode, goal_reward
+
+
+    def eva_check_goal(self):
+
+        # get ego current state
+        player = self._world.player
+        t = player.get_transform().location
+        r = player.get_transform().rotation
+        v = player.get_velocity()
+        c = player.get_control()
+        speed = (3.6 * math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2))
+
+        # find the closest goal
+        closest_goal = [0.0, 0.0]
+        self._x_diff_to_goal = sys.float_info.max
+        self._y_diff_to_goal = sys.float_info.max
+        self._distance_diff_to_goal = sys.float_info.max
+        self._orientation_diff_to_goal = min(abs(r.yaw), 180 - abs(r.yaw))
+
+        goal_reward = abs(t.x - self._eva_parking_goal[0]) * RewardType.X_COEFF.value + abs(t.y - self._eva_parking_goal[1]) * RewardType.Y_COEFF.value + self._orientation_diff_to_goal * RewardType.ORIENTATION_COEFF.value
+
+        for parking_goal in self._world.all_parking_goals:
+            if t.distance(parking_goal) < self._distance_diff_to_goal:
+                self._distance_diff_to_goal = t.distance(parking_goal)
+                self._x_diff_to_goal = abs(t.x - parking_goal.x)
+                self._y_diff_to_goal = abs(t.y - parking_goal.y)
+                closest_goal[0] = parking_goal.x
+                closest_goal[1] = parking_goal.y
+
+        # check stop
+        is_stop = (c.throttle == 0.0) and (speed < 1e-3) and c.reverse
+        if not is_stop:
+            self._num_frames_in_goal = 0
+            self._num_frames_nearby_goal = 0
+            self._num_frames_nearby_no_goal = 0
+
+        # check success parking
+        success_parking, goal_reward = self.check_success_slot(closest_goal, t, goal_reward)
+        if success_parking:
+            self.start_next_parking()
+            return True, goal_reward
+
+        # check fail parking
+        if self.check_fail_slot(closest_goal, t):
+            self.start_next_parking()
+            return True, goal_reward
+
+        return False, goal_reward
+
+    def check_success_slot(self, closest_goal, ego_transform, goal_reward):
+        x_in_slot = (abs(ego_transform.x - closest_goal[0]) <= self._goal_reach_x_diff)
+        y_in_slot = (abs(ego_transform.y - closest_goal[1]) <= self._goal_reach_y_diff)
+        r_in_slot = (self._orientation_diff_to_goal <= self._goal_reach_orientation_diff)
+
+        if x_in_slot and y_in_slot and r_in_slot:
+            self._num_frames_in_goal += 1
+            if (self._eva_parking_goal[0] == closest_goal[0]) and (self._eva_parking_goal[1] == closest_goal[1]):
+                goal_reward = goal_reward + RewardType.IN_SUCCESS_RANGE.value
+
+        if self._num_frames_in_goal > self._num_frames_in_goal_needed:
+            if (self._eva_parking_goal[0] == closest_goal[0]) and (self._eva_parking_goal[1] == closest_goal[1]):
+                self._target_success_nums += 1
+                self._position_error.append(self._distance_diff_to_goal)
+                self._orientation_error.append(self._orientation_diff_to_goal)
+                self._parking_time.append(self._num_frames_total / self._frames_per_second)
+                goal_reward = goal_reward + RewardType.SUCCESSFUL_PARKING.value
+                logging.info("parking target success for task %s-%d, target_success_nums: %d",
+                             parking_position.slot_id[self._eva_task_idx],
+                             self._eva_parking_idx + 1, self._target_success_nums)
+            else:
+                self._no_target_success_nums += 1
+                logging.info("parking no target success for task %s-%d, no_target_success_nums: %d",
+                             parking_position.slot_id[self._eva_task_idx],
+                             self._eva_parking_idx + 1, self._no_target_success_nums)
+                goal_reward = goal_reward + RewardType.FAILED_PARKING.value
+            return True, goal_reward
+
+        return False, goal_reward
+
+    # def start_next_parking(self):
+    #     self._agent_need_init = True
+
+    #     self._eva_parking_idx += 1
+    #     if self.is_complete_slot(self._eva_parking_idx):
+    #         logging.info("*****************   End eva task %s *****************",
+    #                      parking_position.slot_id[self._eva_task_idx])
+    #         self.save_slot_metric()
+    #         self.start_next_slot()
+    #         return
+
+    #     self.clear_metric_frame()
+
+    #     self._ego_transform = self._ego_transform_generator.get_eva_ego_transform(self._eva_parking_nums,
+    #                                                                               self._eva_parking_idx)
+    #     self._world.player.set_transform(self._ego_transform)
+    #     self._world.player.apply_control(carla.VehicleControl())
