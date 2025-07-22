@@ -19,6 +19,7 @@ parking_model:
   hist_frame_nums: 10
   token_nums: 204
   image_crop: 256
+  seq_length: 4
 
   # bev encoder
   bev_encoder_in_channel: 64

@@ -33,6 +33,7 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
     def get_data(self):
         val_towns = self.cfg.validation_map
         train_towns = self.cfg.training_map
+        seq_length = self.cfg.seq_length
         train_data = os.path.join(self.root_dir, train_towns)
         val_data = os.path.join(self.root_dir, val_towns)
 
@@ -57,23 +58,32 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
             self.task_offsets.append((start_index, start_index + num_valid_frames))
 
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
-                
-                with open(task_path + f"/measurements/{str(frame).zfill(4)}.json", "r") as read_file:
-                    data = json.load(read_file)
+                hist_ego_pos = []
+                hist_ego_motion = []
+                hist_raw_control = []
+                for i in range(seq_length):
+                    if frame+i-seq_length+1 <=0:
+                        history_frame=0
+                    else:
+                        history_frame = frame+i-seq_length+1
+                    with open(task_path + f"/measurements/{str(history_frame).zfill(4)}.json", "r") as read_file:
+                        data = json.load(read_file)
 
-                # current ego pose
-                cur_x = data['x']
-                cur_y = data['y']
-                cur_yaw = data['yaw']
-                ego_pos = [cur_x, cur_y, cur_yaw]
-                
+                    # current ego pose
+                    cur_x = data['x']
+                    cur_y = data['y']
+                    cur_yaw = data['yaw']
+                    ego_pos = [cur_x, cur_y, cur_yaw]
+                    
+                    hist_ego_pos.append(ego_pos)
+                    hist_ego_motion.append([data['speed'], data['acc_x'], data['acc_y']])
+                    hist_raw_control.append([data['Throttle'], data['Brake'], data['Steer'], data['Reverse']])
                 # Save Waypoints
-                self.ego_pos.append(ego_pos)
+                self.ego_pos.append(hist_ego_pos)
                 # ego_motion
-                self.ego_motion.append([data['speed'], data['acc_x'], data['acc_y']])
+                self.ego_motion.append(hist_ego_motion)
                 # current control will be used to predict next ego_pose
-                self.raw_control.append([data['Throttle'],data['Brake'],data['Steer'], data['Reverse']])
-
+                self.raw_control.append(hist_raw_control)
             ### We miss the last element due to future_frame_nums
             with open(task_path + f"/measurements/{str(frame+1).zfill(4)}.json", "r") as read_file:
                 data_last = json.load(read_file)
@@ -86,6 +96,8 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
             
         self.ego_motion = np.array(self.ego_motion).astype(np.float32)
         self.ego_pos = np.array(self.ego_pos).astype(np.float32)
+        self.raw_control = np.array(self.raw_control).astype(np.float32)
+        self.ego_motion, self.ego_pos, self.raw_control = self.ego_motion.reshape(self.ego_motion.shape[0],-1), self.ego_pos.reshape(self.ego_pos.shape[0],-1), self.raw_control.reshape(self.raw_control.shape[0],-1)
         self.ego_pos_last = np.array(self.ego_pos_last).astype(np.float32)
         # Convert lists to tensors
         self.task_offsets = np.array(self.task_offsets).astype(np.int32)
@@ -106,13 +118,13 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
             data[key] = []
 
         # ego_motion
-        data['ego_motion'] =  torch.from_numpy(self.ego_motion[index]) # [speed, acc_x, acc_y]
+        data['ego_motion'] =  torch.from_numpy(self.ego_motion[index]).reshape(self.cfg.seq_length,-1) # [speed, acc_x, acc_y]
 
         # gt untokenized control
-        data['raw_control'] = torch.from_numpy(np.array(self.raw_control[index]))
+        data['raw_control'] = torch.from_numpy(self.raw_control[index]).reshape(self.cfg.seq_length,-1)
 
         # gt ego_pos current & next frame
-        data['ego_pos'] = torch.from_numpy(self.ego_pos[index])
+        data['ego_pos'] = torch.from_numpy(self.ego_pos[index]).reshape(self.cfg.seq_length,-1)
 
         # Determine if the current index is at the end of a task
         is_end_of_task = any(index == offset[1] - 1 for offset in self.task_offsets)
@@ -126,7 +138,7 @@ class CarlaDatasetDynamic(torch.utils.data.Dataset):
             data['ego_pos_next'] = torch.from_numpy(self.ego_pos_last[task_index])
         else:
             # Otherwise, set ego_pos_next to the next frame's ego_pos
-            data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index + 1])
+            data['ego_pos_next'] = torch.from_numpy(self.ego_pos[index + 1].reshape(self.cfg.seq_length,-1)[-1])
 
         data['task_offsets'] = torch.from_numpy(self.task_offsets)
         # print("dataloading order check: ", index)

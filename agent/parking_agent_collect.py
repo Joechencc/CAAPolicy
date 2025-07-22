@@ -305,7 +305,7 @@ class ParkingAgent:
         self.model = ParkingModel(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-        self.model.load_state_dict(state_dict)
+        self.model.load_state_dict(state_dict,strict=False)
         self.model.to(self.device)
         self.model.eval()
 
@@ -665,7 +665,7 @@ class ParkingAgent:
         ego_pos_torch = deepcopy(self.ego_xy_dynamic)
         ego_pos_torch.append(vehicle_transform.rotation.yaw)
         ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
-        ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y, imu_data.accelerometer.x, imu_data.accelerometer.y],
+        ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y,  3.6*vehicle_velocity.z, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                         dtype=torch.float).to(self.device)
         raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
 
@@ -706,7 +706,7 @@ class ParkingAgent:
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking","dynamics"]
-        target_type = target_types[3]
+        target_type = target_types[0]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
