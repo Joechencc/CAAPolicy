@@ -489,7 +489,7 @@ class World(object):
 
         # draw target lot char T
         target_parking_goal = self._parking_spawn_points[target_index]
-        # self._world.debug.draw_string(target_parking_goal, 'T', draw_shadow=True, color=carla.Color(255, 0, 0))
+        self._world.debug.draw_string(target_parking_goal, 'T', draw_shadow=True, color=carla.Color(255, 0, 0))
 
         # update spectator
         t = self._player.get_transform().location

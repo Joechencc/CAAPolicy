@@ -296,3 +296,61 @@ class DataGenerator:
             bev_view1 = self._world.render_BEV_from_state(data_frame['bev_state'])
             img1 = encode_npy_to_pil(np.asarray(bev_view1.squeeze().cpu()))
             save_img(img1, keyword)
+
+class OODDataGenerator(DataGenerator):
+    def __init__(self, carla_world, args):
+        super().__init__(carla_world, args)
+        self.num_frames_till_now = 0
+
+    def check_goal(self):
+        t = self._world.ego_transform
+        p = t.location
+        r = t.rotation
+
+        all_parking_goals = self._world.all_parking_goals
+
+        # find the closest goal
+        self._distance_diff_to_goal = sys.float_info.max
+        closest_goal = [0.0, 0.0, 0.0]  # (x, y, yaw)
+        for parking_goal in all_parking_goals:
+            if p.distance(parking_goal) < self._distance_diff_to_goal:
+                self._distance_diff_to_goal = p.distance(parking_goal)
+                closest_goal[0] = parking_goal.x
+                closest_goal[1] = parking_goal.y
+                closest_goal[2] = r.yaw
+
+        # find rotation difference
+        self._rotation_diff_to_goal = math.sqrt(min(abs(r.yaw), 180 - abs(r.yaw)) ** 2 + r.roll ** 2 + r.pitch ** 2)
+
+        # check if goal is reached
+        if self._distance_diff_to_goal < self._goal_reach_distance_diff and \
+                self._rotation_diff_to_goal < self._goal_reach_rotation_diff:
+            self._num_frames_in_goal += 1
+        else:
+            self._num_frames_in_goal = 0
+
+        self.num_frames_till_now = self.num_frames_till_now + 1
+
+        if self._num_frames_in_goal > self._num_frames_goal_needed or self.num_frames_till_now >= 700:
+            logging.info('task %d goal reached; ready to save sensor data', self._task_index)
+            self.save_sensor_data(closest_goal)
+            logging.info('*****task %d done*****', self._task_index)
+            self._task_index += 1
+            if self._task_index >= self._num_tasks:
+                logging.info('completed all tasks; Thank you!')
+                exit(0)
+            self.restart()
+
+    def destroy(self):
+        self._batch_data_frames.clear()
+        self._num_frames_in_goal = 0
+        self.num_frames_till_now = 0
+
+        self._world.destroy()
+
+    def soft_destroy(self):
+        self._batch_data_frames.clear()
+        self._num_frames_in_goal = 0
+        self.num_frames_till_now = 0
+
+        self._world.soft_destroy()

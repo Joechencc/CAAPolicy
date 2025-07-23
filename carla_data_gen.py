@@ -3,7 +3,7 @@ import logging
 import carla
 import pygame
 
-from data_generation.data_generator import DataGenerator
+from data_generation.data_generator import DataGenerator, OODDataGenerator
 from data_generation.keyboard_control import KeyboardControl
 
 
@@ -19,32 +19,32 @@ def game_loop(args):
         carla_world = client.load_world(args.map)
         carla_world.unload_map_layer(carla.MapLayer.ParkedVehicles)
 
-        data_generator = DataGenerator(carla_world, args)
+        data_generator = OODDataGenerator(carla_world, args)
         controller = KeyboardControl(data_generator.world)
 
 
         # Apply weather AFTER everything is initialized
         import time
-        time.sleep(0.2)
-        weather_0911_default = carla.WeatherParameters(
-            cloudiness=15.0,
-            precipitation=0.0,
-            precipitation_deposits=0.0,
-            wind_intensity=0.35,
-            sun_azimuth_angle=0.0,
-            sun_altitude_angle=75.0,
-            fog_density=0.0,
-            fog_distance=0.0,
-            fog_falloff=0.0,
-            wetness=0.0,
-            scattering_intensity=1.0,
-            mie_scattering_scale=0.03,
-            rayleigh_scattering_scale=0.0331,
-            dust_storm=0.0
-        )
+        # time.sleep(0.2)
+        # weather_0911_default = carla.WeatherParameters(
+        #     cloudiness=15.0,
+        #     precipitation=0.0,
+        #     precipitation_deposits=0.0,
+        #     wind_intensity=0.35,
+        #     sun_azimuth_angle=0.0,
+        #     sun_altitude_angle=75.0,
+        #     fog_density=0.0,
+        #     fog_distance=0.0,
+        #     fog_falloff=0.0,
+        #     wetness=0.0,
+        #     scattering_intensity=1.0,
+        #     mie_scattering_scale=0.03,
+        #     rayleigh_scattering_scale=0.0331,
+        #     dust_storm=0.0
+        # )
 
-        carla_world.set_weather(weather_0911_default)
-        time.sleep(0.1)
+        # carla_world.set_weather(weather_0911_default)
+        # time.sleep(0.1)
         print("Final weather:", carla_world.get_weather())
         
         display = pygame.display.set_mode(
