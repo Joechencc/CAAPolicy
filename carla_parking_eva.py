@@ -102,6 +102,10 @@ def main():
         default='./ckpt/dynamic_model.ckpt',
         help='path to dynamic_model.ckpt')
     argparser.add_argument(
+        '--model_seq_path_dynamic',
+        default='./ckpt/dynamics_model/exp_2025_7_21_22_40_55/last.ckpt',
+        help='path to dynamic_seq_model.ckpt')
+    argparser.add_argument(
         '--model_config_path',
         default='./config/training.yaml',
         help='path to model training.yaml')
@@ -150,7 +154,7 @@ def main():
         choices=['cpu', 'cuda'])
     argparser.add_argument(
         '--show_eva_imgs',
-        default=False,
+        default=True,
         type=str2bool,
         help='show eva figure in eva model (default: False)')
     argparser.add_argument(

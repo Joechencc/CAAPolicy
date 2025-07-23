@@ -23,6 +23,8 @@ from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
 from model.dynamics_model import DynamicsModel
+from model.dynamics_seq_model import DynamicsModel as DynamicsSeqModel
+
 from copy import deepcopy
 
 
@@ -262,7 +264,7 @@ class ParkingAgent:
 
         self.save_output = SaveOutput()
         self.hook_handle = None
-        self.load_model(args.model_path, args.model_path_dynamic)
+        self.load_model(args.model_path, args.model_path_dynamic, args.model_seq_path_dynamic)
 
         self.stop_count = 0
         self.boost = False
@@ -271,6 +273,12 @@ class ParkingAgent:
         self.relative_target = [0,0]
         self.ego_xy = []
         self.ego_xy_dynamic=[]
+        self.ego_xy_dynamic_temporal=[]
+        self.ego_pos_temporal = [] 
+        self.ego_motion_temporal = [] 
+        self.raw_control_temporal = [] 
+        self.seq_length = self.cfg.seq_length
+
         self.gt_traj =[]
         self.track_traj = []
         self.dynamic_traj = []
@@ -296,7 +304,7 @@ class ParkingAgent:
                 logging.exception('Invalid YAML Config file {}', args.dynamic_cfg)
         self.dynamic_cfg = get_cfg(dynamic_cfg_yaml)
 
-    def load_model(self, parking_pth_path, dynamic_parking_pth_path):
+    def load_model(self, parking_pth_path, dynamic_parking_pth_path, dynamic_parking_temporal_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         ###################
         self.model = ParkingModel(self.cfg)
@@ -319,6 +327,14 @@ class ParkingAgent:
         self.dynamic_model.load_state_dict(dynamic_state_dict)
         self.dynamic_model.to(self.device)
         self.dynamic_model.eval()
+        ###################
+        ###################
+        self.dynamic_seq_model = DynamicsSeqModel()
+        dynamic_seq_ckpt = torch.load(dynamic_parking_temporal_pth_path, map_location='cuda:0')
+        dynamic_seq_state_dict = OrderedDict([(k.replace('model.', ''), v) for k, v in dynamic_seq_ckpt['state_dict'].items()])
+        self.dynamic_seq_model.load_state_dict(dynamic_seq_state_dict)
+        self.dynamic_seq_model.to(self.device)
+        self.dynamic_seq_model.eval()
         ###################
 
     def save_seg_img(self, pred_segmentation):
@@ -397,10 +413,16 @@ class ParkingAgent:
         self.step = -1
         self.pre_target_point = None
         self.ego_xy=[]
-        self.ego_xy_dynamic=[]
+        self.ego_xy_dynamic = []
+        self.ego_xy_dynamic_temporal = []
+        self.ego_pos_temporal = [] 
+        self.ego_motion_temporal = [] 
+        self.raw_control_temporal = [] 
+
         self.gt_traj =[]
         self.track_traj = []
         self.dynamic_traj = []
+        self.dynamic_temporal_traj = []
 
 
     def save_atten_avg_map(self, data):
@@ -416,15 +438,6 @@ class ParkingAgent:
         return grid_image, atten_avg
 
     def tick(self):
-        # if next_flag == True:
-        #     self.step=-1
-        #     self.relative_target = [0,0]
-        #     self.ego_xy = []
-        #     self.ego_xy_dynamic=[]
-        #     self.gt_traj =[]
-        #     self.track_traj = []
-        #     self.dynamic_traj = []
-
         if self.net_eva.agent_need_init:
             self.init_agent()
             self.net_eva.agent_need_init = False
@@ -447,15 +460,11 @@ class ParkingAgent:
             imu_data = data_frame['imu']
 
             data = self.get_model_data(data_frame)
-            # print("self.ego_position::",self.ego_position)
-            # print("self.ego_xy::",self.ego_xy)
-            # print("self.ego_xy_dynamic::",self.ego_xy_dynamic)
-            # if self.step % 300 ==0:
-            #     import pdb; pdb.set_trace()
             
             self.gt_traj.append(self.ego_position)
             self.track_traj.append(deepcopy(self.ego_xy))
             self.dynamic_traj.append(deepcopy(self.ego_xy_dynamic))
+            self.dynamic_temporal_traj.append(deepcopy(self.ego_xy_dynamic_temporal))
 
             if self.draw_img:
                 if self.step % 200 == 0:
@@ -466,13 +475,16 @@ class ParkingAgent:
                     y_track = [p[1] for p in self.track_traj]
                     x_dynamic = [p[0].item() for p in self.dynamic_traj]
                     y_dynamic = [p[1].item() for p in self.dynamic_traj]
+                    x_dynamic_temporal = [p[0].item() for p in self.dynamic_temporal_traj]
+                    y_dynamic_temporal = [p[1].item() for p in self.dynamic_temporal_traj]
 
                     # Create an isolated figure
                     fig, ax = plt.subplots(figsize=(6, 6))
 
                     ax.plot(x_gt, y_gt, 'ro-', label='GT', linewidth=1.5, markersize=3, zorder=1)
-                    ax.plot(x_track, y_track, 'bs--', label='Track', linewidth=1.5, markersize=3, zorder=2)
+                    # ax.plot(x_track, y_track, 'bs--', label='Track', linewidth=1.5, markersize=3, zorder=2)
                     ax.plot(x_dynamic, y_dynamic, 'g^:', label='Dynamic', linewidth=1.5, markersize=3, zorder=3)
+                    ax.plot(x_dynamic_temporal, y_dynamic_temporal, 'bs--', label='Dynamic_temporal', linewidth=1.5, markersize=3, zorder=3)
 
                     ax.set_xlabel('X')
                     ax.set_ylabel('Y')
@@ -589,6 +601,7 @@ class ParkingAgent:
         if not self.ego_xy: # read only once after initilization
             self.ego_xy = [vehicle_transform.location.x, vehicle_transform.location.y] 
             self.ego_xy_dynamic = [vehicle_transform.location.x, vehicle_transform.location.y] 
+            self.ego_xy_dynamic_temporal = [vehicle_transform.location.x, vehicle_transform.location.y] 
             #print('self.ego_xy initialization:', self.ego_xy)
         parking_goal_world = self.net_eva.eva_parking_goal[:2]
         #print('This is target under global frame', parking_goal_world)
@@ -601,8 +614,14 @@ class ParkingAgent:
         accel_x_world = imu_data.accelerometer.x * np.cos(yaw) + imu_data.accelerometer.y * np.sin(yaw)
         accel_y_world = -imu_data.accelerometer.x * np.sin(yaw) + imu_data.accelerometer.y * np.cos(yaw)
 
-        displacement_x_world = vehicle_velocity.x * dt + 0.5 * accel_x_world * dt**2
-        displacement_y_world = vehicle_velocity.y * dt + 0.5 * accel_y_world * dt**2
+        vx = vehicle_velocity.x
+        vy = vehicle_velocity.y
+        vz = vehicle_velocity.z
+
+        speed = 3.6 * math.sqrt(vx**2 + vy**2 + vz**2)
+
+        displacement_x_world = speed * np.cos(yaw) * dt + 0.5 * accel_x_world * dt**2
+        displacement_y_world = speed * np.sin(yaw) * dt + 0.5 * accel_y_world * dt**2
         self.ego_xy[0] += displacement_x_world
         self.ego_xy[1] += displacement_y_world
         #print('this is egox', self.ego_xy[0])
@@ -618,7 +637,12 @@ class ParkingAgent:
         ego_pos_torch = deepcopy(self.ego_xy_dynamic)
         ego_pos_torch.append(vehicle_transform.rotation.yaw)
         ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
-        ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y, 3.6*vehicle_velocity.z, imu_data.accelerometer.x, imu_data.accelerometer.y],
+        vx = torch.tensor(vehicle_velocity.x)
+        vy = torch.tensor(vehicle_velocity.y)
+        vz = torch.tensor(vehicle_velocity.z)
+
+        speed = 3.6 * torch.sqrt(vx**2 + vy**2 + vz**2)
+        ego_motion_torch = torch.tensor([speed, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                         dtype=torch.float).to(self.device)
         raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
 
@@ -637,6 +661,53 @@ class ParkingAgent:
         relative_x_ego_dynamic = relative_x_world_dynamic * np.cos(yaw) + relative_y_world_dynamic * np.sin(yaw)
         relative_y_ego_dynamic = -relative_x_world_dynamic * np.sin(yaw) + relative_y_world_dynamic * np.cos(yaw)
         ###########################################
+        ##############Dynamic temporal####################
+        ego_pos_temporal_torch = deepcopy(self.ego_xy_dynamic_temporal)
+        ego_pos_temporal_torch.append(vehicle_transform.rotation.yaw)
+        ego_pos_temporal_torch = torch.tensor(ego_pos_temporal_torch).to(self.device)
+        vx = torch.tensor(vehicle_velocity.x)
+        vy = torch.tensor(vehicle_velocity.y)
+        vz = torch.tensor(vehicle_velocity.z)
+
+        speed = 3.6 * torch.sqrt(vx**2 + vy**2 + vz**2)
+        ego_motion_temporal_torch = torch.tensor([speed, imu_data.accelerometer.x, imu_data.accelerometer.y],
+                                        dtype=torch.float).to(self.device)
+        raw_control_temporal_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
+        
+        ego_pos_temporal_torch = ego_pos_temporal_torch.unsqueeze(0).unsqueeze(1)
+        ego_motion_temporal_torch = ego_motion_temporal_torch.unsqueeze(0).unsqueeze(1)
+        raw_control_temporal_torch = raw_control_temporal_torch.unsqueeze(0).unsqueeze(1)
+
+        if len(self.ego_pos_temporal)==0:            
+            self.ego_pos_temporal = ego_pos_temporal_torch.repeat(1, self.seq_length,1)            
+            self.ego_motion_temporal = ego_motion_temporal_torch.repeat(1, self.seq_length,1)
+            self.raw_control_temporal = raw_control_temporal_torch.repeat(1, self.seq_length,1)
+            
+        else:
+            self.ego_pos_temporal = self.ego_pos_temporal[:, 1:, :]
+            self.ego_motion_temporal = self.ego_motion_temporal[:, 1:, :]
+            self.raw_control_temporal = self.raw_control_temporal[:, 1:, :]
+            self.ego_pos_temporal = torch.cat([self.ego_pos_temporal, ego_pos_temporal_torch], dim=1)
+            self.ego_motion_temporal = torch.cat([self.ego_motion_temporal, ego_motion_temporal_torch], dim=1)
+            self.raw_control_temporal = torch.cat([self.raw_control_temporal, raw_control_temporal_torch], dim=1)
+
+
+        input_data = {
+            # 'yaw'
+            'ego_pos': self.ego_pos_temporal,  # Shape: (1, 3)
+            'ego_motion': self.ego_motion_temporal,  # Shape: (1, 4)
+            'raw_control': self.raw_control_temporal, # Shape: (4,)
+        }
+        delta_mean_temporal, log_var_temporal, x_displacement_track_temporal, y_displacement_track_temporal = self.dynamic_seq_model(input_data)
+        self.ego_xy_dynamic_temporal[0] += delta_mean_temporal.squeeze(0)[0].detach()
+        self.ego_xy_dynamic_temporal[1] += delta_mean_temporal.squeeze(0)[1].detach()
+        relative_x_world_dynamic_temporal = parking_goal_world[0] - self.ego_xy_dynamic_temporal[0]
+        relative_y_world_dynamic_temporal = parking_goal_world[1] - self.ego_xy_dynamic_temporal[1]
+
+        relative_x_ego_dynamic_temporal = relative_x_world_dynamic_temporal * np.cos(yaw) + relative_y_world_dynamic_temporal * np.sin(yaw)
+        relative_y_ego_dynamic_temporal = -relative_x_world_dynamic_temporal * np.sin(yaw) + relative_y_world_dynamic_temporal * np.cos(yaw)
+        ###########################################
+
 
         data['relative_target'] = torch.tensor([relative_x_ego,relative_y_ego], dtype=torch.float).unsqueeze(0)
         #print("This is relative_target:", data['relative_target'])
@@ -658,8 +729,8 @@ class ParkingAgent:
         data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
-        target_types = ["gt","predicted","tracking","dynamics"]
-        target_type = target_types[3]
+        target_types = ["gt","predicted","tracking","dynamics","dynamics_temporal"]
+        target_type = target_types[4]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
@@ -681,6 +752,11 @@ class ParkingAgent:
             # import pdb; pdb.set_trace()
             data["target_point"][0][0] = relative_x_ego_dynamic
             data["target_point"][0][1] = relative_y_ego_dynamic
+        elif target_type == "dynamics_temporal":
+            data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
+            data["target_point"][0][0] = relative_x_ego_dynamic_temporal
+            data["target_point"][0][1] = relative_y_ego_dynamic_temporal
+
 
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         data['gt_waypoint'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)

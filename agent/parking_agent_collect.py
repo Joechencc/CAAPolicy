@@ -23,6 +23,7 @@ from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
 from model.dynamics_model import DynamicsModel
+from model.dynamics_seq_model import DynamicsModel as DynamicsSeqModel
 from copy import deepcopy
 import json
 
@@ -263,7 +264,7 @@ class ParkingAgent:
 
         self.save_output = SaveOutput()
         self.hook_handle = None
-        self.load_model(args.model_path, args.model_path_dynamic)
+        self.load_model(args.model_path, args.model_path_dynamic, args.model_seq_path_dynamic)
 
         self.stop_count = 0
         self.boost = False
@@ -299,7 +300,7 @@ class ParkingAgent:
                 logging.exception('Invalid YAML Config file {}', args.dynamic_cfg)
         self.dynamic_cfg = get_cfg(dynamic_cfg_yaml)
 
-    def load_model(self, parking_pth_path, dynamic_parking_pth_path):
+    def load_model(self, parking_pth_path, dynamic_parking_pth_path, dynamic_parking_temporal_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         ###################
         self.model = ParkingModel(self.cfg)
@@ -323,6 +324,15 @@ class ParkingAgent:
         self.dynamic_model.to(self.device)
         self.dynamic_model.eval()
         ###################
+        ###################
+        self.dynamic_seq_model = DynamicsSeqModel()
+        dynamic_seq_ckpt = torch.load(dynamic_parking_temporal_pth_path, map_location='cuda:0')
+        dynamic_seq_state_dict = OrderedDict([(k.replace('model.', ''), v) for k, v in dynamic_seq_ckpt['state_dict'].items()])
+        self.dynamic_seq_model.load_state_dict(dynamic_seq_state_dict)
+        self.dynamic_seq_model.to(self.device)
+        self.dynamic_seq_model.eval()
+        ###################
+    
 
     def save_seg_img(self, pred_segmentation):
         pred_segmentation = pred_segmentation[0]
@@ -665,7 +675,12 @@ class ParkingAgent:
         ego_pos_torch = deepcopy(self.ego_xy_dynamic)
         ego_pos_torch.append(vehicle_transform.rotation.yaw)
         ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
-        ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y,  3.6*vehicle_velocity.z, imu_data.accelerometer.x, imu_data.accelerometer.y],
+        vx = torch.tensor(vehicle_velocity.x)
+        vy = torch.tensor(vehicle_velocity.y)
+        vz = torch.tensor(vehicle_velocity.z)
+
+        speed = 3.6 * torch.sqrt(vx**2 + vy**2 + vz**2)
+        ego_motion_torch = torch.tensor([speed, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                         dtype=torch.float).to(self.device)
         raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
 
