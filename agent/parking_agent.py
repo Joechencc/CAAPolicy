@@ -24,6 +24,7 @@ from data_generation.tools import encode_npy_to_pil
 from model.parking_model import ParkingModel
 from model.dynamics_model import DynamicsModel
 from copy import deepcopy
+from scipy.ndimage import rotate
 
 
 # convert location in ego centric to world frame
@@ -156,12 +157,63 @@ def highlight_grid(image, grid_indexes, grid_size=14):
         a.rectangle([(y * w, x * h), (y * w + w, x * h + h)], fill=None, outline='red', width=2)
     return image
 
-
-def get_atten_avg_map(att_map, grid_index, image, grid_size=16):
+def highlight_grid_triangle(image, grid_indexes, grid_size=14, scale=1.5, width=4):
     if not isinstance(grid_size, tuple):
         grid_size = (grid_size, grid_size)
 
-    grid_image = highlight_grid(image, [grid_index], grid_size)
+    W, H = image.size
+    h = H / grid_size[0]
+    w = W / grid_size[1]
+    image = image.copy()
+    draw = ImageDraw.Draw(image)
+
+    for grid_index in grid_indexes:
+        x, y = np.unravel_index(grid_index, (grid_size[0], grid_size[1]))
+
+        # Center of the cell
+        cx = y * w + w / 2
+        cy = x * h + h / 2
+
+        # Control the triangle size and shape
+        tri_w = w * 0.6 * scale  # width
+        tri_h = h * 1.2 * scale  # height (sharper if taller)
+
+        # Downward-pointing triangle
+        bottom = (cx, cy + tri_h / 2)
+        left   = (cx - tri_w / 2, cy - tri_h / 2)
+        right  = (cx + tri_w / 2, cy - tri_h / 2)
+
+        triangle = [bottom, left, right]
+        draw.polygon(triangle, outline='red', width=width)
+
+    return image
+
+def highlight_grid_with_car_icon(image, grid_indexes, car_icon, grid_size=14):
+    if not isinstance(grid_size, tuple):
+        grid_size = (grid_size, grid_size)
+    
+    W, H = image.size
+    h = H / grid_size[0]
+    w = W / grid_size[1]
+
+    # Resize car icon to fit within a grid cell
+    icon = car_icon.resize((int(w), int(h)))
+
+    image = image.convert("RGBA")  # ensure RGBA for transparency
+    image = image.copy()
+
+    for grid_index in grid_indexes:
+        x, y = np.unravel_index(grid_index, (grid_size[0], grid_size[1]))
+        top_left = (int(y * w), int(x * h))
+        image.paste(icon, top_left, mask=icon)  # paste with transparency
+
+    return image.convert("RGB")  # convert back if needed
+
+def get_atten_avg_map(att_map, grid_index, image, grid_size=16, car_icon=None):
+    if not isinstance(grid_size, tuple):
+        grid_size = (grid_size, grid_size)
+
+    grid_image = highlight_grid_triangle(image, [grid_index], grid_size)
 
     att_map = att_map.squeeze()
     average_att_map = att_map.mean(axis=0)
@@ -274,6 +326,8 @@ class ParkingAgent:
         self.gt_traj =[]
         self.track_traj = []
         self.dynamic_traj = []
+
+        self.car_icon = Image.open("./car.png").convert("RGBA")
 
         self.init_agent()
         self.draw_img = True
@@ -410,7 +464,7 @@ class ParkingAgent:
         bev = data['segmentation']
         bev = bev.convert("RGB")
         # visualize_grid_to_grid(atten, 136, bev)
-        grid_image, atten_avg = get_atten_avg_map(atten, 136, bev)
+        grid_image, atten_avg = get_atten_avg_map(atten, 136, bev, car_icon=self.car_icon)
         grid_image = np.asarray(grid_image)[::-1, ...]
         atten_avg = np.asarray(atten_avg)[::-1, ...]
         return grid_image, atten_avg
@@ -516,7 +570,8 @@ class ParkingAgent:
                     self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
                     self.save_seg_img(pred_segmentation)
                     self.save_target_bev_img(target_bev)
-                    self.display_imgs()
+                    # self.display_imgs()
+                    self.display_aligned_imgs(data_frame)
                 self.save_output.clear()
 
                 # import pdb; pdb.set_trace()
@@ -659,7 +714,7 @@ class ParkingAgent:
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking","dynamics"]
-        target_type = target_types[3]
+        target_type = target_types[2]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
@@ -799,6 +854,48 @@ class ParkingAgent:
         ax_bev.axis('off')
         ax_bev.set_title('seg_bev(output)', fontsize=10)
         ax_bev.imshow(self.seg_bev)
+
+        plt.pause(0.1)
+        plt.clf()
+
+    def display_aligned_imgs(self, data_frame):
+
+        plt.subplots_adjust(wspace=0.08, hspace=0.08, left=0.04, bottom=0.0, right=0.95, top=0.97)
+        rows = 2
+        cols = 4
+        ax_ctl = plt.subplot(rows, cols, 4)
+        ax_ctl.axis('off')
+        t_x = 0.2
+        t_y = 0.8
+        throttle_show = int(self.trans_control.throttle * 1000) / 1000
+        steer_show = int(self.trans_control.steer * 1000) / 1000
+        brake_show = int(self.trans_control.brake * 1000) / 1000
+        reverse_show = self.trans_control.reverse
+        ax_ctl.text(t_x, t_y, 'Throttle: ' + str(throttle_show), fontsize=10, color='red')
+        ax_ctl.text(t_x, t_y - 0.2, '    Steer: ' + str(steer_show), fontsize=10, color='red')
+        ax_ctl.text(t_x, t_y - 0.4, '   Brake: ' + str(brake_show), fontsize=10, color='red')
+        ax_ctl.text(t_x, t_y - 0.6, 'Reverse: ' + str(reverse_show), fontsize=10, color='red')
+
+        # Get yaw angle
+        yaw = data_frame['veh_transfrom'].rotation.yaw
+
+        # Rotate all images by -yaw
+        rotated_grid_image = rotate(self.grid_image, -yaw, reshape=False, order=1)
+        rotated_atten = rotate(self.atten_avg / np.max(self.atten_avg), -yaw, reshape=False, order=1)
+        rotated_seg_bev = rotate(self.seg_bev, -yaw, reshape=False, order=0)
+
+        # Plot
+        ax_atten = plt.subplot(rows, cols, 7)
+        ax_atten.axis('off')
+        ax_atten.set_title('atten(output)', fontsize=10)
+        ax_atten.imshow(rotated_grid_image)
+        ax_atten.imshow(rotated_atten, alpha=0.6, cmap='rainbow')
+
+        ax_bev = plt.subplot(rows, cols, 8)
+        ax_bev.axis('off')
+        ax_bev.set_title('seg_bev(output)', fontsize=10)
+        ax_bev.imshow(rotated_grid_image)
+        ax_bev.imshow(rotated_seg_bev, alpha=0.6)
 
         plt.pause(0.1)
         plt.clf()
