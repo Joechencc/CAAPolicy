@@ -9,6 +9,7 @@ from model.control_predict import ControlPredict
 from model.segmentation_head import SegmentationHead
 from model.waypoint_predict import WaypointPredict
 from model.gradient_approx import GradientApproximator
+from model.film_modulator import FiLMModulator
 
 
 class ParkingModel(nn.Module):
@@ -28,6 +29,8 @@ class ParkingModel(nn.Module):
         self.waypoint_predict = WaypointPredict(self.cfg)
 
         self.grad_approx = GradientApproximator(self.cfg.bev_encoder_out_channel)
+
+        self.film_modulate = FiLMModulator(self.cfg)
 
         self.segmentation_head = SegmentationHead(self.cfg)
         
@@ -86,8 +89,9 @@ class ParkingModel(nn.Module):
         target_point = target_point.unsqueeze(1)
         fuse_feature = self.feature_fusion(bev_down_sample, zero_ego_motion, target_point)
 
-        pred_segmentation = self.segmentation_head(fuse_feature)
-
+        # pred_segmentation = self.segmentation_head(fuse_feature)
+        pred_segmentation = self.segmentation_head(self.film_modulate(fuse_feature, target_point))
+        
         return fuse_feature, pred_segmentation, pred_depth, bev_target
 
     def forward(self, data):
