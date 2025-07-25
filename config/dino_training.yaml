@@ -9,7 +9,7 @@ parking_model:
   epochs: 26
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 16
+  batch_size: 16 # 16
 
   training_map: "e2e_parking/Town04_Opt" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/vast/rs9193/Town_Opt_1000"
   validation_map: "e2e_parking/Town04_Opt_Val" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/scratch/rs9193/Town_Opt_1000_Val"
@@ -36,7 +36,7 @@ parking_model:
 
   # segmentation
   seg_classes: 3
-  seg_vehicle_weights: [2.0, 2.0, 4.0] # [1.0, 2.0, 2.0]
+  seg_vehicle_weights: [1.0, 2.0, 2.0] # [1.0, 2.0, 2.0]
 
   # transformer encoder
   tf_en_dim: 264

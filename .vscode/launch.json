@@ -12,9 +12,9 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             // For training
-            // "args": ["--config", "./config/dino_training.yaml"]
+            "args": ["--config", "./config/dino_training.yaml"]
             // For testing
-            "args": ["--model_config_path", "./config/training.yaml", "--model_path", "./milestone/leanable_attention_best_20.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
+            // "args": ["--model_config_path", "./config/dino_training.yaml", "--model_path", "./ckpt/exp_2025_7_25_13_34_0/E2EParking-epoch=06-val_loss=2.11.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
         }
     ]
 }

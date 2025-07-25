@@ -56,6 +56,13 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.parking_model = ParkingModel(self.cfg)
 
+    def on_train_epoch_start(self):
+        # print("I come.")
+        dataloader = self.trainer.datamodule.train_dataloader()
+        dataset = dataloader.dataset
+        if hasattr(dataset, 'relabel_goals'):
+            dataset.relabel_goals(self.current_epoch)
+
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)

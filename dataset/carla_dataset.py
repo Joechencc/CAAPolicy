@@ -577,6 +577,31 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         logger.info('Preloaded {} sequences', str(len(self.front)))
 
+    def relabel_goals(self, epoch):
+        # Custom relabeling logic — example: small perturbation
+        self.target_point = self.disturb_target_points(self.target_point, x_range=(-5.0, 5.0), y_range=(-5.0, 5.0), yaw_range=(-45.0, 45.0))
+        print(f"[CarlaDataset] Relabeled parking goals for epoch {epoch}")
+
+    def disturb_target_points(self, target_point, x_range=(-1.0, 1.0), y_range=(-1.0, 1.0), yaw_range=(-10.0, 10.0)):
+        """
+        Adds uniform noise to (x, y, yaw_deg).
+        
+        Parameters:
+            target_point: numpy array of shape (N, 3)
+            x_range, y_range: noise range in meters
+            yaw_range: noise range in degrees
+        
+        Returns:
+            disturbed_points: numpy array of same shape
+        """
+        noise_x = np.random.uniform(*x_range, size=(target_point.shape[0], 1)).astype(np.float32)
+        noise_y = np.random.uniform(*y_range, size=(target_point.shape[0], 1)).astype(np.float32)
+        noise_yaw = np.random.uniform(*yaw_range, size=(target_point.shape[0], 1)).astype(np.float32)
+
+        noise = np.concatenate([noise_x, noise_y, noise_yaw], axis=1)
+        disturbed = target_point + noise
+        return disturbed
+
     def __len__(self):
         return len(self.front)
 
