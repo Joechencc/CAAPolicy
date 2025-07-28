@@ -895,7 +895,7 @@ class ParkingAgent:
         ax_bev.axis('off')
         ax_bev.set_title('seg_bev(output)', fontsize=10)
         ax_bev.imshow(rotated_grid_image)
-        ax_bev.imshow(rotated_seg_bev, alpha=0.6)
+        ax_bev.imshow(rotated_seg_bev, alpha=0.6, vmin=0, vmax=255)
 
         plt.pause(0.1)
         plt.clf()

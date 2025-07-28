@@ -510,6 +510,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 parking_goal = [data['x'], data['y'], data['yaw']]
                 parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
+            print("I am here.")
         #
         # plt.figure(figsize=(10, 8))
         #
