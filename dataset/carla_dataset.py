@@ -265,6 +265,60 @@ def add_raw_control(data, throttle_brake, steer, reverse):
     steer.append(data['Steer'])
     reverse.append(int(data['Reverse']))
 
+def compute_shaped_rtg_with_terminal_bonus(
+    target_points,
+    x_thresh=1.0,
+    y_thresh=0.6,
+    theta_thresh=10.0,
+    step_goal_bonus=5.0,
+    terminal_bonus=300.0,
+    w_x=1.0,
+    w_y=1.0,
+    w_theta=0.1,
+):
+    """
+    target_points: list or np.array of shape (T, 3)
+    Returns:
+        rewards: (T,)
+        return_to_go: (T,)
+    """
+    T = len(target_points)
+    target_points = np.array(target_points)
+    final_x, final_y, final_theta = target_points[-1]
+
+    def angle_diff(a, b):
+        diff = a - b
+        return (diff + 180) % 360 - 180
+
+    rewards = []
+    for i in range(T):
+        x, y, theta = target_points[i]
+        dx = abs(x - final_x)
+        dy = abs(y - final_y)
+        dtheta = abs(angle_diff(theta, final_theta))
+
+        # reward shaping
+        reward = - (w_x * dx + w_y * dy + w_theta * dtheta)
+
+        # goal proximity bonus
+        in_goal_range = dx <= x_thresh and dy <= y_thresh and dtheta <= theta_thresh
+        if in_goal_range:
+            if i == T - 1:
+                reward += terminal_bonus
+            else:
+                reward += step_goal_bonus
+
+        rewards.append(reward)
+
+    # Compute return-to-go
+    rtg = np.zeros_like(rewards)
+    running_return = 0.0
+    for t in reversed(range(T)):
+        running_return += rewards[t]
+        rtg[t] = running_return
+
+    return np.array(rewards), rtg
+
 
 class CarlaDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, is_train, config):
@@ -316,6 +370,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.reverse = []
 
         self.target_point = []
+        self.acc_return = []
 
         self.topdown = []
 
@@ -394,6 +449,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 all_tasks.append(task_path)
 
         for task_path in all_tasks:
+            pose_episode = []
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
                 # collect data at current frame
@@ -510,7 +566,13 @@ class CarlaDataset(torch.utils.data.Dataset):
                 parking_goal = [data['x'], data['y'], data['yaw']]
                 parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
-            print("I am here.")
+                pose_episode.append(parking_goal)
+
+            rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=5.0,
+                                                                    terminal_bonus=300.0, w_x=0.3, w_y=0.3, w_theta=0.05)
+            self.acc_return.append(rtg)
+
+
         #
         # plt.figure(figsize=(10, 8))
         #
@@ -574,6 +636,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
         self.target_point = np.array(self.target_point).astype(np.float32)
+        self.acc_return = np.hstack(self.acc_return).astype(np.float32)
 
 
         logger.info('Preloaded {} sequences', str(len(self.front)))
