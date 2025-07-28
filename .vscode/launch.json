@@ -12,9 +12,9 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             // For training
-            // "args": ["--config", "./config/dino_training.yaml"]
+            "args": ["--config", "./config/dino_training.yaml"]
             // For testing
-            "args": ["--model_config_path", "./config/dino_training.yaml", "--model_path", "./ckpt/dinov2_vitb14_reg_freezing/E2EParking-epoch=24-val_loss=2.05.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "False", "--eva_epochs", "1000"]
+            // "args": ["--model_config_path", "./config/dino_training.yaml", "--model_path", "./ckpt/dinov2_vitb14_reg_freezing/E2EParking-epoch=24-val_loss=2.05.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "False", "--eva_epochs", "1000"]
         }
     ]
 }
