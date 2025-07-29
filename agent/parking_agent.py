@@ -895,7 +895,7 @@ class ParkingAgent:
         ax_bev.axis('off')
         ax_bev.set_title('seg_bev(output)', fontsize=10)
         ax_bev.imshow(rotated_grid_image)
-        ax_bev.imshow(rotated_seg_bev, alpha=0.6)
+        ax_bev.imshow(rotated_seg_bev, alpha=0.6, vmin=0, vmax=255)
 
         plt.pause(0.1)
         plt.clf()
@@ -908,3 +908,127 @@ class ParkingAgent:
             'reverse': self.trans_control.reverse,
         }
         return control
+
+class ParkingAgentRL(ParkingAgent):
+    def __init__(self, network_evaluator: NetworkEvaluator, args):
+        super().__init__(network_evaluator, args)
+        self.process_frequency = 3
+        
+    def tick(self):
+
+        if self.net_eva.agent_need_init:
+            self.init_agent()
+            self.net_eva.agent_need_init = False
+
+        self.step += 1
+
+        # stop 1s for new eva
+        if self.step < 30:
+            self.player.apply_control(carla.VehicleControl())
+            self.player.set_transform(self.net_eva.ego_transform)
+            return None
+
+        if self.step % self.process_frequency == 0:
+            data_frame = self.world.sensor_data_frame
+
+            if not data_frame:
+                return None
+
+            vehicle_transform = data_frame['veh_transfrom']
+            imu_data = data_frame['imu']
+
+            data = self.get_model_data(data_frame)
+            
+            self.gt_traj.append(self.ego_position)
+            self.track_traj.append(deepcopy(self.ego_xy))
+            self.dynamic_traj.append(deepcopy(self.ego_xy_dynamic))
+
+            if self.draw_img:
+                if self.step % 200 == 0:
+                    ##########
+                    x_gt = [p[0] for p in self.gt_traj]
+                    y_gt = [p[1] for p in self.gt_traj]
+                    x_track = [p[0] for p in self.track_traj]
+                    y_track = [p[1] for p in self.track_traj]
+                    x_dynamic = [p[0].item() for p in self.dynamic_traj]
+                    y_dynamic = [p[1].item() for p in self.dynamic_traj]
+
+                    # Create an isolated figure
+                    fig, ax = plt.subplots(figsize=(6, 6))
+
+                    ax.plot(x_gt, y_gt, 'ro-', label='GT', linewidth=1.5, markersize=3, zorder=1)
+                    ax.plot(x_track, y_track, 'bs--', label='Track', linewidth=1.5, markersize=3, zorder=2)
+                    ax.plot(x_dynamic, y_dynamic, 'g^:', label='Dynamic', linewidth=1.5, markersize=3, zorder=3)
+
+                    ax.set_xlabel('X')
+                    ax.set_ylabel('Y')
+                    ax.set_title('Trajectory Plot')
+                    ax.legend()
+                    ax.grid(True)
+                    ax.axis('equal')
+                    fig.tight_layout()
+
+                    # Ensure directory exists
+                    # os.makedirs(self.save_dir, exist_ok=True)
+                    save_path = os.path.join('trajectory.png')
+                    fig.savefig(save_path, dpi=300)
+
+                    # Optional: Comment out if running in batch/headless mode
+                    # plt.show()
+
+                    # Clean up
+                    plt.close(fig)
+
+            self.model.eval()
+
+            start_time = time.time()
+
+            pred_controls, pred_waypoints, pred_segmentation, _, target_bev, fuse_feature, pred_tgt_logits = self.model.predict_control_logits(data)
+
+            end_time = time.time()
+
+            self.net_eva.inference_time.append(end_time - start_time)
+
+            self.save_prev_target(pred_segmentation)
+            control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
+
+            self.trans_control.throttle = control_signal[0]
+            self.trans_control.brake = control_signal[1]
+            self.trans_control.steer = control_signal[2]
+            self.trans_control.reverse = control_signal[3]
+
+            self.speed_limit(data_frame)
+
+            if self.show_eva_imgs:
+                self.grid_image, self.atten_avg = self.save_atten_avg_map(data)
+                self.save_seg_img(pred_segmentation)
+                self.save_target_bev_img(target_bev)
+                self.display_imgs()
+            self.save_output.clear()
+
+            # import pdb; pdb.set_trace()
+            # draw waypoint WP1, WP2, WP3, WP4
+            for i in range(0,4):
+                #waypoint : [x,y,yaw] in egocentric
+                waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                #convert to world frame
+                waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+                waypoint[-1] = 0.3 #z=0.3
+                location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
+                # self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+                #                                     color=carla.Color(255, 0, 0))
+
+            self.prev_xy_thea = [vehicle_transform.location.x,
+                                 vehicle_transform.location.y,
+                                 imu_data.compass if np.isnan(imu_data.compass) else 0]
+
+            self.player.apply_control(self.trans_control)
+
+            return fuse_feature, pred_controls, pred_tgt_logits
+
+        self.player.apply_control(self.trans_control)
+
+        return None
+
+        
+

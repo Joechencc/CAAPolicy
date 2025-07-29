@@ -6,7 +6,7 @@ parking_model:
   log_every_n_steps: 5
   check_val_every_n_epoch: 1
 
-  epochs: 26
+  epochs: 30 # 26
   learning_rate: 0.0001
   weight_decay: 0.0001
   batch_size: 16 # 16
@@ -49,8 +49,8 @@ parking_model:
 
 
   # transformer decoder
-  tf_de_dim: 264
-  tf_de_heads: 6
+  tf_de_dim: 267 # 264
+  tf_de_heads: 3 # 6
   tf_de_layers: 4
   tf_de_dropout: 0.05
   tf_de_tgt_dim: 15

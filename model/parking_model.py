@@ -5,11 +5,15 @@ from tool.config import Configuration
 from model.bev_model import BevModel
 from model.bev_encoder import BevEncoder
 from model.feature_fusion import FeatureFusion
-from model.control_predict import ControlPredict
+from model.control_predict import ControlPredict, ControlPredictRL
 from model.segmentation_head import SegmentationHead
 from model.waypoint_predict import WaypointPredict
 from model.gradient_approx import GradientApproximator
 from model.film_modulator import FiLMModulator
+
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import math
 
 
 class ParkingModel(nn.Module):
@@ -26,9 +30,11 @@ class ParkingModel(nn.Module):
 
         self.control_predict = ControlPredict(self.cfg)
 
+        # self.control_predict_rl = ControlPredictRL(self.cfg)
+
         self.waypoint_predict = WaypointPredict(self.cfg)
 
-        self.grad_approx = GradientApproximator(self.cfg.bev_encoder_out_channel)
+        self.grad_approx = GradientApproximator(self.cfg.bev_encoder_out_channel+3)
 
         self.film_modulate = FiLMModulator(self.cfg)
 
@@ -91,9 +97,62 @@ class ParkingModel(nn.Module):
         fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
 
         # pred_segmentation = self.segmentation_head(fuse_feature)
-        pred_segmentation = self.segmentation_head(self.film_modulate(fuse_feature, target_point))
+        filmed_fuse_feature = self.film_modulate(fuse_feature, target_point)
+        # self.visualize_fused_feature(filmed_fuse_feature, method="pca")
+        pred_segmentation = self.segmentation_head(filmed_fuse_feature)
+
+        # Step 1: Downsample segmentation to 16x16
+        seg_down = F.interpolate(pred_segmentation, size=(16, 16), mode='bilinear', align_corners=False)  # [1, 3, 16, 16]
+        # Step 2: Rearrange segmentation to [1, 256, 3]
+        seg_down_flat = seg_down.permute(0, 2, 3, 1).reshape(pred_segmentation.shape[0], filmed_fuse_feature.shape[1], 3)  # [1, 256, 3]
+        # Step 3: Concatenate along the feature dimension
+        concat_feature = torch.cat([filmed_fuse_feature, seg_down_flat], dim=-1)  # [1, 256, 267]
+
+        return concat_feature, pred_segmentation, pred_depth, bev_target
+
+
+    def visualize_fused_feature(self, fused_feature: torch.Tensor, method: str = 'mean'):
+        """
+        Visualize a fused feature of shape (1, 256, 264) as a 2D image.
+
+        Args:
+            fused_feature (torch.Tensor): Tensor of shape [1, 256, 264]
+            method (str): Aggregation method across channels ('mean', 'max', 'pca', 'umap')
+        """
+        assert fused_feature.shape == (1, 256, 264), "Expected shape [1, 256, 264]"
         
-        return fuse_feature, pred_segmentation, pred_depth, bev_target
+        # Reshape to (16, 16, 264)
+        _, S, C = fused_feature.shape
+        H = W = int(math.sqrt(S))
+        feat_img = fused_feature.reshape(H, W, C)  # (16, 16, 264)
+        feat_flat = feat_img.reshape(-1, C).cpu().numpy()  # (256, 264)
+
+        # Reduce to 1D using different methods
+        if method == 'mean':
+            feat_vis = fused_feature.mean(dim=-1).reshape(H, W)
+        elif method == 'max':
+            feat_vis = fused_feature.max(dim=-1)[0].reshape(H, W)
+        elif method == 'pca':
+            from sklearn.decomposition import PCA
+            feat_pca = PCA(n_components=1).fit_transform(feat_flat)
+            feat_vis = torch.tensor(feat_pca).reshape(H, W)
+        elif method == 'umap':
+            from umap import UMAP
+            feat_umap = UMAP(n_components=1).fit_transform(feat_flat)
+            feat_vis = torch.tensor(feat_umap).reshape(H, W)
+        else:
+            raise ValueError("method must be one of ['mean', 'max', 'pca', 'umap']")
+
+        # Normalize to [0, 1]
+        feat_vis = (feat_vis - feat_vis.min()) / (feat_vis.max() - feat_vis.min() + 1e-8)
+
+        # Plot
+        plt.imshow(feat_vis.cpu().numpy(), cmap='viridis')
+        plt.title(f"Fused Feature ({method})")
+        plt.colorbar()
+        plt.axis('off')
+        plt.show()
+
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
@@ -101,10 +160,11 @@ class ParkingModel(nn.Module):
         #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
         #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
         # else:
-        fuse_feature_copy = fuse_feature.clone()
-        approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
+        fuse_feature.requires_grad_(True)
+        # fuse_feature_copy = fuse_feature.clone()
+        approx_grad = self.grad_approx(fuse_feature.transpose(1,2)).transpose(1,2)
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        pred_waypoint = self.waypoint_predict(fuse_feature_copy,data['gt_waypoint'].cuda())
+        pred_waypoint = self.waypoint_predict(fuse_feature, data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
 
@@ -114,9 +174,10 @@ class ParkingModel(nn.Module):
     #     pred_waypoint = self.waypoint_predict.predict(refined_fuse_feature_copy, pred_multi_waypoints)
     #     return pred_control, pred_waypoint
     def forward_twice(self, refined_feature, data):
-        refined_feature_copy = refined_feature.clone()
+        # refined_feature_copy = refined_feature.clone()
+        refined_feature.requires_grad_(True)
         pred_control = self.control_predict(refined_feature, data['gt_control'].cuda())
-        pred_waypoint = self.waypoint_predict(refined_feature_copy,data['gt_waypoint'].cuda())
+        pred_waypoint = self.waypoint_predict(refined_feature, data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint
         
@@ -129,36 +190,51 @@ class ParkingModel(nn.Module):
         approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_tgt_logits = []
 
+        # INFO: Original control
         for i in range(3):
             pred_control = self.control_predict.predict(approx_grad*fuse_feature, pred_multi_controls)
-            # pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
-            # pred_tgt_logits.append(pred_controls_f)
-            # grad = torch.autograd.grad(torch.cat(pred_tgt_logits).mean(), fuse_feature, create_graph=True)[0]
-            # refined_feature = approx_grad*fuse_feature
-            # pred_control_2, pred_waypoint_2 = self.forward_eval_twice(refined_feature, pred_multi_controls, pred_multi_waypoints)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
-            # pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint_2], dim=1)
-        # Compute gradients of the last pred_control w.r.t. fuse_feature
-        # grads_throttle = torch.autograd.grad(
-        #     outputs=pred_tgt_logits[0],
-        #     inputs=fuse_feature,
-        #     retain_graph=True,
-        #     create_graph=True  # if higher-order grads needed later
-        # )
-        # grads_steer = torch.autograd.grad(
-        #     outputs=pred_tgt_logits[1],
-        #     inputs=fuse_feature,
-        #     retain_graph=True,
-        #     create_graph=True  # if higher-order grads needed later
-        # )
-        # grads_reverse = torch.autograd.grad(
-        #     outputs=pred_tgt_logits[2],
-        #     inputs=fuse_feature,
-        #     retain_graph=True,
-        #     create_graph=True  # if higher-order grads needed later
-        # )
+
+        # INFO: New Control
+        # logits = self.control_policy_rl(approx_grad*fuse_feature)  # [1, 3, 200]
+        # dists = [torch.distributions.Categorical(logits=logits[:, i]) for i in range(3)]
+        # actions = torch.stack([d.sample() for d in dists], dim=1)  # [1, 3]
+        # pred_multi_controls = torch.cat([pred_multi_controls, actions], dim=1)
 
         for i in range(12):
             pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
             pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
         return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target
+
+    def predict_control_logits(self, data):
+        # with torch.enable_grad():
+        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
+        pred_multi_controls = data['gt_control'].cuda()
+        pred_multi_waypoints = data['gt_waypoint'].cuda()
+        fuse_feature_copy = fuse_feature.clone()
+        approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
+        pred_tgt_logits = []
+
+        for i in range(3):
+            pred_control, pred_controls_f = self.control_predict.predict_logits(approx_grad*fuse_feature, pred_multi_controls)
+            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+            pred_tgt_logits.append(pred_controls_f)
+        pred_tgt_logits = torch.concat(pred_tgt_logits, dim=0).cuda()
+
+        for i in range(12):
+            pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
+            pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
+
+        return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target, fuse_feature, pred_tgt_logits
+
+    def fuse_feature_to_logits(self, fuse_feature, pred_multi_controls):
+        approx_grad = self.grad_approx(fuse_feature.transpose(1,2)).transpose(1,2)
+        pred_tgt_logits = []
+        # for i in range(3):
+        pred_control, pred_controls_f = self.control_predict.predict_logits(approx_grad*fuse_feature, pred_multi_controls)
+        # pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+        # pred_tgt_logits.append(pred_controls_f.cuda())
+        # pred_tgt_logits = torch.concat(pred_tgt_logits, dim=0).cuda()
+        return pred_controls_f
+
+
