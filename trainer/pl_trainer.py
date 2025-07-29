@@ -95,36 +95,36 @@ class ParkingTrainingModule(pl.LightningModule):
         pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
 
         control_loss = self.control_loss_func(pred_control, batch)
-        # loss_dict.update({
-        #     "control_loss": control_loss
-        # })
+        loss_dict.update({
+            "control_loss": control_loss*0.0 if self.current_epoch < self.perception_training_steps else control_loss
+        })
 
         waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-        # loss_dict.update({
-        #     "waypoint_loss": waypoint_loss
-        # })
+        loss_dict.update({
+            "waypoint_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss
+        })
         # grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
-        grads = []
-        for b in range(pred_control.shape[0]): # B,12,256
-            grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
-            grads.append(grad[b])
-        grad_gt = torch.stack(grads, dim=0)
-        refined_feature = approx_grad*fuse_feature
-        pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
-        control_loss_2 = self.control_loss_func(pred_control_2, batch)
-        loss_dict.update({
-            "control_loss": control_loss_2*0.0 if self.current_epoch < self.perception_training_steps else control_loss_2
-        })
+        # grads = []
+        # for b in range(pred_control.shape[0]): # B,12,256
+        #     grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
+        #     grads.append(grad[b])
+        # grad_gt = torch.stack(grads, dim=0)
+        # refined_feature = approx_grad*fuse_feature
+        # pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
+        # control_loss_2 = self.control_loss_func(pred_control_2, batch)
+        # loss_dict.update({
+        #     "control_loss": control_loss_2*0.0 if self.current_epoch < self.perception_training_steps else control_loss_2
+        # })
 
-        grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
-        loss_dict.update({
-            "grad_loss": grad_loss*0.0 if self.current_epoch < self.perception_training_steps else grad_loss
-        })
+        # grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
+        # loss_dict.update({
+        #     "grad_loss": grad_loss*0.0 if self.current_epoch < self.perception_training_steps else grad_loss
+        # })
 
-        waypoint_loss_2 = self.waypoint_loss_func(pred_waypoint_2, batch)
-        loss_dict.update({
-            "waypoint_loss": waypoint_loss_2*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss_2
-        })
+        # waypoint_loss_2 = self.waypoint_loss_func(pred_waypoint_2, batch)
+        # loss_dict.update({
+        #     "waypoint_loss": waypoint_loss_2*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss_2
+        # })
 
         segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         loss_dict.update({
@@ -152,25 +152,25 @@ class ParkingTrainingModule(pl.LightningModule):
 
             control_loss = self.control_loss_func(pred_control, batch)
             waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-            grads = []
-            for b in range(pred_control.shape[0]):
-                grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
-                grads.append(grad[b])
-            grad_gt = torch.stack(grads, dim=0)
+            # grads = []
+            # for b in range(pred_control.shape[0]):
+            #     grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
+            #     grads.append(grad[b])
+            # grad_gt = torch.stack(grads, dim=0)
             # grad_gt = torch.autograd.grad(pred_control[:,1:13,:].mean(), fuse_feature, create_graph=True)[0]
-            refined_feature = approx_grad*fuse_feature
-        pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
+        #     refined_feature = approx_grad*fuse_feature
+        # pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
 
-        acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control_2, batch)
+        acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
         val_loss_dict.update({
             "acc_steer_val_loss": acc_steer_val_loss*0.0 if self.current_epoch < self.perception_training_steps else acc_steer_val_loss,
             "reverse_val_loss": reverse_val_loss*0.0 if self.current_epoch < self.perception_training_steps else reverse_val_loss
         })
-        grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
-        val_loss_dict.update({
-            "grad_loss": grad_loss*0.0 if self.current_epoch < self.perception_training_steps else grad_loss
-        })
-        waypoint_loss = self.waypoint_loss_func(pred_waypoint_2, batch)
+        # grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
+        # val_loss_dict.update({
+        #     "grad_loss": grad_loss*0.0 if self.current_epoch < self.perception_training_steps else grad_loss
+        # })
+        waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
         val_loss_dict.update({
             "waypoint_val_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss,
         })

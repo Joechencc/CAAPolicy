@@ -589,7 +589,7 @@ class ParkingAgent:
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
 
-        # self.player.apply_control(self.trans_control)
+        self.player.apply_control(self.trans_control)
 
     def speed_limit(self, data_frame):
         # if vehicle stops at initialization, give throttle until Gear turns to 1
