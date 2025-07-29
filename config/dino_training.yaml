@@ -1,6 +1,6 @@
 parking_model:
   # train
-  data_dir: '/home/intern2025/research/ParkWithUncertainty'
+  data_dir: '/data_ssd/'
   log_dir: './log/'
   checkpoint_dir: './ckpt'
   log_every_n_steps: 5
