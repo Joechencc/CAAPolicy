@@ -320,6 +320,19 @@ def compute_shaped_rtg_with_terminal_bonus(
     return np.array(rewards), rtg
 
 
+
+def make_rtg_windowed_array(rtg, window_size=4):
+    rtg = np.asarray(rtg)
+    T = len(rtg)
+    
+    # Pad the end with the last value
+    padded = np.concatenate([rtg, np.full((window_size - 1,), rtg[-1])])
+    
+    # Create the (T, window_size) array
+    rtg_windowed = np.stack([padded[i:i + window_size] for i in range(T)], axis=0)
+    return rtg_windowed  # shape: (220, 4)
+
+
 class CarlaDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, is_train, config):
         super(CarlaDataset, self).__init__()
@@ -570,7 +583,9 @@ class CarlaDataset(torch.utils.data.Dataset):
 
             rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=5.0,
                                                                     terminal_bonus=300.0, w_x=0.3, w_y=0.3, w_theta=0.05)
-            self.acc_return.append(rtg)
+            
+            rtg_windowed = make_rtg_windowed_array(rtg)
+            self.acc_return.append(rtg_windowed)
 
 
         #
@@ -636,7 +651,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
         self.target_point = np.array(self.target_point).astype(np.float32)
-        self.acc_return = np.hstack(self.acc_return).astype(np.float32)
+        self.acc_return = np.vstack(self.acc_return).astype(np.float32)
 
 
         logger.info('Preloaded {} sequences', str(len(self.front)))
@@ -723,6 +738,9 @@ class CarlaDataset(torch.utils.data.Dataset):
         data['delta_x'] = torch.from_numpy(self.delta_x_values[index])
         data['delta_y'] = torch.from_numpy(self.delta_y_values[index])
         data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
+
+        # accumulated reward
+        data['acc_rew'] = torch.from_numpy(self.acc_return[index])
 
 
         return data
