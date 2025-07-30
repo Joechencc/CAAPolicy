@@ -581,11 +581,13 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.target_point.append(parking_goal)
                 pose_episode.append(parking_goal)
 
-            rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=5.0,
-                                                                    terminal_bonus=300.0, w_x=0.3, w_y=0.3, w_theta=0.05)
-            
-            rtg_windowed = make_rtg_windowed_array(rtg)
-            self.acc_return.append(rtg_windowed)
+            if len(pose_episode) != 0:
+                # print("pose_episode len is: ", len(pose_episode))
+                rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=5.0,
+                                                                        terminal_bonus=300.0, w_x=0.3, w_y=0.3, w_theta=0.05)
+                
+                rtg_windowed = make_rtg_windowed_array(rtg)
+                self.acc_return.append(rtg_windowed)
 
 
         #
