@@ -12,9 +12,9 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             // For training
-            // "args": ["--config", "./config/dino_training.yaml", "--model_path", "./ckpt/dinov2_vib14_relabel/E2EParking-epoch=25-val_loss=1.30.ckpt"]
+            // "args": ["--config", "./config/dino_training.yaml", "--model_path", "./ckpt/dinov2_vib14_perception_only_relabel/E2EParking-epoch=25-val_loss=1.30.ckpt"]
             // For testing
-            "args": ["--model_config_path", "./config/dino_training.yaml", "--model_path", "./ckpt/dinov2_vib14_relabel/E2EParking-epoch=34-val_loss=2.34.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
+            "args": ["--model_config_path", "./config/dino_training.yaml", "--model_path", "./ckpt/dinov2_vib14_relabel/E2EParking-epoch=27-val_loss=2.73.ckpt", "--model_path_dynamic", "./milestone/dynamic_control_speed.ckpt", "--show_eva_imgs", "True"]
         }
     ]
 }
