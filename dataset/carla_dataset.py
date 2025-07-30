@@ -377,12 +377,14 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.speed = []
         self.acc_x = []
         self.acc_y = []
+        self.ego_motion_seq = []
 
         self.throttle_brake = []
         self.steer = []
         self.reverse = []
 
         self.target_point = []
+        self.target_point_seq = []
         self.acc_return = []
 
         self.topdown = []
@@ -504,6 +506,14 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.acc_x.append(data['acc_x'])
                 self.acc_y.append(data['acc_y'])
 
+                # construct ego motion seq
+                ego_motion_seq = []
+                for i in range(self.cfg.future_frame_nums):
+                    with open(task_path + f"/measurements/{str(frame + i).zfill(4)}.json", "r") as read_file:
+                        data = json.load(read_file)
+                        ego_motion_seq.append([data['speed'], data['acc_x'], data['acc_y']])
+                self.ego_motion_seq.append(ego_motion_seq)
+
                 # control
                 controls = []
                 throttle_brakes = []
@@ -581,8 +591,19 @@ class CarlaDataset(torch.utils.data.Dataset):
                 self.target_point.append(parking_goal)
                 pose_episode.append(parking_goal)
 
-            rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=5.0,
-                                                                    terminal_bonus=300.0, w_x=0.3, w_y=0.3, w_theta=0.05)
+                target_point_seq = []
+                for i in range(self.cfg.future_frame_nums):
+                    with open(task_path + f"/measurements/{str(frame + i).zfill(4)}.json", "r") as m_file, open(task_path + f"/parking_goal/0001.json", "r") as p_file:
+                        m_data, p_data = json.load(m_file), json.load(p_file)
+                        ego_trans = carla.Transform(carla.Location(x=m_data['x'], y=m_data['y'], z=m_data['z']), carla.Rotation(yaw=m_data['yaw'], pitch=m_data['pitch'], roll=m_data['roll']))
+                        parking_goal = [p_data['x'], p_data['y'], p_data['yaw']]
+                        parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                        target_point_seq.append(parking_goal)
+                self.target_point_seq.append(target_point_seq)
+
+
+            rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=0.05,
+                                                                    terminal_bonus=3.0, w_x=0.003, w_y=0.003, w_theta=0.0005)
             
             rtg_windowed = make_rtg_windowed_array(rtg)
             self.acc_return.append(rtg_windowed)
@@ -651,6 +672,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
         self.target_point = np.array(self.target_point).astype(np.float32)
+        self.ego_motion_seq = np.array(self.ego_motion_seq).astype(np.float32)
+        self.target_point_seq = np.array(self.target_point_seq).astype(np.float32)
         self.acc_return = np.vstack(self.acc_return).astype(np.float32)
 
 
@@ -722,6 +745,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         speed = self.speed[index]
         ego_motion = np.column_stack((speed, self.acc_x[index], self.acc_y[index]))
         data['ego_motion'] = torch.from_numpy(ego_motion)
+        data['ego_motion_seq'] = torch.from_numpy(self.ego_motion_seq[index])
+        data['target_point_seq'] = torch.from_numpy(self.target_point_seq[index]) 
 
         # gt control token
         data['gt_control'] = torch.from_numpy(self.control[index])
