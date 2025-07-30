@@ -161,10 +161,10 @@ class ParkingModel(nn.Module):
         #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
         # else:
         fuse_feature.requires_grad_(True)
-        # fuse_feature_copy = fuse_feature.clone()
-        approx_grad = self.grad_approx(fuse_feature.transpose(1,2)).transpose(1,2)
+        fuse_feature_copy = fuse_feature.clone()
+        approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        pred_waypoint = self.waypoint_predict(fuse_feature, data['gt_waypoint'].cuda())
+        pred_waypoint = self.waypoint_predict(fuse_feature_copy, data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
 
@@ -174,10 +174,10 @@ class ParkingModel(nn.Module):
     #     pred_waypoint = self.waypoint_predict.predict(refined_fuse_feature_copy, pred_multi_waypoints)
     #     return pred_control, pred_waypoint
     def forward_twice(self, refined_feature, data):
-        # refined_feature_copy = refined_feature.clone()
         refined_feature.requires_grad_(True)
+        refined_feature_copy = refined_feature.clone()
         pred_control = self.control_predict(refined_feature, data['gt_control'].cuda())
-        pred_waypoint = self.waypoint_predict(refined_feature, data['gt_waypoint'].cuda())
+        pred_waypoint = self.waypoint_predict(refined_feature_copy, data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint
         
