@@ -17,7 +17,7 @@ parking_model:
   # validation_map: "/scratch/rs9193/dynamics_1/" #/scratch/rs9193/dynamics_1/ # "/scratch/rs9193/Town_Opt_1000_Val"
   future_frame_nums: 4
   hist_frame_nums: 10
-  token_nums: 204
+  token_nums: 204 # 204
   image_crop: 294
 
   # bev encoder

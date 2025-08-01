@@ -189,12 +189,11 @@ class ParkingModel(nn.Module):
         pred_multi_controls = data['gt_control'].cuda()
         pred_multi_waypoints = data['gt_waypoint'].cuda()
         fuse_feature_copy = fuse_feature.clone()
-        approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         pred_tgt_logits = []
 
         # INFO: Original control
         for i in range(3):
-            pred_control = self.control_predict.predict(approx_grad*fuse_feature, pred_multi_controls)
+            pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls, data)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
 
         # INFO: New Control
@@ -204,7 +203,7 @@ class ParkingModel(nn.Module):
         # pred_multi_controls = torch.cat([pred_multi_controls, actions], dim=1)
 
         for i in range(12):
-            pred_waypoint = self.waypoint_predict.predict(approx_grad*fuse_feature_copy, pred_multi_waypoints)
+            pred_waypoint = self.waypoint_predict.predict(fuse_feature_copy, pred_multi_waypoints)
             pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
         return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target
 

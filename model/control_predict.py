@@ -59,6 +59,12 @@ class ControlPredict(nn.Module):
     #     pred_controls = self.output(pred_controls)
     #     return pred_controls
 
+    def expand_and_pad(self, x, repeated_num = 3):
+        x_rep = x.repeat_interleave(repeated_num, dim=1)   # [B, 12, D]
+        x_start = x_rep[:, 0:1, :]              # [B, 1, D]
+        x_end = x_rep[:, -1:, :]                # [B, 1, D]
+        return torch.cat([x_start, x_rep, x_end], dim=1)  # [B, 14, D]
+
     def forward(self, encoder_out, batch):
         B = batch['gt_control'].shape[0]
 
@@ -71,16 +77,12 @@ class ControlPredict(nn.Module):
         # ---------------------------------------------------
         # Expand step-wise inputs: 4 → 12 → insert start & end
         # ---------------------------------------------------
-        def expand_and_pad(x):
-            x_rep = x.repeat_interleave(3, dim=1)   # [B, 12, D]
-            x_start = x_rep[:, 0:1, :]              # [B, 1, D]
-            x_end = x_rep[:, -1:, :]                # [B, 1, D]
-            return torch.cat([x_start, x_rep, x_end], dim=1)  # [B, 14, D]
 
-        target_point_seq = expand_and_pad(batch['target_point_seq'])   # [B, 14, 3]
-        ego_motion_full = expand_and_pad(batch['ego_motion_seq'])      # [B, 14, 3]
+
+        target_point_seq = self.expand_and_pad(batch['target_point_seq'])   # [B, 14, 3]
+        ego_motion_full = self.expand_and_pad(batch['ego_motion_seq'])      # [B, 14, 3]
         acc_rew_seq = batch['acc_rew'].unsqueeze(-1)                   # [B, 4, 1]
-        acc_rew_full = expand_and_pad(acc_rew_seq)                     # [B, 14, 1]
+        acc_rew_full = self.expand_and_pad(acc_rew_seq)                     # [B, 14, 1]
 
         # ---------------------------------------------------
         # Encode control tokens (discrete), project continuous
@@ -111,15 +113,39 @@ class ControlPredict(nn.Module):
 
         return pred_controls     # [B, 14, vocab_size]
 
+    # original predict
+    # def predict(self, encoder_out, tgt):
+    #     length = tgt.size(1)
+    #     padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
+    #     tgt = torch.cat([tgt, padding], dim=1)
 
-    def predict(self, encoder_out, tgt):
-        length = tgt.size(1)
-        padding = torch.ones(tgt.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
-        tgt = torch.cat([tgt, padding], dim=1)
+    #     tgt_mask, tgt_padding_mask = self.create_mask(tgt)
 
-        tgt_mask, tgt_padding_mask = self.create_mask(tgt)
+    #     tgt_embedding = self.embedding(tgt)
+    #     tgt_embedding = tgt_embedding + self.pos_embed
 
-        tgt_embedding = self.embedding(tgt)
+    #     pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
+    #     pred_controls_f = self.output(pred_controls)[:, length - 1, :]
+
+    #     pred_controls = torch.softmax(pred_controls_f, dim=-1)
+    #     pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
+    #     return pred_controls
+
+    def predict(self, encoder_out, pred_control, batch):
+        length = pred_control.size(1)
+        padding = torch.ones(pred_control.size(0), self.cfg.tf_de_tgt_dim - length - 1).fill_(self.pad_idx).long().to('cuda')
+        pred_control = torch.cat([pred_control, padding], dim=1)
+
+        tgt_mask, tgt_padding_mask = self.create_mask(pred_control)
+
+        target_point_seq = self.expand_and_pad(batch['target_point'].unsqueeze(1), repeated_num=12)   # [B, 14, 3]
+        ego_motion_full = self.expand_and_pad(batch['ego_motion'], repeated_num=12)      # [B, 14, 3]                  # [B, 4, 1]
+        acc_rew_full = self.expand_and_pad(torch.Tensor([[-2.0]]).unsqueeze(1), repeated_num=12)                     # [B, 14, 1]
+
+        continuous_part = torch.cat([target_point_seq, ego_motion_full, acc_rew_full], dim=-1).cuda()
+        control_embed = self.embedding(pred_control)  # [B, 14, control_emb_dim]
+        cont_proj = self.input_proj(continuous_part)                    # [B, 14, d_model - control_emb_dim]
+        tgt_embedding = torch.cat([cont_proj, control_embed], dim=-1)   # [B, 14, d_model]
         tgt_embedding = tgt_embedding + self.pos_embed
 
         pred_controls = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
@@ -128,6 +154,7 @@ class ControlPredict(nn.Module):
         pred_controls = torch.softmax(pred_controls_f, dim=-1)
         pred_controls = pred_controls.argmax(dim=-1).view(-1, 1)
         return pred_controls
+
 
     def predict_logits(self, encoder_out, tgt):
         length = tgt.size(1)

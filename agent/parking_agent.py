@@ -887,9 +887,9 @@ class ParkingAgent:
         # Plot
         ax_atten = plt.subplot(rows, cols, 7)
         ax_atten.axis('off')
-        ax_atten.set_title('atten(output)', fontsize=10)
+        ax_atten.set_title('seg_gt(output)', fontsize=10)
         ax_atten.imshow(rotated_grid_image)
-        ax_atten.imshow(rotated_atten, alpha=0.6, cmap='rainbow')
+        # ax_atten.imshow(rotated_atten, alpha=0.6, cmap='rainbow')
 
         ax_bev = plt.subplot(rows, cols, 8)
         ax_bev.axis('off')
