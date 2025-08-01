@@ -83,11 +83,13 @@ class ParkingTrainingModule(pl.LightningModule):
                 pass
 
         else:
-            freeze_module(self.parking_model.bev_model)
-            freeze_module(self.parking_model.bev_encoder)
-            freeze_module(self.parking_model.feature_fusion)
-            freeze_module(self.parking_model.film_modulate)
-            freeze_module(self.parking_model.segmentation_head)
+            print("Train perception with low lr and motion with normal lr.")
+            pass
+            # freeze_module(self.parking_model.bev_model)
+            # freeze_module(self.parking_model.bev_encoder)
+            # freeze_module(self.parking_model.feature_fusion)
+            # freeze_module(self.parking_model.film_modulate)
+            # freeze_module(self.parking_model.segmentation_head)
 
 
     def training_step(self, batch, batch_idx):
@@ -206,18 +208,28 @@ class ParkingTrainingModule(pl.LightningModule):
     def configure_optimizers(self):
         base_lr = self.cfg.learning_rate
         dino_lr = 0.1 * self.cfg.learning_rate  # ← add this to your config
+        perception_lr = 0.1 * self.cfg.learning_rate 
         weight_decay = self.cfg.weight_decay
 
         # Separate DINOv2 parameters (in DinoCamEncoder) and the rest
         dino_params = self.parking_model.bev_model.cam_encoder.parameters()
+
+        perception_params = (p for n, p in self.named_parameters() 
+        if n.startswith("parking_model.bev_model") or n.startswith("parking_model.bev_encoder") 
+        or n.startswith("parking_model.feature_fusion") or n.startswith("parking_model.film_modulate") 
+        or n.startswith("parking_model.segmentation_head"))
+
         other_params = (
             p for n, p in self.named_parameters()
-            if not n.startswith("parking_model.bev_model.cam_encoder")
+            if not (n.startswith("parking_model.bev_model") or n.startswith("parking_model.bev_encoder") 
+            or n.startswith("parking_model.feature_fusion") or n.startswith("parking_model.film_modulate") 
+            or n.startswith("parking_model.segmentation_head"))
         )
 
         # Parameter groups
         param_groups = [
-            {"params": dino_params, "lr": dino_lr, "weight_decay": weight_decay},
+            # {"params": dino_params, "lr": dino_lr, "weight_decay": weight_decay},
+            {"params": perception_params, "lr": perception_lr, "weight_decay": weight_decay},
             {"params": other_params, "lr": base_lr, "weight_decay": weight_decay},
         ]
 
