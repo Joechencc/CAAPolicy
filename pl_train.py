@@ -51,7 +51,7 @@ def train():
 
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
-    num_gpus = 1
+    num_gpus = 4
 
     torch.set_float32_matmul_precision('medium')
 

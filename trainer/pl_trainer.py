@@ -73,8 +73,8 @@ class ParkingTrainingModule(pl.LightningModule):
 
         if self.current_epoch < self.perception_training_steps:
             # Freeze backbone
-            for p in self.backbone.parameters():
-                p.requires_grad = False
+            # for p in self.backbone.parameters():
+            #     p.requires_grad = False
 
             if self.current_epoch % 3 != 0:
                 if hasattr(dataset, 'relabel_goals'):
