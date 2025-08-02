@@ -47,6 +47,8 @@ class Configuration:
     tf_en_bev_length = None
     tf_en_motion_length = None
 
+    tf_de_emb_dim = None
+    tf_de_proj_dim = None
     tf_de_dim = None
     tf_de_heads = None
     tf_de_layers = None
@@ -104,6 +106,8 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_en_bev_length = config['tf_en_bev_length']
     cfg.tf_en_motion_length = config['tf_en_motion_length']
 
+    cfg.tf_de_emb_dim = config['tf_de_emb_dim']
+    cfg.tf_de_proj_dim = config['tf_de_proj_dim']
     cfg.tf_de_dim = config['tf_de_dim']
     cfg.tf_de_heads = config['tf_de_heads']
     cfg.tf_de_layers = config['tf_de_layers']

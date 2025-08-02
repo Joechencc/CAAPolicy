@@ -79,8 +79,9 @@ class ParkingTrainingModule(pl.LightningModule):
             if self.current_epoch % 3 != 0:
                 if hasattr(dataset, 'relabel_goals'):
                     dataset.relabel_goals(self.current_epoch)
+                    print("Training with relabeled target.")
             else:
-                pass
+                print("Training with original target.")
 
         else:
             print("Train perception with low lr and motion with normal lr.")

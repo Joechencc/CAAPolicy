@@ -748,6 +748,7 @@ class ParkingAgent:
             seg_gt[seg_gt == 2] = 255
             data['segmentation'] = Image.fromarray(seg_gt)
         data["ego_trans"] = vehicle_transform
+        data["acc_rew"] = torch.Tensor([min(-10.0 + (3.0 - (-10.0)) / 200.0 * self.step, 3.0)])
         return data
 
     # def draw_waypoints(self, waypoints):

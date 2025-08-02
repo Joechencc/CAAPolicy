@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from timm.models.layers import trunc_normal_
 from tool.config import Configuration
-
+from .seg_encoder import SegmentationEncoder
 
 class ControlPredict(nn.Module):
     def __init__(self, cfg: Configuration):
@@ -11,14 +11,16 @@ class ControlPredict(nn.Module):
         self.cfg = cfg
         self.pad_idx = self.cfg.token_nums - 1
 
-        self.embedding = nn.Embedding(self.cfg.token_nums, self.cfg.tf_de_dim-45)
-        self.input_proj = nn.Sequential(nn.Linear(7, 128), nn.ReLU(), nn.Linear(128, 45))
+        self.embedding = nn.Embedding(self.cfg.token_nums, self.cfg.tf_de_emb_dim)
+        self.input_proj = nn.Sequential(nn.Linear(7, 128), nn.ReLU(), nn.Linear(128, self.cfg.tf_de_proj_dim))
         self.pos_drop = nn.Dropout(self.cfg.tf_de_dropout)
         self.pos_embed = nn.Parameter(torch.randn(1, self.cfg.tf_de_tgt_dim - 1, self.cfg.tf_de_dim) * .02)
 
         tf_layer = nn.TransformerDecoderLayer(d_model=self.cfg.tf_de_dim, nhead=self.cfg.tf_de_heads)
         self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
         self.output = nn.Linear(self.cfg.tf_de_dim, self.cfg.token_nums)
+
+        self.seg_encoder = SegmentationEncoder(in_channels=3, d_model=self.cfg.tf_de_dim, height=200, width=200)
 
         self.init_weights()
 
@@ -108,6 +110,8 @@ class ControlPredict(nn.Module):
         # tgt_mask = self.generate_causal_mask(14).to(tgt_embedding.device)  # [14, 14]
         tgt_mask, tgt_padding_mask = self.create_mask(gt_control)
 
+        encoder_out = self.seg_encoder(encoder_out)
+
         decoder_out = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
         pred_controls = self.output(decoder_out)  # [14, B, vocab_size]
 
@@ -140,7 +144,7 @@ class ControlPredict(nn.Module):
 
         target_point_seq = self.expand_and_pad(batch['target_point'].unsqueeze(1), repeated_num=12)   # [B, 14, 3]
         ego_motion_full = self.expand_and_pad(batch['ego_motion'], repeated_num=12)      # [B, 14, 3]                  # [B, 4, 1]
-        acc_rew_full = self.expand_and_pad(torch.Tensor([[-2.0]]).unsqueeze(1), repeated_num=12)                     # [B, 14, 1]
+        acc_rew_full = self.expand_and_pad(batch['acc_rew'].unsqueeze(0).unsqueeze(0), repeated_num=12)                     # [B, 14, 1]
 
         continuous_part = torch.cat([target_point_seq, ego_motion_full, acc_rew_full], dim=-1).cuda()
         control_embed = self.embedding(pred_control)  # [B, 14, control_emb_dim]

@@ -38,6 +38,8 @@ class ParkingModel(nn.Module):
 
         self.film_modulate = FiLMModulator(self.cfg)
 
+        # self.seg_modulate = 
+
         self.segmentation_head = SegmentationHead(self.cfg)
         
     def adjust_target_bev(self, bev_feature, target_point):
@@ -165,8 +167,8 @@ class ParkingModel(nn.Module):
         approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         # original control_predict
         # pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        pred_control = self.control_predict(fuse_feature, data)
-        pred_waypoint = self.waypoint_predict(fuse_feature_copy, data['gt_waypoint'].cuda())
+        pred_control = self.control_predict(pred_segmentation, data)
+        pred_waypoint = self.waypoint_predict(pred_segmentation, data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
 
@@ -193,7 +195,7 @@ class ParkingModel(nn.Module):
 
         # INFO: Original control
         for i in range(3):
-            pred_control = self.control_predict.predict(fuse_feature, pred_multi_controls, data)
+            pred_control = self.control_predict.predict(pred_segmentation, pred_multi_controls, data)
             pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
 
         # INFO: New Control
@@ -203,7 +205,7 @@ class ParkingModel(nn.Module):
         # pred_multi_controls = torch.cat([pred_multi_controls, actions], dim=1)
 
         for i in range(12):
-            pred_waypoint = self.waypoint_predict.predict(fuse_feature_copy, pred_multi_waypoints)
+            pred_waypoint = self.waypoint_predict.predict(pred_segmentation, pred_multi_waypoints)
             pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
         return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target
 

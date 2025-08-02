@@ -1,0 +1,46 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class SegmentationEncoder(nn.Module):
+    def __init__(self, in_channels=3, d_model=256, height=200, width=200):
+        super().__init__()
+        self.d_model = d_model
+        self.height = height
+        self.width = width
+
+        # Project from segmentation logits (C channels) to d_model feature size
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, 64, kernel_size=5, stride=2, padding=2),  # [B, 64, 100, 100]
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2), # [B, 128, 50, 50]
+            nn.ReLU(),
+            nn.Conv2d(128, d_model, kernel_size=5, stride=2, padding=2),  # [B, d_model, 25, 25]
+        )
+
+        # Positional embeddings for H×W spatial tokens
+        self.pos_embed = nn.Parameter(torch.zeros(1, d_model, 25, 25))
+        nn.init.trunc_normal_(self.pos_embed, std=0.02)
+
+    def forward(self, seg_logits):
+        """
+        seg_logits: [B, C, H, W]  - raw segmentation logits (not normalized)
+        Returns:
+            memory: [B, L, d_model] - flattened encoder memory for decoder
+        """
+        B, C, H, W = seg_logits.shape
+        assert H == self.height and W == self.width, "Unexpected input size"
+
+        # Normalize segmentation logits → probabilities
+        seg_probs = F.softmax(seg_logits, dim=1)           # [B, C, H, W]
+
+        # Project to d_model channels
+        feat = self.conv(seg_probs)                        # [B, d_model, H, W]
+
+        # Add positional encoding
+        feat = feat + self.pos_embed                       # [B, d_model, H, W]
+
+        # Flatten spatial dimensions into sequence
+        memory = feat.flatten(2).transpose(1, 2)           # [B, L=H*W, d_model]
+
+        return memory

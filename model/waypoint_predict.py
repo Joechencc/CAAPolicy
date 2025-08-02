@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from timm.models.layers import trunc_normal_
 from tool.config import Configuration
+from .seg_encoder import SegmentationEncoder
 
 
 class WaypointPredict(nn.Module):
@@ -18,6 +19,8 @@ class WaypointPredict(nn.Module):
         tf_layer = nn.TransformerDecoderLayer(d_model=self.cfg.tf_de_dim, nhead=self.cfg.tf_de_heads)
         self.tf_decoder = nn.TransformerDecoder(tf_layer, num_layers=self.cfg.tf_de_layers)
         self.output = nn.Linear(self.cfg.tf_de_dim, self.cfg.token_nums)
+
+        self.seg_encoder = SegmentationEncoder(in_channels=3, d_model=self.cfg.tf_de_dim, height=200, width=200)
 
         self.init_weights()
 
@@ -39,6 +42,7 @@ class WaypointPredict(nn.Module):
     def decoder(self, encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask):
         encoder_out = encoder_out.transpose(0, 1)
         tgt_embedding = tgt_embedding.transpose(0, 1)
+        
         pred_waypoints = self.tf_decoder(tgt=tgt_embedding,
                                         memory=encoder_out,
                                         tgt_mask=tgt_mask,
@@ -53,6 +57,8 @@ class WaypointPredict(nn.Module):
         tgt_embedding = self.embedding(tgt)
         tgt_embedding = self.pos_drop(tgt_embedding + self.pos_embed)
 
+        encoder_out = self.seg_encoder(encoder_out)
+        
         pred_waypoints = self.decoder(encoder_out, tgt_embedding, tgt_mask, tgt_padding_mask)
         pred_waypoints = self.output(pred_waypoints)
         return pred_waypoints
