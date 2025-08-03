@@ -55,6 +55,17 @@ class Configuration:
     tf_de_dropout = None
     tf_de_tgt_dim = None
 
+    horizon = None
+    observation_dim = None
+    action_dim = None
+    diffusion_feat_dim = None
+    n_timesteps = None
+    loss_type = None
+    clip_denoised = None
+    predict_epsilon = None
+    action_weight = None
+    loss_discount = None
+    loss_weights = None
 
 def get_cfg(cfg_yaml: dict):
     today = datetime.now()
@@ -113,5 +124,17 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_de_layers = config['tf_de_layers']
     cfg.tf_de_dropout = config['tf_de_dropout']
     cfg.tf_de_tgt_dim = config['tf_de_tgt_dim']
+
+    cfg.horizon = config['horizon']
+    cfg.observation_dim = config['observation_dim']
+    cfg.action_dim = config['action_dim']
+    cfg.diffusion_feat_dim = config['diffusion_feat_dim']
+    cfg.n_timesteps = config['n_timesteps']
+    cfg.loss_type = config['loss_type']
+    cfg.clip_denoised = config['clip_denoised']
+    cfg.predict_epsilon = config['predict_epsilon']
+    cfg.action_weight = config['action_weight']
+    cfg.loss_discount = config['loss_discount']
+    cfg.loss_weights = config['loss_weights']
 
     return cfg

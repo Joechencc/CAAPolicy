@@ -356,6 +356,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.init_camera_config()
 
         # data
+        self.task_idx = []
+
         self.front = []
         self.front_left = []
         self.front_right = []
@@ -463,7 +465,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 task_path = os.path.join(root_path, task_dir)
                 all_tasks.append(task_path)
 
-        for task_path in all_tasks:
+        for task_id, task_path in enumerate(all_tasks):
             pose_episode = []
             total_frames = len(os.listdir(task_path + "/measurements/"))
             for frame in range(self.cfg.hist_frame_nums, total_frames - self.cfg.future_frame_nums):
@@ -601,6 +603,8 @@ class CarlaDataset(torch.utils.data.Dataset):
                         target_point_seq.append(parking_goal)
                 self.target_point_seq.append(target_point_seq)
 
+                self.task_idx.append(task_id)    
+
             if len(pose_episode) != 0:
                 rewards, rtg = compute_shaped_rtg_with_terminal_bonus(pose_episode, x_thresh=1.0, y_thresh=0.6, theta_thresh=10.0, step_goal_bonus=0.05,
                                                                         terminal_bonus=3.0, w_x=0.003, w_y=0.003, w_theta=0.0005)
@@ -639,6 +643,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         #
         # # 显示图形
         # plt.show()
+
+        self.task_idx = np.array(self.task_idx).astype(np.int)
 
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
@@ -710,7 +716,8 @@ class CarlaDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         data = {}
         keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
-                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
+                'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',
+                'gt_target_point_traj', 'gt_control_traj', 'gt_acc_traj', 'gt_steer_traj', 'gt_reverse_traj']
         for key in keys:
             data[key] = []
 
@@ -767,9 +774,86 @@ class CarlaDataset(torch.utils.data.Dataset):
         # accumulated reward
         data['acc_rew'] = torch.from_numpy(self.acc_return[index])
 
+        # Start diffusion Part
+        start_task_idx, curr_task_idx = self.task_idx[index], self.task_idx[index]
+        num_in_seq = 0
+
+        while curr_task_idx == start_task_idx:
+            data['gt_target_point_traj'].append(torch.from_numpy(self.target_point[index+num_in_seq]))
+            data['gt_control_traj'].append(torch.from_numpy(self.control[index+num_in_seq]))
+            data['gt_acc_traj'].append(torch.from_numpy(self.throttle_brake[index+num_in_seq]))
+            data['gt_steer_traj'].append(torch.from_numpy(self.steer[index+num_in_seq]))
+            data['gt_reverse_traj'].append(torch.from_numpy(self.reverse[index+num_in_seq]))
+            num_in_seq = num_in_seq + 1
+            curr_task_idx = self.task_idx[index+num_in_seq]
+        data['gt_target_point_traj'], data['gt_control_traj'], data['gt_acc_traj'], data['gt_steer_traj'], data['gt_reverse_traj'] = torch.vstack(data['gt_target_point_traj']), torch.vstack(data['gt_control_traj']), torch.vstack(data['gt_acc_traj']), torch.vstack(data['gt_steer_traj']), torch.vstack(data['gt_reverse_traj'])
+
 
         return data
 
+
+    # def __getitem__(self, index):
+    #     data = {}
+    #     keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
+    #             'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',]
+    #     for key in keys:
+    #         data[key] = []
+
+    #     # image & extrinsics & intrinsics
+    #     images = [self.image_process(self.front[index])[0], self.image_process(self.front_left[index])[0],self.image_process(self.front_right[index])[0],
+    #               self.image_process(self.back[index])[0], self.image_process(self.back_left[index])[0],self.image_process(self.back_right[index])[0],]
+    #     images = torch.cat(images, dim=0)
+    #     data['image'] = images
+
+    #     data['extrinsics'] = self.extrinsic
+    #     data['intrinsics'] = self.intrinsic
+
+    #     # depth
+    #     depths = [get_depth(self.front_depth[index], self.image_crop),
+    #               get_depth(self.front_left_depth[index], self.image_crop),
+    #               get_depth(self.front_right_depth[index], self.image_crop),
+    #               get_depth(self.back_depth[index], self.image_crop),
+    #               get_depth(self.back_left_depth[index], self.image_crop),
+    #               get_depth(self.back_right_depth[index], self.image_crop),]
+    #     depths = torch.cat(depths, dim=0)
+    #     data['depth'] = depths
+
+    #     # segmentation
+    #     segmentation = self.semantic_process(self.topdown[index], scale=0.5, crop=200,
+    #                                          target_slot=self.target_point[index])
+    #     data['segmentation'] = torch.from_numpy(segmentation).long().unsqueeze(0)
+
+    #     # target_point
+    #     data['target_point'] = torch.from_numpy(self.target_point[index])
+
+    #     # ego_motion
+    #     speed = self.speed[index]
+    #     ego_motion = np.column_stack((speed, self.acc_x[index], self.acc_y[index]))
+    #     data['ego_motion'] = torch.from_numpy(ego_motion)
+    #     data['ego_motion_seq'] = torch.from_numpy(self.ego_motion_seq[index])
+    #     data['target_point_seq'] = torch.from_numpy(self.target_point_seq[index]) 
+
+    #     # gt control token
+    #     data['gt_control'] = torch.from_numpy(self.control[index])
+
+    #     # gt control raw
+    #     data['gt_acc'] = torch.from_numpy(self.throttle_brake[index])
+    #     data['gt_steer'] = torch.from_numpy(self.steer[index])
+    #     data['gt_reverse'] = torch.from_numpy(self.reverse[index])
+
+    #     # gt waypoint token
+    #     data['gt_waypoint'] = torch.from_numpy(self.waypoint[index])
+
+    #     # gt waypoint raw
+    #     data['delta_x'] = torch.from_numpy(self.delta_x_values[index])
+    #     data['delta_y'] = torch.from_numpy(self.delta_y_values[index])
+    #     data['delta_yaw'] = torch.from_numpy(self.delta_yaw_values[index])
+
+    #     # accumulated reward
+    #     data['acc_rew'] = torch.from_numpy(self.acc_return[index])
+
+
+    #     return data
 
 class ProcessSemantic:
     def __init__(self, cfg):

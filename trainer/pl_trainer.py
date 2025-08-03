@@ -9,7 +9,7 @@ from loss.control_loss import ControlLoss, ControlValLoss
 from loss.waypoint_loss import WaypointLoss
 from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
-from model.parking_model import ParkingModel
+from model.parking_model import ParkingModel, ParkingModelDiffusion
 import torch.nn.functional as F
 
 
@@ -61,7 +61,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.depth_loss_func = DepthLoss(self.cfg)
 
-        self.parking_model = ParkingModel(self.cfg)
+        self.parking_model = ParkingModelDiffusion(self.cfg)
 
         self.perception_training_steps = 26
 
