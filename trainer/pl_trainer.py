@@ -210,7 +210,7 @@ class ParkingTrainingModule(pl.LightningModule):
     def configure_optimizers(self):
         base_lr = self.cfg.learning_rate
         dino_lr = 0.1 * self.cfg.learning_rate  # ← add this to your config
-        perception_lr = 0.1 * self.cfg.learning_rate 
+        perception_lr = self.cfg.learning_rate if self.current_epoch < self.perception_training_steps else 0.1 * self.cfg.learning_rate 
         weight_decay = self.cfg.weight_decay
 
         # Separate DINOv2 parameters (in DinoCamEncoder) and the rest
