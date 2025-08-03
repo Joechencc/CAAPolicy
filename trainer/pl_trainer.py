@@ -18,7 +18,7 @@ def setup_callbacks(cfg):
 
     ckpt_callback = ModelCheckpoint(dirpath=cfg.checkpoint_dir,
                                     monitor='val_loss',
-                                    save_top_k=10,
+                                    save_top_k=40,
                                     mode='min',
                                     filename='E2EParking-{epoch:02d}-{val_loss:.2f}',
                                     save_last=True)
@@ -63,7 +63,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.parking_model = ParkingModel(self.cfg)
 
-        self.perception_training_steps = 26
+        self.perception_training_steps = 15
 
 
     def on_train_epoch_start(self):
@@ -81,11 +81,12 @@ class ParkingTrainingModule(pl.LightningModule):
                     dataset.relabel_goals(self.current_epoch)
                     print("Training with relabeled target.")
             else:
+                dataset.keep_goals(self.current_epoch)
                 print("Training with original target.")
 
         else:
+            dataset.keep_goals(self.current_epoch)
             print("Train perception with low lr and motion with normal lr.")
-            pass
             # freeze_module(self.parking_model.bev_model)
             # freeze_module(self.parking_model.bev_encoder)
             # freeze_module(self.parking_model.feature_fusion)
