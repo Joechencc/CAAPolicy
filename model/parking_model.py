@@ -387,7 +387,8 @@ class ParkingModelDiffusion(nn.Module):
         # original control_predict
         # pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
         start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
-        pred_control = self.trajectory_predict(pred_segmentation, start_end_relative_point)
+        seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"], "target_point": data["target_point"]}
+        pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
         pred_waypoint = self.waypoint_predict(pred_segmentation, data['gt_waypoint'].cuda())
 
         return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad

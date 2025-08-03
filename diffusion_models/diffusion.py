@@ -410,18 +410,18 @@ class GaussianDiffusion(nn.Module):
         return ret_val
 
     # @torch.no_grad()
-    def conditional_sample(self, pred_segmentation, data, horizon=None, estimator=None, return_diffusion=False):
+    def conditional_sample(self, seg_egoMotion_tgtPose, data, horizon=None, estimator=None, return_diffusion=False):
         '''
             conditions : [ (time, state), ... ]
         '''
         device = self.betas.device
-        batch_size = len(pred_segmentation)
+        batch_size = len(data)
         horizon = horizon or self.horizon
         shape = (batch_size, horizon, self.diffusion_feature_dim)
         sample_type = "original"
         # global_cond = {k: v.to(device) for k, v in global_cond.items()}
 
-        return self.p_sample_loop(shape, pred_segmentation, data, estimator, sample_type, return_diffusion)
+        return self.p_sample_loop(shape, seg_egoMotion_tgtPose, data, estimator, sample_type, return_diffusion)
 
     #------------------------------------------ training ------------------------------------------#
 
@@ -465,6 +465,6 @@ class GaussianDiffusion(nn.Module):
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long() # return the random diffusion timesteps of each batch 
         return self.p_losses(x, global_cond, cond, t)
 
-    def forward(self, pred_segmentation, data):
-        return self.conditional_sample(pred_segmentation, data)
+    def forward(self, seg_egoMotion_tgtPose, data):
+        return self.conditional_sample(seg_egoMotion_tgtPose, data)
 
