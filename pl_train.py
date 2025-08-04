@@ -53,7 +53,7 @@ def train():
 
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
-    num_gpus = 4
+    num_gpus = 1
 
     torch.set_float32_matmul_precision('medium')
 
@@ -79,7 +79,7 @@ def train():
     #     k: v for k, v in state_dict.items()
     #     if not k.startswith('parking_model.grad_approx') and not k.startswith('parking_model.control_predict') and not k.startswith('parking_model.waypoint_predict')
     # }
-    # Option 1: Load with strict=False to allow partial load
+    # # Option 1: Load with strict=False to allow partial load
     # missing, unexpected = parking_model.load_state_dict(state_dict, strict=False)
     # print("Missing keys:", missing)
     # print("Unexpected keys:", unexpected)
@@ -87,7 +87,7 @@ def train():
     parking_trainer.fit(
         parking_model, 
         datamodule=parking_datamodule,
-        ckpt_path= cfg.model_path if cfg.model_path else None 
+        ckpt_path=cfg.model_path if cfg.model_path else None 
     )
 
 

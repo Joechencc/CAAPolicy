@@ -208,6 +208,7 @@ class ParkingTrainingModule(pl.LightningModule):
     #     return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
 
     def configure_optimizers(self):
+    
         base_lr = self.cfg.learning_rate
         dino_lr = 0.1 * self.cfg.learning_rate  # ← add this to your config
         perception_lr = self.cfg.learning_rate if self.current_epoch < self.perception_training_steps else 0.1 * self.cfg.learning_rate 
@@ -216,13 +217,14 @@ class ParkingTrainingModule(pl.LightningModule):
         # Separate DINOv2 parameters (in DinoCamEncoder) and the rest
         dino_params = self.parking_model.bev_model.cam_encoder.parameters()
 
-        perception_params = (p for n, p in self.named_parameters() 
+        named_params = list(self.named_parameters())
+
+        perception_params = (p for n, p in named_params 
         if n.startswith("parking_model.bev_model") or n.startswith("parking_model.bev_encoder") 
         or n.startswith("parking_model.feature_fusion") or n.startswith("parking_model.film_modulate") 
         or n.startswith("parking_model.segmentation_head"))
 
-        other_params = (
-            p for n, p in self.named_parameters()
+        other_params = (p for n, p in named_params
             if not (n.startswith("parking_model.bev_model") or n.startswith("parking_model.bev_encoder") 
             or n.startswith("parking_model.feature_fusion") or n.startswith("parking_model.film_modulate") 
             or n.startswith("parking_model.segmentation_head"))
