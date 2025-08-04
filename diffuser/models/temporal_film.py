@@ -9,6 +9,10 @@ from torchsummary import summary
 from diffuser.models.temporal import TemporalUnet
 from diffuser.models.encoder import EncoderRNN
 from diffuser.models.fc_encoder import EncoderFC
+
+import numpy as np
+
+from .cnn_encoder import EncoderCNN
 # from diffusion_policy.model.diffusion.conv1d_components import (
     # Downsample1d, Upsample1d, Conv1dBlock)
 # from diffusion_policy.model.diffusion.positional_embedding import SinusoidalPosEmb
@@ -88,16 +92,18 @@ class ConditionalResidualBlock1D(nn.Module):
 
 class ConditionalUnet1D(nn.Module):
     def __init__(self, 
+        cfg,
         dim = 32,
         transition_dim = 32, 
         horizon = None,
         cond_dim = None,
         local_cond_dim=None,
         global_cond_dim=None,
-        lstm_out_dim = 32,
-        # diffusion_step_embed_dim=256,
-        # down_dims=[256,512,1024],
-        # down_dims = [32, 64, 128, 256],
+        output_dim = 32,
+        motion_feature_num = 3,
+        target_feature_num = 3,
+        hidden_dim = 32,
+
         dim_mults=(1, 2, 4, 8),
         kernel_size=3,
         n_groups=8,
@@ -120,7 +126,7 @@ class ConditionalUnet1D(nn.Module):
         start_dim = down_dims[0]
 
         # INFO: define the diffusion step encoder
-        dsed = diffusion_step_embed_dim
+        dsed = global_cond_dim[0]
         diffusion_step_encoder = nn.Sequential(
             SinusoidalPosEmb(dsed),
             nn.Linear(dsed, dsed * 4),
@@ -129,22 +135,23 @@ class ConditionalUnet1D(nn.Module):
         )
 
         # INFO: add global condition dimensions in 
-        cond_dim = dsed
-        if global_cond_dim is not None:
-            cond_dim += global_cond_dim
+        cond_dim = np.sum(global_cond_dim)
 
         # INFO: add lstm condition dimensions in (here is used to encode detections)
-        if lstm_out_dim is not None:
-            cond_dim += lstm_out_dim
+        # if lstm_out_dim is not None:
+        #     cond_dim += lstm_out_dim
         #     global_feature_cond_dim = lstm_out_dim + cond_dim
         # else:
         #     global_feature_cond_dim = cond_dim
 
+        self.segmentation_encoder = EncoderCNN(in_channels=3, d_model=cfg.tf_de_dim, height=200, width=200, output_dim=global_cond_dim[1])
+        self.motion_encoder = EncoderFC(input_dim=motion_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[2])
+        self.target_encoder = EncoderFC(input_dim=target_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[3])
+        
 
-        self.fc = EncoderFC(input_dim=global_feature_num, hidden_dim = lstm_out_dim, output_dim = global_cond_dim)
-        if lstm_out_dim != 0:
-            self.lstm = EncoderRNN(input_dim=lstm_dim, hidden_dim = lstm_out_dim, num_layers = 1)
-            self.lstm.flatten_parameters()
+        # if lstm_out_dim != 0:
+        #     self.lstm = EncoderRNN(input_dim=lstm_dim, hidden_dim = lstm_out_dim, num_layers = 1)
+        #     self.lstm.flatten_parameters()
 
         # INFO: define the input and output channel dimensions for the components in local_cond_encoder, down_modules, and up_modules; [(2, 32), (32, 64), (64, 128), (128, 256)]
         in_out = list(zip(all_dims[:-1], all_dims[1:]))
@@ -255,14 +262,17 @@ class ConditionalUnet1D(nn.Module):
         global_feature = self.diffusion_step_encoder(timesteps)
 
         if global_cond is not None:
-            if 'detections' in global_cond.keys():
+            if 'pred_segmentation' in global_cond.keys():
                 # INFO: encode the previous/post detections with LSTM
-                detections_encoded = self.lstm(global_cond['detections'])
-                global_feature = torch.cat([detections_encoded, global_feature], axis=-1)
+                segmentation_encoded = self.segmentation_encoder(global_cond['pred_segmentation'])
+                global_feature = torch.cat([segmentation_encoded, global_feature], axis=-1)
                 # INFO: encode the start with FC
-            if 'motions_start' in global_cond.keys():
-                motion_start_encoded = self.fc(global_cond['motions_start'])
-                global_feature = torch.cat([motion_start_encoded, global_feature], axis=-1)
+            if 'ego_motion' in global_cond.keys():
+                egoMotion_encoded = self.motion_encoder(global_cond['ego_motion'])
+                global_feature = torch.cat([egoMotion_encoded, global_feature], axis=-1)
+            if 'target_point' in global_cond.keys():
+                targetPoint_encoded = self.target_encoder(global_cond['target_point'])
+                global_feature = torch.cat([targetPoint_encoded, global_feature], axis=-1)            
 
         if 'local_cond' in global_cond.keys():
             local_cond = global_cond['local_cond']
