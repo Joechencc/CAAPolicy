@@ -13,6 +13,8 @@ from dataset.dataloader import ParkingDataModule
 from tool.config import get_cfg
 import torch
 
+torch.cuda.empty_cache()
+torch.cuda.ipc_collect()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 
@@ -51,7 +53,7 @@ def train():
 
     parking_callbacks = setup_callbacks(cfg)
     tensor_logger = TensorBoardLogger(save_dir=cfg.log_dir, default_hp_metric=False)
-    num_gpus = 1
+    num_gpus = 4
 
     torch.set_float32_matmul_precision('medium')
 
@@ -66,7 +68,7 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-    # parking_trainer.fit_loop.epoch_progress.current.completed = 29
+    parking_trainer.fit_loop.epoch_progress.current.completed = 15
     
     # Load checkpoint manually
     # ckpt = torch.load(cfg.model_path, map_location='cpu')
@@ -85,7 +87,7 @@ def train():
     parking_trainer.fit(
         parking_model, 
         datamodule=parking_datamodule,
-        ckpt_path= None # cfg.model_path if cfg.model_path else None 
+        ckpt_path= cfg.model_path if cfg.model_path else None 
     )
 
 

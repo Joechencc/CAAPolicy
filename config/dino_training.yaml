@@ -1,18 +1,18 @@
 parking_model:
   # train
-  data_dir: '/home/intern2025/research/ParkWithUncertainty'
+  data_dir: '/data_ssd/'
   log_dir: './log/'
   checkpoint_dir: './ckpt'
   log_every_n_steps: 5
   check_val_every_n_epoch: 1
 
-  epochs: 50 # 26
+  epochs: 40 # 26
   learning_rate: 0.0001
   weight_decay: 0.0001
   batch_size: 16 # 16
 
-  training_map: "e2e_parking/Town04_Opt" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/vast/rs9193/Town_Opt_1000"
-  validation_map: "e2e_parking/Town04_Opt_Val" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/scratch/rs9193/Town_Opt_1000_Val"
+  training_map: "e2e_parking/Town_Opt_1000" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/vast/rs9193/Town_Opt_1000"
+  validation_map: "e2e_parking/Town_Opt_1000_Val" #/vast/sy3913/egocentric_speed_dataset/e2e_dataset/ # "/scratch/rs9193/Town_Opt_1000_Val"
   # training_map: "/scratch/rs9193/dynamics_1/" #/scratch/rs9193/dynamics_1/ # "/vast/rs9193/Town_Opt_1000"
   # validation_map: "/scratch/rs9193/dynamics_1/" #/scratch/rs9193/dynamics_1/ # "/scratch/rs9193/Town_Opt_1000_Val"
   future_frame_nums: 4
