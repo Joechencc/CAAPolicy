@@ -13,6 +13,8 @@ from dataset.dataloader import ParkingDataModule
 from tool.config import get_cfg
 import torch
 
+torch.cuda.empty_cache()
+torch.cuda.ipc_collect()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 
@@ -69,18 +71,19 @@ def train():
     parking_trainer.fit_loop.epoch_progress.current.completed = 15
     
     # Load checkpoint manually
-    # ckpt = torch.load(cfg.model_path, map_location='cpu')
+    ckpt = torch.load(cfg.model_path, map_location='cpu')
     # Get only the model weights
-    # state_dict = ckpt['state_dict'] if 'state_dict' in ckpt else ckpt
+    state_dict = ckpt['state_dict'] if 'state_dict' in ckpt else ckpt
     # Remove all keys related to grad_approx (which has mismatched shape)
-    # filtered_state_dict = {
-    #     k: v for k, v in state_dict.items()
-    #     if not k.startswith('parking_model.grad_approx') and not k.startswith('parking_model.control_predict') and not k.startswith('parking_model.waypoint_predict')
-    # }
-    # Option 1: Load with strict=False to allow partial load
-    # missing, unexpected = parking_model.load_state_dict(state_dict, strict=False)
-    # print("Missing keys:", missing)
-    # print("Unexpected keys:", unexpected)
+    filtered_state_dict = {
+        k: v for k, v in state_dict.items()
+        if not k.startswith('parking_model.trajectory_predict')
+    }
+
+    # # Option 1: Load with strict=False to allow partial load
+    missing, unexpected = parking_model.load_state_dict(filtered_state_dict, strict=False)
+    print("Missing keys:", missing)
+    print("Unexpected keys:", unexpected)
 
     parking_trainer.fit(
         parking_model, 

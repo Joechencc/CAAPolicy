@@ -645,7 +645,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         # plt.show()
 
         self.task_idx = np.array(self.task_idx).astype(np.int)
-        print("Task ID: ", self.task_idx)
+        # print("Task ID: ", self.task_idx)
 
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
@@ -678,7 +678,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_y_values = np.array(self.delta_y_values).astype(np.float32)
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
-        self.target_point = np.array(self.target_point).astype(np.float32)
+        self.target_point_pre = np.array(self.target_point).astype(np.float32)
+        self.target_point = self.target_point_pre.copy()
         self.ego_motion_seq = np.array(self.ego_motion_seq).astype(np.float32)
         self.target_point_seq = np.array(self.target_point_seq).astype(np.float32)
         self.acc_return = np.vstack(self.acc_return).astype(np.float32)
@@ -695,6 +696,9 @@ class CarlaDataset(torch.utils.data.Dataset):
         # Custom relabeling logic — example: small perturbation
         self.target_point = self.disturb_target_points(self.target_point, x_range=(-5.0, 5.0), y_range=(-5.0, 5.0), yaw_range=(-45.0, 45.0))
         print(f"[CarlaDataset] Relabeled parking goals for epoch {epoch}")
+
+    def keep_goals(self, epoch):
+        self.target_point = self.target_point_pre
 
     def disturb_target_points(self, target_point, x_range=(-1.0, 1.0), y_range=(-1.0, 1.0), yaw_range=(-10.0, 10.0)):
         """

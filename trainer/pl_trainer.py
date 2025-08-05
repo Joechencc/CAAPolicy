@@ -18,7 +18,7 @@ def setup_callbacks(cfg):
 
     ckpt_callback = ModelCheckpoint(dirpath=cfg.checkpoint_dir,
                                     monitor='val_loss',
-                                    save_top_k=10,
+                                    save_top_k=40,
                                     mode='min',
                                     filename='E2EParking-{epoch:02d}-{val_loss:.2f}',
                                     save_last=True)
@@ -81,11 +81,12 @@ class ParkingTrainingModule(pl.LightningModule):
                     dataset.relabel_goals(self.current_epoch)
                     print("Training with relabeled target.")
             else:
+                dataset.keep_goals(self.current_epoch)
                 print("Training with original target.")
 
         else:
+            dataset.keep_goals(self.current_epoch)
             print("Train perception with low lr and motion with normal lr.")
-            pass
             # freeze_module(self.parking_model.bev_model)
             # freeze_module(self.parking_model.bev_encoder)
             # freeze_module(self.parking_model.feature_fusion)
@@ -207,9 +208,10 @@ class ParkingTrainingModule(pl.LightningModule):
     #     return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
 
     def configure_optimizers(self):
+    
         base_lr = self.cfg.learning_rate
         dino_lr = 0.1 * self.cfg.learning_rate  # ← add this to your config
-        perception_lr = 0.1 * self.cfg.learning_rate 
+        perception_lr = self.cfg.learning_rate if self.current_epoch < self.perception_training_steps else 0.1 * self.cfg.learning_rate 
         weight_decay = self.cfg.weight_decay
 
         # Separate DINOv2 parameters (in DinoCamEncoder) and the rest

@@ -6,7 +6,7 @@ parking_model:
   log_every_n_steps: 5
   check_val_every_n_epoch: 1
 
-  epochs: 50 # 26
+  epochs: 40 # 26
   learning_rate: 0.0001
   weight_decay: 0.0001
   batch_size: 16 # 16
