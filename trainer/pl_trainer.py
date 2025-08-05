@@ -238,7 +238,7 @@ class ParkingTrainingModule(pl.LightningModule):
         ]
 
         # Optimizer
-        optimizer = torch.optim.Adam(param_groups)
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
 
         # Scheduler (applies to both groups uniformly)
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
