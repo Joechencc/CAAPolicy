@@ -389,9 +389,16 @@ class ParkingModelDiffusion(nn.Module):
         start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
         seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(), "target_point": data["target_point"]}
         pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
-        pred_waypoint = self.waypoint_predict(pred_segmentation, data['gt_waypoint'].cuda())
+        # pred_waypoint = self.waypoint_predict(pred_segmentation, data['gt_waypoint'].cuda())
 
-        return pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad
+        return pred_control, pred_segmentation, pred_depth, fuse_feature
+
+    def diffusion_loss(self, data):
+        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
+        seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(), "target_point": data["target_point"]}
+        loss = self.trajectory_predict.loss(data["gt_target_point_traj"], seg_egoMotion_tgtPose, start_end_relative_point)[0]
+        return loss
 
     # def forward_eval_twice(self, refined_fuse_feature, pred_multi_controls, pred_multi_waypoints):
     #     refined_fuse_feature_copy = refined_fuse_feature.clone()

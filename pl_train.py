@@ -66,7 +66,7 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-    # parking_trainer.fit_loop.epoch_progress.current.completed = 29
+    parking_trainer.fit_loop.epoch_progress.current.completed = 15
     
     # Load checkpoint manually
     # ckpt = torch.load(cfg.model_path, map_location='cpu')

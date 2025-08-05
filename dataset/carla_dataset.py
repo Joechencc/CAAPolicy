@@ -84,7 +84,7 @@ def convert_slot_coord(ego_trans, target_point):
     elif yaw_diff < -180:
         yaw_diff += 360
 
-    target_point = [target_point_self_veh[0], target_point_self_veh[1], yaw_diff]
+    target_point = [target_point_self_veh[0], target_point_self_veh[1], np.deg2rad(yaw_diff)]
 
     return target_point
 
@@ -588,7 +588,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 # target point
                 with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
                     data = json.load(read_file)
-                parking_goal = [data['x'], data['y'], data['yaw']]
+                parking_goal = [data['x'], data['y'], (data['yaw'])]
                 parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
                 pose_episode.append(parking_goal)
@@ -645,6 +645,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         # plt.show()
 
         self.task_idx = np.array(self.task_idx).astype(np.int)
+        print("Task ID: ", self.task_idx)
 
         self.front = np.array(self.front).astype(np.string_)
         self.front_left = np.array(self.front_left).astype(np.string_)
@@ -682,8 +683,13 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.target_point_seq = np.array(self.target_point_seq).astype(np.float32)
         self.acc_return = np.vstack(self.acc_return).astype(np.float32)
 
+        traj_mean = np.mean(self.target_point, axis=0, keepdims=True)    # shape (1, 3)
+        traj_std = np.std(self.target_point, axis=0, keepdims=True) + 1e-8  # shape (1, 3), add epsilon to avoid /0
+        self.target_point = (self.target_point - traj_mean) / traj_std
+
 
         logger.info('Preloaded {} sequences', str(len(self.front)))
+        logger.info('Mean and std of trajectory points are %s, %s.' % (traj_mean, traj_std))
 
     def relabel_goals(self, epoch):
         # Custom relabeling logic — example: small perturbation
@@ -785,7 +791,11 @@ class CarlaDataset(torch.utils.data.Dataset):
             data['gt_steer_traj'].append(torch.from_numpy(self.steer[index+num_in_seq]))
             data['gt_reverse_traj'].append(torch.from_numpy(self.reverse[index+num_in_seq]))
             num_in_seq = num_in_seq + 1
-            curr_task_idx = self.task_idx[index+num_in_seq]
+            if index + num_in_seq < len(self):
+                curr_task_idx = self.task_idx[index+num_in_seq]
+            else:
+                break
+
         data['gt_target_point_traj'], data['gt_control_traj'], data['gt_acc_traj'], data['gt_steer_traj'], data['gt_reverse_traj'] = torch.vstack(data['gt_target_point_traj']), torch.vstack(data['gt_control_traj']), torch.vstack(data['gt_acc_traj']), torch.vstack(data['gt_steer_traj']), torch.vstack(data['gt_reverse_traj'])
 
 

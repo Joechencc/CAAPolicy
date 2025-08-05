@@ -73,7 +73,7 @@ class ParkingDataModule(pl.LightningDataModule):
         data_root = self.data_dir
         train_set = CarlaDataset(data_root, 1, self.cfg)
         val_set = CarlaDataset(data_root, 0, self.cfg)
-        diffusion_collate = partial(diffusion_collate_fn, seq_len=100)
+        diffusion_collate = partial(diffusion_collate_fn, seq_len=self.cfg.horizon)
         self.train_loader = DataLoader(dataset=train_set,
                                        batch_size=self.cfg.batch_size,
                                        shuffle=True,

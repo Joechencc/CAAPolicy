@@ -119,7 +119,7 @@ class GaussianDiffusion(nn.Module):
         '''
         self.action_weight = action_weight
 
-        dim_weights = torch.ones(self.transition_dim, dtype=torch.float32)
+        dim_weights = torch.ones(self.action_dim, dtype=torch.float32)
 
         ## set loss coefficients for dimensions of observation
         if weights_dict is None: weights_dict = {}
@@ -460,7 +460,7 @@ class GaussianDiffusion(nn.Module):
 
     def loss(self, x, global_cond, cond):
         x = x.to(self.betas.device) # ground truth future trajectory
-        global_cond = {k: v.to(self.betas.device) for k, v in global_cond.items()} # Move tensors to device, GPU/CPU
+        # global_cond = {k: v.to(self.betas.device) for k, v in global_cond.items()} # Move tensors to device, GPU/CPU
         batch_size = len(x) # batch size
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long() # return the random diffusion timesteps of each batch 
         return self.p_losses(x, global_cond, cond, t)

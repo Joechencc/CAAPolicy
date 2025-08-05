@@ -31,7 +31,7 @@ class Downsample1d(nn.Module):
     def __init__(self, dim):
         super().__init__()
         # torch.nn.Conv1d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros', device=None, dtype=None)
-        self.conv = nn.Conv1d(dim, dim, 4, 2, 2)
+        self.conv = nn.Conv1d(dim, dim, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x):
         return self.conv(x)
@@ -39,7 +39,7 @@ class Downsample1d(nn.Module):
 class Upsample1d(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        self.conv = nn.ConvTranspose1d(dim, dim, 4, 2, 2)
+        self.conv = nn.ConvTranspose1d(dim, dim, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x):
         return self.conv(x)

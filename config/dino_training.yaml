@@ -62,11 +62,11 @@ parking_model:
   hybrid_ckpt_path: "./ckpt/exp_2025_7_11_2_2_41/E2EParking-epoch=03-val_loss=1.73.ckpt"
 
   # diffusion parameters
-  horizon: 10
+  horizon: 128
   observation_dim: 9
-  action_dim: 8
+  action_dim: 3
   diffusion_feat_dim: 3
-  n_timesteps: 1000
+  n_timesteps: 10
   loss_type: 'l1'
   clip_denoised: False
   predict_epsilon: True

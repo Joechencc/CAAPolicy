@@ -63,7 +63,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.parking_model = ParkingModelDiffusion(self.cfg)
 
-        self.perception_training_steps = 26
+        self.perception_training_steps = 15
 
 
     def on_train_epoch_start(self):
@@ -95,17 +95,17 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
+        pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
 
-        control_loss = self.control_loss_func(pred_control, batch)
+        control_loss = self.parking_model.diffusion_loss(batch)
         loss_dict.update({
             "control_loss": control_loss*0.0 if self.current_epoch < self.perception_training_steps else control_loss
         })
 
-        waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-        loss_dict.update({
-            "waypoint_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss
-        })
+        # waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
+        # loss_dict.update({
+        #     "waypoint_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss
+        # })
 
 
         # grads = []
@@ -153,10 +153,10 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            pred_control, pred_waypoint, pred_segmentation, pred_depth, fuse_feature, approx_grad = self.parking_model(batch)
+            pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
 
-            control_loss = self.control_loss_func(pred_control, batch)
-            waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
+            # control_loss = self.control_loss_func(pred_control, batch)
+            # waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
         #     grads = []
         #     for b in range(pred_control.shape[0]):
         #         grad = torch.autograd.grad(pred_control[b][1:13,:].mean(), fuse_feature, create_graph=True)[0]
@@ -165,19 +165,19 @@ class ParkingTrainingModule(pl.LightningModule):
         #     refined_feature = approx_grad*fuse_feature
         # pred_control_2, pred_waypoint_2 = self.parking_model.forward_twice(refined_feature, batch)
 
-        acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
-        val_loss_dict.update({
-            "acc_steer_val_loss": acc_steer_val_loss*0.0 if self.current_epoch < self.perception_training_steps else acc_steer_val_loss,
-            "reverse_val_loss": reverse_val_loss*0.0 if self.current_epoch < self.perception_training_steps else reverse_val_loss
-        })
+        # acc_steer_val_loss, reverse_val_loss = self.control_val_loss_func(pred_control, batch)
+        # val_loss_dict.update({
+        #     "acc_steer_val_loss": acc_steer_val_loss*0.0 if self.current_epoch < self.perception_training_steps else acc_steer_val_loss,
+        #     "reverse_val_loss": reverse_val_loss*0.0 if self.current_epoch < self.perception_training_steps else reverse_val_loss
+        # })
         # grad_loss = F.mse_loss(approx_grad, grad_gt.detach())
         # val_loss_dict.update({
         #     "grad_loss": grad_loss*0.0 if self.current_epoch < self.perception_training_steps else grad_loss
         # })
-        waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
-        val_loss_dict.update({
-            "waypoint_val_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss,
-        })
+        # waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
+        # val_loss_dict.update({
+        #     "waypoint_val_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss,
+        # })
 
         segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
         val_loss_dict.update({
@@ -215,13 +215,15 @@ class ParkingTrainingModule(pl.LightningModule):
         # Separate DINOv2 parameters (in DinoCamEncoder) and the rest
         dino_params = self.parking_model.bev_model.cam_encoder.parameters()
 
-        perception_params = (p for n, p in self.named_parameters() 
+        named_params = list(self.named_parameters())
+
+        perception_params = (p for n, p in named_params 
         if n.startswith("parking_model.bev_model") or n.startswith("parking_model.bev_encoder") 
         or n.startswith("parking_model.feature_fusion") or n.startswith("parking_model.film_modulate") 
         or n.startswith("parking_model.segmentation_head"))
 
         other_params = (
-            p for n, p in self.named_parameters()
+            p for n, p in named_params
             if not (n.startswith("parking_model.bev_model") or n.startswith("parking_model.bev_encoder") 
             or n.startswith("parking_model.feature_fusion") or n.startswith("parking_model.film_modulate") 
             or n.startswith("parking_model.segmentation_head"))
