@@ -61,7 +61,6 @@ class EncoderCNN(nn.Module):
 
         if self.cfg.motion_head == "segmentation":
             pred_segmentation = torch.argmax(seg_logits, dim=1, keepdim=True).to(dtype=torch.float32)
-            pred_segmentation = pred_segmentation.detach().cpu().numpy()
             pred_segmentation[pred_segmentation == 1] = 0.5
             pred_segmentation[pred_segmentation == 2] = 1.0
             seg_logits = pred_segmentation.flip(dims=[2])
