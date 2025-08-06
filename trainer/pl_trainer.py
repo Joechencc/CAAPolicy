@@ -11,6 +11,8 @@ from loss.depth_loss import DepthLoss
 from loss.seg_loss import SegmentationLoss
 from model.parking_model import ParkingModel, ParkingModelDiffusion
 import torch.nn.functional as F
+import shutil
+import os
 
 
 def setup_callbacks(cfg):
@@ -65,6 +67,13 @@ class ParkingTrainingModule(pl.LightningModule):
 
         self.perception_training_steps = 15
 
+    def on_train_start(self):
+        config_path = "./config/dino_training.yaml"  # assume you store path here
+        checkpoint_dir = self.cfg.checkpoint_dir # works for TensorBoard, WandB, CSVLogger, etc.
+
+        # Copy the config
+        if self.trainer.is_global_zero and os.path.isfile(config_path):
+            shutil.copy(config_path, os.path.join(checkpoint_dir, 'dino_training.yaml'))
 
     def on_train_epoch_start(self):
 
@@ -94,8 +103,11 @@ class ParkingTrainingModule(pl.LightningModule):
                 freeze_module(self.parking_model.film_modulate)
                 freeze_module(self.parking_model.segmentation_head)
             else:
-                pass
-
+                freeze_module(self.parking_model.bev_model)
+                freeze_module(self.parking_model.bev_encoder)
+                freeze_module(self.parking_model.feature_fusion)
+                freeze_module(self.parking_model.film_modulate)
+                freeze_module(self.parking_model.segmentation_head)
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}

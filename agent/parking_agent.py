@@ -17,7 +17,7 @@ from collections import OrderedDict
 
 from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
-from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint, convert_veh_coord
+from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint, convert_veh_coord, convert_veh_in_slot_frame
 from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
@@ -553,18 +553,18 @@ class ParkingAgent:
             with torch.no_grad():
                 start_time = time.time()
 
-                pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
 
                 self.save_prev_target(pred_segmentation)
-                control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
+                # control_signal = detokenize_control(pred_controls[0].tolist()[1:], self.cfg.token_nums)
 
-                self.trans_control.throttle = control_signal[0]
-                self.trans_control.brake = control_signal[1]
-                self.trans_control.steer = control_signal[2]
-                self.trans_control.reverse = control_signal[3]
+                # self.trans_control.throttle = control_signal[0]
+                # self.trans_control.brake = control_signal[1]
+                # self.trans_control.steer = control_signal[2]
+                # self.trans_control.reverse = control_signal[3]
 
                 self.speed_limit(data_frame)
 
@@ -578,20 +578,20 @@ class ParkingAgent:
 
                 # import pdb; pdb.set_trace()
                 # draw waypoint WP1, WP2, WP3, WP4
-                for i in range(0,4):
-                    #waypoint : [x,y,yaw] in egocentric
-                    waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
-                    #convert to world frame
-                    waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
-                    waypoint[-1] = 0.3 #z=0.3
-                    location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
-                    self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
-                                                        color=carla.Color(255, 0, 0))
+                # for i in range(0,4):
+                #     #waypoint : [x,y,yaw] in egocentric
+                #     waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                #     #convert to world frame
+                #     waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+                #     waypoint[-1] = 0.3 #z=0.3
+                #     location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
+                #     self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
+                #                                         color=carla.Color(255, 0, 0))
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
 
-        self.player.apply_control(self.trans_control)
+        # self.player.apply_control(self.trans_control)
 
     def speed_limit(self, data_frame):
         # if vehicle stops at initialization, give throttle until Gear turns to 1

@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import math
 
 import numpy as np
-from diffuser.utils.visualizer import plot_trajectory_with_yaw
+from diffuser.utils.visualizer import plot_trajectory_with_yaw, invert_trajectory_2D, deg2rad_trajectory_2D
 
 
 class ParkingModel(nn.Module):
@@ -306,7 +306,7 @@ class ParkingModelDiffusion(nn.Module):
         images = data['image'].to(self.cfg.device, non_blocking=True)
         intrinsics = data['intrinsics'].to(self.cfg.device, non_blocking=True)
         extrinsics = data['extrinsics'].to(self.cfg.device, non_blocking=True)
-        target_point = data['target_point'].to(self.cfg.device, non_blocking=True) #已经是相对车的位置了
+        target_point = data['target_point'].to(self.cfg.device, non_blocking=True) # in car ego frame
         zero_target_point = torch.zeros_like(target_point).to(self.cfg.device, non_blocking=True).unsqueeze(1)
         ego_motion = data['ego_motion'].to(self.cfg.device, non_blocking=True)
         zero_ego_motion = torch.zeros_like(ego_motion).to(self.cfg.device, non_blocking=True)
@@ -433,7 +433,7 @@ class ParkingModelDiffusion(nn.Module):
         return pred_control, pred_waypoint
         
     def predict(self, data):
-        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
         # if not self.training:
         #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
         #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
@@ -465,19 +465,19 @@ class ParkingModelDiffusion(nn.Module):
             pred_control = self.denormalize_target_point(pred_control, device="cuda")
         # pred_control = self.denormalize_target_point(pred_control, mean=torch.Tensor([[-2.4473171, -0.39712235, 0.10734732]]).cuda(), std=torch.Tensor([[2.7895596, 3.3346443, 1.0033212]]).cuda())
 
-        plot_trajectory_with_yaw(pred_control.squeeze(0))
+        plot_trajectory_with_yaw((deg2rad_trajectory_2D(pred_control.squeeze(0))), invert_y=True)
 
-        return pred_control, pred_segmentation, pred_depth, fuse_feature
+        return pred_control, pred_segmentation, pred_depth, bev_target
 
     def normalize_trajectories(self, traj):
-        traj = traj / torch.Tensor([[10.0, 10.0, 1.57]])
+        traj = traj / torch.Tensor([[10.0, 10.0, 180.0]])
         return traj
 
     def denormalize_target_point(self, traj, device):
         if device == "cuda":
-            traj = traj * torch.Tensor([[10.0, 10.0, 1.57]]).cuda()
+            traj = traj * torch.Tensor([[10.0, 10.0, 180.0]]).cuda()
         elif device == "cpu":
-            traj = traj * torch.Tensor([[10.0, 10.0, 1.57]])
+            traj = traj * torch.Tensor([[10.0, 10.0, 180.0]])
         else:
             pass
         return traj
