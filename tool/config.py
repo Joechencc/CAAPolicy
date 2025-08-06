@@ -55,7 +55,7 @@ class Configuration:
     tf_de_dropout = None
     tf_de_tgt_dim = None
 
-    horizon = None
+    # horizon = None
     observation_dim = None
     action_dim = None
     diffusion_feat_dim = None
@@ -66,6 +66,10 @@ class Configuration:
     action_weight = None
     loss_discount = None
     loss_weights = None
+
+    planner_type = None
+    normalize_traj = None
+    motion_head = None
 
 def get_cfg(cfg_yaml: dict):
     today = datetime.now()
@@ -125,7 +129,7 @@ def get_cfg(cfg_yaml: dict):
     cfg.tf_de_dropout = config['tf_de_dropout']
     cfg.tf_de_tgt_dim = config['tf_de_tgt_dim']
 
-    cfg.horizon = config['horizon']
+    # cfg.horizon = config['horizon']
     cfg.observation_dim = config['observation_dim']
     cfg.action_dim = config['action_dim']
     cfg.diffusion_feat_dim = config['diffusion_feat_dim']
@@ -136,5 +140,9 @@ def get_cfg(cfg_yaml: dict):
     cfg.action_weight = config['action_weight']
     cfg.loss_discount = config['loss_discount']
     cfg.loss_weights = config['loss_weights']
+
+    cfg.planner_type = config['planner_type']
+    cfg.normalize_traj = config['normalize_traj']
+    cfg.motion_head = config['motion_head']
 
     return cfg

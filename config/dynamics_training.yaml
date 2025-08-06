@@ -66,11 +66,29 @@ parking_model:
   tf_en_target_length: 3
 
   # transformer decoder
-  tf_de_dim: 264
+  tf_de_emb_dim: 267
+  tf_de_proj_dim: 45
+  tf_de_dim: 312 # 264
   tf_de_heads: 6
   tf_de_layers: 4
   tf_de_dropout: 0.05
   tf_de_tgt_dim: 15
+
+    # diffusion parameters
+  horizon: 128
+  observation_dim: 9
+  action_dim: 3
+  diffusion_feat_dim: 3
+  n_timesteps: 20
+  loss_type: 'l1'
+  clip_denoised: False
+  predict_epsilon: True
+  action_weight: 1.0
+  loss_discount: 1.0
+  loss_weights: null
+  planner_type: global_interp # local, global, local_interp, global_interp
+  normalize_traj: True
+  motion_head: embedding
   hybrid_ckpt_path: "/scratch/rs9193/e2e_temporal_spatial/ParkWithUncertainty/ckpt/last.ckpt"
 
   resume_ckpt_path: ckpt/dynamics_model/exp_2025_6_5_22_15_55/last.ckpt #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint

@@ -13,6 +13,7 @@ from diffuser.models.fc_encoder import EncoderFC
 import numpy as np
 
 from .cnn_encoder import EncoderCNN
+from model.seg_encoder import SegmentationEncoder
 # from diffusion_policy.model.diffusion.conv1d_components import (
     # Downsample1d, Upsample1d, Conv1dBlock)
 # from diffusion_policy.model.diffusion.positional_embedding import SinusoidalPosEmb
@@ -144,7 +145,8 @@ class ConditionalUnet1D(nn.Module):
         # else:
         #     global_feature_cond_dim = cond_dim
 
-        self.segmentation_encoder = EncoderCNN(in_channels=3, d_model=cfg.tf_de_dim, height=200, width=200, output_dim=global_cond_dim[1])
+        self.segmentation_encoder = EncoderCNN(config=cfg, in_channels=267, d_model=cfg.tf_de_dim, height=200, width=200, output_dim=global_cond_dim[1])
+        # self.segmentation_encoder = SegmentationEncoder(in_channels=3, d_model=32, height=200, width=200)
         self.motion_encoder = EncoderFC(input_dim=motion_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[2])
         self.target_encoder = EncoderFC(input_dim=target_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[3])
         
@@ -265,13 +267,16 @@ class ConditionalUnet1D(nn.Module):
             if 'pred_segmentation' in global_cond.keys():
                 # INFO: encode the previous/post detections with LSTM
                 segmentation_encoded = self.segmentation_encoder(global_cond['pred_segmentation'])
+                # segmentation_encoded = torch.zeros_like(segmentation_encoded).cuda()
                 global_feature = torch.cat([segmentation_encoded, global_feature], axis=-1)
                 # INFO: encode the start with FC
             if 'ego_motion' in global_cond.keys():
                 egoMotion_encoded = self.motion_encoder(global_cond['ego_motion'])
+                # egoMotion_encoded = torch.zeros_like(egoMotion_encoded).cuda()
                 global_feature = torch.cat([egoMotion_encoded, global_feature], axis=-1)
             if 'target_point' in global_cond.keys():
                 targetPoint_encoded = self.target_encoder(global_cond['target_point'])
+                # targetPoint_encoded = torch.zeros_like(targetPoint_encoded).cuda()
                 global_feature = torch.cat([targetPoint_encoded, global_feature], axis=-1)            
 
         if 'local_cond' in global_cond.keys():

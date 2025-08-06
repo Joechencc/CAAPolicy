@@ -6,7 +6,7 @@ from model.bev_model import BevModel
 from model.bev_encoder import BevEncoder
 from model.feature_fusion import FeatureFusion
 from model.control_predict import ControlPredict, ControlPredictRL
-from diffusion_models.diffusion import GaussianDiffusion
+from diffuser.models.diffusion import GaussianDiffusion
 from model.segmentation_head import SegmentationHead
 from model.waypoint_predict import WaypointPredict
 from model.gradient_approx import GradientApproximator
@@ -15,6 +15,9 @@ from model.film_modulator import FiLMModulator
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import math
+
+import numpy as np
+from diffuser.utils.visualizer import plot_trajectory_with_yaw
 
 
 class ParkingModel(nn.Module):
@@ -386,8 +389,11 @@ class ParkingModelDiffusion(nn.Module):
         # approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
         # original control_predict
         # pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
-        seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(), "target_point": data["target_point"]}
+        if "global" in self.cfg.planner_type:
+            start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
+        else:
+            start_end_relative_point = data["gt_target_point_traj"][:,0:1,:]
+        seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(), "target_point": data["target_point"]}
         pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
         # pred_waypoint = self.waypoint_predict(pred_segmentation, data['gt_waypoint'].cuda())
 
@@ -395,8 +401,11 @@ class ParkingModelDiffusion(nn.Module):
 
     def diffusion_loss(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
-        start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
-        seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(), "target_point": data["target_point"]}
+        if "global" in self.cfg.planner_type:
+            start_end_relative_point = torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
+        else:
+            start_end_relative_point = data["gt_target_point_traj"][:,0:1,:]
+        seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(), "target_point": data["target_point"]}
         loss = self.trajectory_predict.loss(data["gt_target_point_traj"], seg_egoMotion_tgtPose, start_end_relative_point)[0]
         return loss
 
@@ -414,28 +423,49 @@ class ParkingModelDiffusion(nn.Module):
         return pred_control, pred_waypoint
         
     def predict(self, data):
-        # with torch.enable_grad():
-        fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
-        pred_multi_controls = data['gt_control'].cuda()
-        pred_multi_waypoints = data['gt_waypoint'].cuda()
+        fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        # if not self.training:
+        #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
+        #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
+        # else:
+        fuse_feature.requires_grad_(True)
         fuse_feature_copy = fuse_feature.clone()
-        pred_tgt_logits = []
+        # approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
+        # original control_predict
+        # pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
+        start_relative_point = data["target_point"].unsqueeze(1)
+        if self.cfg.normalize_traj:
+            start_relative_point = self.normalize_trajectories(start_relative_point)
+        end_relative_point = torch.zeros_like(start_relative_point)
+        if "global" in self.cfg.planner_type:
+            start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
+        else:
+            start_end_relative_point = start_relative_point
+        # start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
+        # torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
+        
+        seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(1), "target_point": self.normalize_trajectories(data["target_point"]) if self.cfg.normalize_traj else data["target_point"]}
+        pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
+        if self.cfg.normalize_traj:
+            pred_control = self.denormalize_target_point(pred_control, device="cuda")
+        # pred_control = self.denormalize_target_point(pred_control, mean=torch.Tensor([[-2.4473171, -0.39712235, 0.10734732]]).cuda(), std=torch.Tensor([[2.7895596, 3.3346443, 1.0033212]]).cuda())
 
-        # INFO: Original control
-        for i in range(3):
-            pred_control = self.control_predict.predict(pred_segmentation, pred_multi_controls, data)
-            pred_multi_controls = torch.cat([pred_multi_controls, pred_control], dim=1)
+        plot_trajectory_with_yaw(pred_control.squeeze(0))
 
-        # INFO: New Control
-        # logits = self.control_policy_rl(approx_grad*fuse_feature)  # [1, 3, 200]
-        # dists = [torch.distributions.Categorical(logits=logits[:, i]) for i in range(3)]
-        # actions = torch.stack([d.sample() for d in dists], dim=1)  # [1, 3]
-        # pred_multi_controls = torch.cat([pred_multi_controls, actions], dim=1)
+        return pred_control, pred_segmentation, pred_depth, fuse_feature
 
-        for i in range(12):
-            pred_waypoint = self.waypoint_predict.predict(pred_segmentation, pred_multi_waypoints)
-            pred_multi_waypoints = torch.cat([pred_multi_waypoints, pred_waypoint], dim=1)
-        return pred_multi_controls, pred_multi_waypoints, pred_segmentation, pred_depth, bev_target
+    def normalize_trajectories(self, traj):
+        traj = traj / torch.Tensor([[10.0, 10.0, 1.57]])
+        return traj
+
+    def denormalize_target_point(self, traj, device):
+        if device == "cuda":
+            traj = traj * torch.Tensor([[10.0, 10.0, 1.57]]).cuda()
+        elif device == "cpu":
+            traj = traj * torch.Tensor([[10.0, 10.0, 1.57]])
+        else:
+            pass
+        return traj
 
     def predict_control_logits(self, data):
         # with torch.enable_grad():

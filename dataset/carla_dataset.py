@@ -88,6 +88,30 @@ def convert_slot_coord(ego_trans, target_point):
 
     return target_point
 
+def convert_veh_in_slot_frame(ego_trans, target_point):
+    """
+    Convert vehicle position from world frame into parking slot frame.
+    :param slot_trans: slot pose in world frame (Transform)
+    :param veh_trans: vehicle pose in world frame (Transform)
+    :return: [x, y, yaw] in slot frame
+    """
+
+    # Convert vehicle position to slot frame
+    # veh_in_slot = convert_veh_coord(
+    #     ego_trans.location.x,
+    #     ego_trans.location.y,
+    #     1.0,
+    #     target_point  # <-- here slot_trans is used as "reference" frame
+    # )
+
+    # Compute yaw difference (vehicle relative to slot)
+    yaw_diff = ego_trans.rotation.yaw - target_point[2]
+    if yaw_diff > 180:
+        yaw_diff -= 360
+    elif yaw_diff < -180:
+        yaw_diff += 360
+
+    return [ego_trans.location.x - target_point[0], ego_trans.location.y - target_point[1], np.deg2rad(yaw_diff)]
 
 def convert_veh_coord(x, y, z, ego_trans):
     """
@@ -589,7 +613,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 with open(task_path + f"/parking_goal/0001.json", "r") as read_file:
                     data = json.load(read_file)
                 parking_goal = [data['x'], data['y'], (data['yaw'])]
-                parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                parking_goal = convert_veh_in_slot_frame(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
                 pose_episode.append(parking_goal)
 
@@ -599,7 +623,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                         m_data, p_data = json.load(m_file), json.load(p_file)
                         ego_trans = carla.Transform(carla.Location(x=m_data['x'], y=m_data['y'], z=m_data['z']), carla.Rotation(yaw=m_data['yaw'], pitch=m_data['pitch'], roll=m_data['roll']))
                         parking_goal = [p_data['x'], p_data['y'], p_data['yaw']]
-                        parking_goal = convert_slot_coord(ego_trans, parking_goal)
+                        parking_goal = convert_veh_in_slot_frame(ego_trans, parking_goal)
                         target_point_seq.append(parking_goal)
                 self.target_point_seq.append(target_point_seq)
 
@@ -679,18 +703,25 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
         self.target_point_pre = np.array(self.target_point).astype(np.float32)
+        # self.target_point_pre = self.target_point_pre / np.array([[10.0, 10.0, 1.57]]).astype(np.float32)
+        if self.cfg.normalize_traj:
+            self.target_point_pre = self.normalize_trajectories(self.target_point_pre)
         self.target_point = self.target_point_pre.copy()
         self.ego_motion_seq = np.array(self.ego_motion_seq).astype(np.float32)
         self.target_point_seq = np.array(self.target_point_seq).astype(np.float32)
         self.acc_return = np.vstack(self.acc_return).astype(np.float32)
 
-        traj_mean = np.mean(self.target_point, axis=0, keepdims=True)    # shape (1, 3)
-        traj_std = np.std(self.target_point, axis=0, keepdims=True) + 1e-8  # shape (1, 3), add epsilon to avoid /0
-        self.target_point = (self.target_point - traj_mean) / traj_std
+        # traj_mean = np.mean(self.target_point, axis=0, keepdims=True)    # shape (1, 3)
+        # traj_std = np.std(self.target_point, axis=0, keepdims=True) + 1e-8  # shape (1, 3), add epsilon to avoid /0
+        # self.target_point = (self.target_point - traj_mean) / traj_std
 
 
         logger.info('Preloaded {} sequences', str(len(self.front)))
-        logger.info('Mean and std of trajectory points are %s, %s.' % (traj_mean, traj_std))
+        # logger.info('Mean and std of trajectory points are %s, %s.' % (traj_mean, traj_std))
+
+    def normalize_trajectories(self, traj):
+        traj = traj / np.array([[10.0, 10.0, 1.57]]).astype(np.float32)
+        return traj
 
     def relabel_goals(self, epoch):
         # Custom relabeling logic — example: small perturbation

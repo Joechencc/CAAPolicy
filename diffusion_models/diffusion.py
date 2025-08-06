@@ -67,7 +67,7 @@ class GaussianDiffusion(nn.Module):
         self.action_dim = cfg.action_dim
         self.transition_dim = self.observation_dim + self.action_dim
         self.diffusion_feature_dim = cfg.diffusion_feat_dim
-        self.model = ConditionalUnet1D(cfg, transition_dim=self.diffusion_feature_dim, horizon=self.horizon, global_cond_dim=[32, 64, 32, 32], lstm_dim=6, output_dim=5, global_feature_num=4)
+        self.model = ConditionalUnet1D(cfg, transition_dim=self.diffusion_feature_dim, horizon=self.horizon, global_cond_dim=[32, 128, 32, 32], lstm_dim=6, output_dim=5, global_feature_num=4)
 
         betas = cosine_beta_schedule(cfg.n_timesteps)
         alphas = 1. - betas

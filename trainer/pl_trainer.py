@@ -102,6 +102,7 @@ class ParkingTrainingModule(pl.LightningModule):
         loss_dict.update({
             "control_loss": control_loss*0.0 if self.current_epoch < self.perception_training_steps else control_loss
         })
+        print("Diffusion Loss is Now: ", control_loss)
 
         # waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
         # loss_dict.update({
@@ -154,8 +155,11 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
-
+            # pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+            diffusion_loss = self.parking_model.diffusion_loss(batch)
+            val_loss_dict.update({
+                "diffusion_loss": diffusion_loss
+            })
             # control_loss = self.control_loss_func(pred_control, batch)
             # waypoint_loss = self.waypoint_loss_func(pred_waypoint, batch)
         #     grads = []
@@ -180,15 +184,15 @@ class ParkingTrainingModule(pl.LightningModule):
         #     "waypoint_val_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss,
         # })
 
-        segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        val_loss_dict.update({
-            "segmentation_val_loss": segmentation_val_loss
-        })
+        # segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        # val_loss_dict.update({
+        #     "segmentation_val_loss": segmentation_val_loss
+        # })
 
-        depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        val_loss_dict.update({
-            "depth_val_loss": depth_val_loss
-        })
+        # depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
+        # val_loss_dict.update({
+        #     "depth_val_loss": depth_val_loss
+        # })
 
         val_loss = sum(val_loss_dict.values())
         val_loss_dict.update({

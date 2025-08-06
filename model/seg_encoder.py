@@ -18,6 +18,15 @@ class SegmentationEncoder(nn.Module):
             nn.Conv2d(128, d_model, kernel_size=5, stride=2, padding=2),  # [B, d_model, 25, 25]
         )
 
+        # project to a feature vector
+        # self.proj = nn.Sequential(
+        #     nn.Linear(in_features=32*25*25, out_features=256),
+        #     nn.ReLU(),
+        #     nn.Linear(256, 128),
+        #     nn.ReLU(),
+        #     nn.Linear(128, 128)  # For example, output size 10
+        # )
+
         # Positional embeddings for H×W spatial tokens
         self.pos_embed = nn.Parameter(torch.zeros(1, d_model, 25, 25))
         nn.init.trunc_normal_(self.pos_embed, std=0.02)
@@ -28,8 +37,13 @@ class SegmentationEncoder(nn.Module):
         Returns:
             memory: [B, L, d_model] - flattened encoder memory for decoder
         """
-        B, C, H, W = seg_logits.shape
-        assert H == self.height and W == self.width, "Unexpected input size"
+        if seg_logits.dim() == 4:
+            B, C, H, W = seg_logits.shape
+            assert H == self.height and W == self.width, "Unexpected input size"
+        elif seg_logits.dim() == 3:
+            B, N, C = seg_logits.shape
+            H = W = int(N ** 0.5)  # assumes square
+            seg_logits = seg_logits.reshape(B, C, H, W)
 
         # Normalize segmentation logits → probabilities
         seg_probs = F.softmax(seg_logits, dim=1)           # [B, C, H, W]
@@ -42,5 +56,7 @@ class SegmentationEncoder(nn.Module):
 
         # Flatten spatial dimensions into sequence
         memory = feat.flatten(2).transpose(1, 2)           # [B, L=H*W, d_model]
+
+        # memory = self.proj(feat.view(B, -1))
 
         return memory

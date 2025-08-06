@@ -7,6 +7,8 @@ import copy
 from diffuser.models.helpers import get_schedule_jump
 from diffuser.graders.traj_graders import joint_traj_grader
 
+from diffuser.models.temporal_film import ConditionalUnet1D
+
 import diffuser.utils as utils
 from .helpers import (
     cosine_beta_schedule,
@@ -53,25 +55,28 @@ def mountain_loss(traj):
     return loss.mean()
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, model, horizon, observation_dim, action_dim, n_timesteps=1000,
-        loss_type='l1', clip_denoised=False, predict_epsilon=True,
-        action_weight=1.0, loss_discount=1.0, loss_weights=None,
-    ):
-        super().__init__()
-        self.horizon = horizon
-        self.observation_dim = observation_dim
-        self.action_dim = action_dim
-        self.transition_dim = observation_dim + action_dim
-        self.model = model
+    def __init__(self, cfg):
 
-        betas = cosine_beta_schedule(n_timesteps)
+    # self, model, horizon, observation_dim, action_dim, n_timesteps=1000,
+    #     loss_type='l1', clip_denoised=False, predict_epsilon=True,
+    #     action_weight=1.0, loss_discount=1.0, loss_weights=None,
+
+        super().__init__()
+        self.horizon = 128 if "global" in cfg.planner_type else 16
+        self.observation_dim = cfg.observation_dim
+        self.action_dim = cfg.action_dim
+        self.transition_dim = self.observation_dim + self.action_dim
+        self.diffusion_feature_dim = cfg.diffusion_feat_dim
+        self.model = ConditionalUnet1D(cfg, transition_dim=self.diffusion_feature_dim, horizon=self.horizon, global_cond_dim=[32, 128, 32, 32], lstm_dim=6, output_dim=5, global_feature_num=4)
+
+        betas = cosine_beta_schedule(cfg.n_timesteps)
         alphas = 1. - betas
         alphas_cumprod = torch.cumprod(alphas, axis=0)
         alphas_cumprod_prev = torch.cat([torch.ones(1), alphas_cumprod[:-1]])
 
-        self.n_timesteps = int(n_timesteps)
-        self.clip_denoised = clip_denoised
-        self.predict_epsilon = predict_epsilon
+        self.n_timesteps = int(cfg.n_timesteps)
+        self.clip_denoised = cfg.clip_denoised
+        self.predict_epsilon = cfg.predict_epsilon
 
         self.register_buffer('betas', betas)
         self.register_buffer('alphas_cumprod', alphas_cumprod)
@@ -98,8 +103,8 @@ class GaussianDiffusion(nn.Module):
             (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod))
 
         ## get loss coefficients and initialize objective
-        loss_weights = self.get_loss_weights(action_weight, loss_discount, loss_weights)
-        self.loss_fn = Losses[loss_type](loss_weights, self.action_dim)
+        loss_weights = self.get_loss_weights(cfg.action_weight, cfg.loss_discount, cfg.loss_weights)
+        self.loss_fn = Losses[cfg.loss_type](loss_weights, self.action_dim)
 
     def get_loss_weights(self, action_weight, discount, weights_dict):
         '''
@@ -114,7 +119,7 @@ class GaussianDiffusion(nn.Module):
         '''
         self.action_weight = action_weight
 
-        dim_weights = torch.ones(self.transition_dim, dtype=torch.float32)
+        dim_weights = torch.ones(self.action_dim, dtype=torch.float32)
 
         ## set loss coefficients for dimensions of observation
         if weights_dict is None: weights_dict = {}
@@ -322,8 +327,7 @@ class GaussianDiffusion(nn.Module):
         return final
 
     # @torch.no_grad()
-    def p_sample_loop(self, shape, global_cond, cond, estimator, return_diffusion=False, verbose=False, **kwargs):
-        sample_type = kwargs.get('sample_type', 'constrained')
+    def p_sample_loop(self, shape, global_cond, cond, estimator, sample_type, return_diffusion=False, verbose=False):
         if sample_type == 'repaint':
             return self.p_sample_loop_repaint(shape, global_cond, cond, verbose, return_diffusion)
         elif sample_type == 'constrained':
@@ -406,17 +410,18 @@ class GaussianDiffusion(nn.Module):
         return ret_val
 
     # @torch.no_grad()
-    def conditional_sample(self, global_cond, cond, *args, horizon=None, estimator=None, return_diffusion=False, **kwargs):
+    def conditional_sample(self, seg_egoMotion_tgtPose, data, horizon=None, estimator=None, return_diffusion=False):
         '''
             conditions : [ (time, state), ... ]
         '''
         device = self.betas.device
-        batch_size = len(cond)
+        batch_size = len(data)
         horizon = horizon or self.horizon
-        shape = (batch_size, horizon, self.transition_dim)
-        global_cond = {k: v.to(device) for k, v in global_cond.items()}
+        shape = (batch_size, horizon, self.diffusion_feature_dim)
+        sample_type = "original"
+        # global_cond = {k: v.to(device) for k, v in global_cond.items()}
 
-        return self.p_sample_loop(shape, global_cond, cond, estimator, return_diffusion, *args, **kwargs)
+        return self.p_sample_loop(shape, seg_egoMotion_tgtPose, data, estimator, sample_type, return_diffusion)
 
     #------------------------------------------ training ------------------------------------------#
 
@@ -455,11 +460,11 @@ class GaussianDiffusion(nn.Module):
 
     def loss(self, x, global_cond, cond):
         x = x.to(self.betas.device) # ground truth future trajectory
-        global_cond = {k: v.to(self.betas.device) for k, v in global_cond.items()} # Move tensors to device, GPU/CPU
+        # global_cond = {k: v.to(self.betas.device) for k, v in global_cond.items()} # Move tensors to device, GPU/CPU
         batch_size = len(x) # batch size
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long() # return the random diffusion timesteps of each batch 
         return self.p_losses(x, global_cond, cond, t)
 
-    def forward(self, cond, *args, **kwargs):
-        return self.conditional_sample(cond=cond, *args, **kwargs)
+    def forward(self, seg_egoMotion_tgtPose, data):
+        return self.conditional_sample(seg_egoMotion_tgtPose, data)
 

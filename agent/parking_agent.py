@@ -21,7 +21,7 @@ from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSeman
 from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
-from model.parking_model import ParkingModel
+from model.parking_model import ParkingModel, ParkingModelDiffusion
 from model.dynamics_model import DynamicsModel
 from copy import deepcopy
 from scipy.ndimage import rotate
@@ -353,10 +353,12 @@ class ParkingAgent:
     def load_model(self, parking_pth_path, dynamic_parking_pth_path):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         ###################
-        self.model = ParkingModel(self.cfg)
+        self.model = ParkingModelDiffusion(self.cfg)
         ckpt = torch.load(parking_pth_path, map_location='cuda:0')
         state_dict = OrderedDict([(k.replace('parking_model.', ''), v) for k, v in ckpt['state_dict'].items()])
-        self.model.load_state_dict(state_dict,strict=False)
+        missing, unexpected = self.model.load_state_dict(state_dict,strict=False)
+        print("Missing keys:", missing)
+        print("Unexpected keys:", unexpected)
         self.model.to(self.device)
         self.model.eval()
 
