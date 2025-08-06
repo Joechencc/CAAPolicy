@@ -87,11 +87,14 @@ class ParkingTrainingModule(pl.LightningModule):
         else:
             dataset.keep_goals(self.current_epoch)
             print("Train perception with low lr and motion with normal lr.")
-            # freeze_module(self.parking_model.bev_model)
-            # freeze_module(self.parking_model.bev_encoder)
-            # freeze_module(self.parking_model.feature_fusion)
-            # freeze_module(self.parking_model.film_modulate)
-            # freeze_module(self.parking_model.segmentation_head)
+            if self.cfg.motion_head == "segmentation":
+                freeze_module(self.parking_model.bev_model)
+                freeze_module(self.parking_model.bev_encoder)
+                freeze_module(self.parking_model.feature_fusion)
+                freeze_module(self.parking_model.film_modulate)
+                freeze_module(self.parking_model.segmentation_head)
+            else:
+                pass
 
 
     def training_step(self, batch, batch_idx):
@@ -155,7 +158,7 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            # pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+            pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
             diffusion_loss = self.parking_model.diffusion_loss(batch)
             val_loss_dict.update({
                 "diffusion_loss": diffusion_loss
@@ -184,15 +187,15 @@ class ParkingTrainingModule(pl.LightningModule):
         #     "waypoint_val_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss,
         # })
 
-        # segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        # val_loss_dict.update({
-        #     "segmentation_val_loss": segmentation_val_loss
-        # })
+        segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        val_loss_dict.update({
+            "segmentation_val_loss": segmentation_val_loss
+        })
 
-        # depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        # val_loss_dict.update({
-        #     "depth_val_loss": depth_val_loss
-        # })
+        depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
+        val_loss_dict.update({
+            "depth_val_loss": depth_val_loss
+        })
 
         val_loss = sum(val_loss_dict.values())
         val_loss_dict.update({
@@ -215,7 +218,7 @@ class ParkingTrainingModule(pl.LightningModule):
     
         base_lr = self.cfg.learning_rate
         dino_lr = 0.1 * self.cfg.learning_rate  # ← add this to your config
-        perception_lr = self.cfg.learning_rate if self.current_epoch < self.perception_training_steps else 0.1 * self.cfg.learning_rate 
+        perception_lr = self.cfg.learning_rate if self.current_epoch < self.perception_training_steps else 0.01 * self.cfg.learning_rate 
         weight_decay = self.cfg.weight_decay
 
         # Separate DINOv2 parameters (in DinoCamEncoder) and the rest

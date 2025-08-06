@@ -75,4 +75,4 @@ parking_model:
   loss_weights: null
   planner_type: global_interp # local, global, local_interp, global_interp
   normalize_traj: True
-  motion_head: embedding
+  motion_head: embedding # embedding, segmentation
