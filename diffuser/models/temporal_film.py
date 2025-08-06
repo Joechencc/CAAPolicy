@@ -144,8 +144,8 @@ class ConditionalUnet1D(nn.Module):
         #     global_feature_cond_dim = lstm_out_dim + cond_dim
         # else:
         #     global_feature_cond_dim = cond_dim
-
-        self.segmentation_encoder = EncoderCNN(config=cfg, in_channels=267, d_model=cfg.tf_de_dim, height=200, width=200, output_dim=global_cond_dim[1])
+        
+        self.segmentation_encoder = EncoderCNN(config=cfg, in_channels = 267 if cfg.motion_head == "embedding" else 1, d_model=cfg.tf_de_dim, height=200, width=200, output_dim=global_cond_dim[1])
         # self.segmentation_encoder = SegmentationEncoder(in_channels=3, d_model=32, height=200, width=200)
         self.motion_encoder = EncoderFC(input_dim=motion_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[2])
         self.target_encoder = EncoderFC(input_dim=target_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[3])
