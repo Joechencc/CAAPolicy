@@ -68,12 +68,14 @@ class ParkingTrainingModule(pl.LightningModule):
         self.perception_training_steps = 15
 
     def on_train_start(self):
-        config_path = "./config/dino_training.yaml"  # assume you store path here
-        checkpoint_dir = self.cfg.checkpoint_dir # works for TensorBoard, WandB, CSVLogger, etc.
+        config_path = "./config/dino_training.yaml"
+        checkpoint_dir = self.cfg.checkpoint_dir
 
-        # Copy the config
         if self.trainer.is_global_zero and os.path.isfile(config_path):
-            shutil.copy(config_path, os.path.join(checkpoint_dir, 'dino_training.yaml'))
+            os.makedirs(checkpoint_dir, exist_ok=True)  # ✅ create dir if not exists
+
+            dst_path = os.path.join(checkpoint_dir, os.path.basename(config_path))
+            shutil.copyfile(config_path, dst_path)  # ✅ overwrite if exists
 
     def on_train_epoch_start(self):
 
@@ -111,7 +113,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+        # pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
 
         control_loss = self.parking_model.diffusion_loss(batch)
         loss_dict.update({
@@ -148,15 +150,15 @@ class ParkingTrainingModule(pl.LightningModule):
         #     "waypoint_loss": waypoint_loss_2*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss_2
         # })
 
-        segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        loss_dict.update({
-            "segmentation_loss": segmentation_loss
-        })
+        # segmentation_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        # loss_dict.update({
+        #     "segmentation_loss": segmentation_loss
+        # })
 
-        depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        loss_dict.update({
-            "depth_loss": depth_loss
-        })
+        # depth_loss = self.depth_loss_func(pred_depth, batch['depth'])
+        # loss_dict.update({
+        #     "depth_loss": depth_loss
+        # })
         train_loss = sum(loss_dict.values())
         loss_dict.update({
             "train_loss": train_loss
@@ -170,7 +172,7 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+            # pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
             diffusion_loss = self.parking_model.diffusion_loss(batch)
             val_loss_dict.update({
                 "diffusion_loss": diffusion_loss
@@ -199,15 +201,15 @@ class ParkingTrainingModule(pl.LightningModule):
         #     "waypoint_val_loss": waypoint_loss*0.0 if self.current_epoch < self.perception_training_steps else waypoint_loss,
         # })
 
-        segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
-        val_loss_dict.update({
-            "segmentation_val_loss": segmentation_val_loss
-        })
+        # segmentation_val_loss = self.segmentation_loss_func(pred_segmentation.unsqueeze(1), batch['segmentation'])
+        # val_loss_dict.update({
+        #     "segmentation_val_loss": segmentation_val_loss
+        # })
 
-        depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
-        val_loss_dict.update({
-            "depth_val_loss": depth_val_loss
-        })
+        # depth_val_loss = self.depth_loss_func(pred_depth, batch['depth'])
+        # val_loss_dict.update({
+        #     "depth_val_loss": depth_val_loss
+        # })
 
         val_loss = sum(val_loss_dict.values())
         val_loss_dict.update({

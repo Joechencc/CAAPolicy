@@ -703,8 +703,8 @@ class CarlaDataset(torch.utils.data.Dataset):
         self.delta_yaw_values = np.array(self.delta_yaw_values).astype(np.float32)
 
         self.target_point_pre = np.array(self.target_point).astype(np.float32)
-        if self.cfg.normalize_traj:
-            self.target_point_pre = self.normalize_trajectories(self.target_point_pre)
+        # if self.cfg.normalize_traj:
+        #     self.target_point_pre = self.normalize_trajectories(self.target_point_pre)
         self.target_point = self.target_point_pre.copy()
         self.ego_motion_seq = np.array(self.ego_motion_seq).astype(np.float32)
         self.target_point_seq = np.array(self.target_point_seq).astype(np.float32)
