@@ -16,7 +16,7 @@ def seed_worker(worker_id):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
-def diffusion_collate_fn(batch, seq_len, collate_option="global"):
+def diffusion_collate_fn(batch, seq_len, interval, aggregate, collate_option="global"):
     """
     Batch: list of dicts from Dataset __getitem__
     """
@@ -25,6 +25,7 @@ def diffusion_collate_fn(batch, seq_len, collate_option="global"):
     # Keys you want to resize
     traj_keys = [
         'gt_target_point_traj',
+        'ego_trans_traj',
         'gt_control_traj',
         'gt_acc_traj',
         'gt_steer_traj',
@@ -32,7 +33,7 @@ def diffusion_collate_fn(batch, seq_len, collate_option="global"):
     ]
 
     for key in traj_keys:
-        resized = [resize_trajectory(item[key], seq_len, mode=collate_option) for item in batch]  # List of [fixed_steps, D]
+        resized = [resize_trajectory(item[key], seq_len, mode=collate_option, interval=interval, aggregate=aggregate, angle_col=2, angle_unit="deg") for item in batch]  # List of [fixed_steps, D]
         batch_dict[key] = torch.stack(resized, dim=0)  # → [B, fixed_steps, D]
 
     # Copy over all other keys directly (not resized)
@@ -42,28 +43,68 @@ def diffusion_collate_fn(batch, seq_len, collate_option="global"):
 
     return batch_dict
 
+def _block_reduce(tensor, interval, aggregate="last", angle_col=None, angle_unit="deg"):
+    """Collapse every `interval` steps into one row."""
+    if interval <= 1:
+        return tensor
 
-def resize_trajectory(tensor, fixed_steps, mode="global"):
+    T, D = tensor.shape
+    out = []
+    for start in range(0, T, interval):
+        end = min(start + interval, T)
+        block = tensor[start:end]  # [L, D]
+        if aggregate == "last":
+            out.append(block[-1])
+        elif aggregate == "mean":
+            if angle_col is None:
+                out.append(block.mean(dim=0))
+            else:
+                # mean for non-angle dims
+                m = block.mean(dim=0)
+                # circular mean for angle dim
+                ang = block[:, angle_col]
+                if angle_unit == "deg":
+                    ang_rad = torch.deg2rad(ang)
+                else:
+                    ang_rad = ang
+                c = torch.cos(ang_rad).mean()
+                s = torch.sin(ang_rad).mean()
+                ang_mean = torch.atan2(s, c)  # in rad
+                if angle_unit == "deg":
+                    ang_mean = torch.rad2deg(ang_mean)
+                m[angle_col] = ang_mean
+                out.append(m)
+        else:
+            raise ValueError(f"Unknown aggregate: {aggregate}")
+    return torch.stack(out, dim=0)  # [T_block, D]
+
+
+def resize_trajectory(tensor, fixed_steps, mode="global",
+                      interval=1, aggregate="last", angle_col=None, angle_unit="deg"):
     """
     Resize a (T, D) tensor to (fixed_steps, D).
 
+    interval: collapse every `interval` timesteps into one before resizing.
+              aggregate='last' (default) or 'mean' (circular mean for angle_col).
+
     Modes:
-    -------
     1. "global":
         - T == fixed_steps → return as is
-        - T > fixed_steps  → uniform sample along the FULL trajectory
+        - T > fixed_steps  → uniform sample along FULL traj
         - T < fixed_steps  → pad with last
     2. "global_interp":
-        - T >= fixed_steps → interpolate fixed_steps points along FULL trajectory
-        - T < fixed_steps  → interpolate T points along FULL trajectory, then pad with last
+        - T >= fixed_steps → interpolate fixed_steps along FULL traj
+        - T < fixed_steps  → interpolate T along FULL traj, then pad with last
     3. "local":
         - T == fixed_steps → return as is
-        - T > fixed_steps  → take the NEXT fixed_steps points (slice)
+        - T > fixed_steps  → take the NEXT fixed_steps (slice)
         - T < fixed_steps  → pad with last
     4. "local_interp":
-        - T >= fixed_steps → interpolate fixed_steps points along the NEXT fixed_steps segment
-        - T < fixed_steps  → interpolate T points along FULL trajectory, then pad with last
+        - T >= fixed_steps → interpolate fixed_steps along NEXT fixed_steps segment
+        - T < fixed_steps  → interpolate T along FULL traj, then pad with last
     """
+    # 1) collapse blocks first
+    tensor = _block_reduce(tensor, interval, aggregate, angle_col, angle_unit)
     T, D = tensor.shape
 
     if mode == "global":
@@ -80,11 +121,11 @@ def resize_trajectory(tensor, fixed_steps, mode="global"):
         x_old = np.linspace(0, 1, T)
         if T >= fixed_steps:
             x_new = np.linspace(0, 1, fixed_steps)
-            interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].cpu().numpy()) for d in range(D)]).T
+            interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].detach().cpu().numpy()) for d in range(D)]).T
             return torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
         else:
             x_new = np.linspace(0, 1, T)
-            interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].cpu().numpy()) for d in range(D)]).T
+            interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].detach().cpu().numpy()) for d in range(D)]).T
             interp_t = torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
             padding = interp_t[-1:].repeat(fixed_steps - T, 1)
             return torch.cat([interp_t, padding], dim=0)
@@ -103,18 +144,91 @@ def resize_trajectory(tensor, fixed_steps, mode="global"):
             segment_len = min(fixed_steps, T)
             x_old = np.linspace(0, 1, segment_len)
             x_new = np.linspace(0, 1, fixed_steps)
-            interp = np.vstack([np.interp(x_new, x_old, tensor[:segment_len, d].cpu().numpy()) for d in range(D)]).T
+            interp = np.vstack([np.interp(x_new, x_old, tensor[:segment_len, d].detach().cpu().numpy()) for d in range(D)]).T
             return torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
         else:
             x_old = np.linspace(0, 1, T)
             x_new = np.linspace(0, 1, T)
-            interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].cpu().numpy()) for d in range(D)]).T
+            interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].detach().cpu().numpy()) for d in range(D)]).T
             interp_t = torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
             padding = interp_t[-1:].repeat(fixed_steps - T, 1)
             return torch.cat([interp_t, padding], dim=0)
 
     else:
         raise ValueError(f"Unknown mode: {mode}")
+        
+# def resize_trajectory(tensor, fixed_steps, mode="global"):
+#     """
+#     Resize a (T, D) tensor to (fixed_steps, D).
+
+#     Modes:
+#     -------
+#     1. "global":
+#         - T == fixed_steps → return as is
+#         - T > fixed_steps  → uniform sample along the FULL trajectory
+#         - T < fixed_steps  → pad with last
+#     2. "global_interp":
+#         - T >= fixed_steps → interpolate fixed_steps points along FULL trajectory
+#         - T < fixed_steps  → interpolate T points along FULL trajectory, then pad with last
+#     3. "local":
+#         - T == fixed_steps → return as is
+#         - T > fixed_steps  → take the NEXT fixed_steps points (slice)
+#         - T < fixed_steps  → pad with last
+#     4. "local_interp":
+#         - T >= fixed_steps → interpolate fixed_steps points along the NEXT fixed_steps segment
+#         - T < fixed_steps  → interpolate T points along FULL trajectory, then pad with last
+#     """
+#     T, D = tensor.shape
+
+#     if mode == "global":
+#         if T == fixed_steps:
+#             return tensor
+#         elif T > fixed_steps:
+#             idx = np.linspace(0, T - 1, fixed_steps, dtype=int)
+#             return tensor[idx]
+#         else:
+#             padding = tensor[-1:].repeat(fixed_steps - T, 1)
+#             return torch.cat([tensor, padding], dim=0)
+
+#     elif mode == "global_interp":
+#         x_old = np.linspace(0, 1, T)
+#         if T >= fixed_steps:
+#             x_new = np.linspace(0, 1, fixed_steps)
+#             interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].cpu().numpy()) for d in range(D)]).T
+#             return torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
+#         else:
+#             x_new = np.linspace(0, 1, T)
+#             interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].cpu().numpy()) for d in range(D)]).T
+#             interp_t = torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
+#             padding = interp_t[-1:].repeat(fixed_steps - T, 1)
+#             return torch.cat([interp_t, padding], dim=0)
+
+#     elif mode == "local":
+#         if T == fixed_steps:
+#             return tensor
+#         elif T > fixed_steps:
+#             return tensor[:fixed_steps]
+#         else:
+#             padding = tensor[-1:].repeat(fixed_steps - T, 1)
+#             return torch.cat([tensor, padding], dim=0)
+
+#     elif mode == "local_interp":
+#         if T >= fixed_steps:
+#             segment_len = min(fixed_steps, T)
+#             x_old = np.linspace(0, 1, segment_len)
+#             x_new = np.linspace(0, 1, fixed_steps)
+#             interp = np.vstack([np.interp(x_new, x_old, tensor[:segment_len, d].cpu().numpy()) for d in range(D)]).T
+#             return torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
+#         else:
+#             x_old = np.linspace(0, 1, T)
+#             x_new = np.linspace(0, 1, T)
+#             interp = np.vstack([np.interp(x_new, x_old, tensor[:, d].cpu().numpy()) for d in range(D)]).T
+#             interp_t = torch.tensor(interp, dtype=tensor.dtype, device=tensor.device)
+#             padding = interp_t[-1:].repeat(fixed_steps - T, 1)
+#             return torch.cat([interp_t, padding], dim=0)
+
+#     else:
+#         raise ValueError(f"Unknown mode: {mode}")
 
 
 class ParkingDataModule(pl.LightningDataModule):
@@ -129,7 +243,7 @@ class ParkingDataModule(pl.LightningDataModule):
         data_root = self.data_dir
         train_set = CarlaDataset(data_root, 1, self.cfg)
         val_set = CarlaDataset(data_root, 0, self.cfg)
-        diffusion_collate = partial(diffusion_collate_fn, seq_len=128 if "global" in self.cfg.planner_type else 16, collate_option=self.cfg.planner_type)
+        diffusion_collate = partial(diffusion_collate_fn, seq_len=128 if "global" in self.cfg.planner_type else 16, interval=self.cfg.data_interval, aggregate=self.cfg.data_aggregate_type, collate_option=self.cfg.planner_type)
         self.train_loader = DataLoader(dataset=train_set,
                                        batch_size=self.cfg.batch_size,
                                        shuffle=True,

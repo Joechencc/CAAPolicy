@@ -553,7 +553,7 @@ class ParkingAgent:
             with torch.no_grad():
                 start_time = time.time()
 
-                pred_controls, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_traj, pred_segmentation, _, target_bev = self.model.predict(data)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -578,20 +578,62 @@ class ParkingAgent:
 
                 # import pdb; pdb.set_trace()
                 # draw waypoint WP1, WP2, WP3, WP4
-                # for i in range(0,4):
-                #     #waypoint : [x,y,yaw] in egocentric
-                #     waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
-                #     #convert to world frame
-                #     waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
-                #     waypoint[-1] = 0.3 #z=0.3
-                #     location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
-                #     self.world._world.debug.draw_string(location, 'WP{}'.format(i + 1), draw_shadow=True,
-                #                                         color=carla.Color(255, 0, 0))
+                for i, waypoint in enumerate(pred_traj.squeeze(0)):
+                    if i % 4 == 0:
+                        #waypoint : [x,y,yaw] in egocentric
+                        # waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
+                        waypoint = waypoint.tolist()
+                        #convert to world frame
+                        waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
+                        waypoint[-1] = 0.3 #z=0.3
+                        location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
+                        # self.world._world.debug.draw_point(location, size=0.1, color=carla.Color(255, 0, 0), lifetime=0.2)
+                        self.world._world.debug.draw_string(location, '{}'.format(i + 1), draw_shadow=True,
+                                                            color=carla.Color(255, 0, 0))
+
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
 
         # self.player.apply_control(self.trans_control)
+
+    def lerp(self, a, b, t):  # linear interpolate 0..1
+        return int(a + (b - a) * t)
+
+    def lerp_color(self, c0, c1, t):
+        return carla.Color(self.lerp(c0.r, c1.r, t),
+                        self.lerp(c0.g, c1.g, t),
+                        self.lerp(c0.b, c1.b, t))
+
+    def draw_trajectory(self, world, locations, color_start=carla.Color(0,255,0),
+                        color_end=carla.Color(255,0,0),
+                        point_size=0.1, line_thickness=0.05,
+                        life_time=5.0, persistent=False):
+        """
+        locations: list of carla.Location (or objects with .location)
+        Draws colored dots and lines with a gradient from color_start to color_end.
+        """
+        debug = world.debug
+        n = len(locations)
+        if n == 0:
+            return
+
+        # Ensure we have carla.Location list
+        locs = [loc.location if hasattr(loc, "location") else loc for loc in locations]
+
+        for i, loc in enumerate(locs):
+            t = i / max(1, n - 1)
+            c = self.lerp_color(color_start, color_end, t)
+
+            # Dot
+            debug.draw_point(loc, size=point_size, color=c,
+                            life_time=life_time, persistent_lines=persistent)
+
+            # Link to next
+            if i < n - 1:
+                nxt = locs[i + 1]
+                debug.draw_line(loc, nxt, thickness=line_thickness, color=c,
+                                life_time=life_time, persistent_lines=persistent)
 
     def speed_limit(self, data_frame):
         # if vehicle stops at initialization, give throttle until Gear turns to 1

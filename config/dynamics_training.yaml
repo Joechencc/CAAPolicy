@@ -89,6 +89,9 @@ parking_model:
   planner_type: global_interp # local, global, local_interp, global_interp
   normalize_traj: True
   motion_head: embedding
+  ego_centric_traj: True
+  data_aggregate_type: mean
+  data_interval: 4
   hybrid_ckpt_path: "/scratch/rs9193/e2e_temporal_spatial/ParkWithUncertainty/ckpt/last.ckpt"
 
   resume_ckpt_path: ckpt/dynamics_model/exp_2025_6_5_22_15_55/last.ckpt #/scratch/rs9193/park_test/ParkWithUncertainty/ckpt/last.ckpt  # Path to resume training from a checkpoint

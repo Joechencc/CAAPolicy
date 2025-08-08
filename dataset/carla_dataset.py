@@ -381,6 +381,7 @@ class CarlaDataset(torch.utils.data.Dataset):
 
         # data
         self.task_idx = []
+        self.ego_trans = []
 
         self.front = []
         self.front_left = []
@@ -616,6 +617,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                 parking_goal = convert_slot_coord(ego_trans, parking_goal)
                 self.target_point.append(parking_goal)
                 pose_episode.append(parking_goal)
+                
 
                 target_point_seq = []
                 for i in range(self.cfg.future_frame_nums):
@@ -627,6 +629,7 @@ class CarlaDataset(torch.utils.data.Dataset):
                         target_point_seq.append(parking_goal)
                 self.target_point_seq.append(target_point_seq)
 
+                self.ego_trans.append([ego_trans.location.x, ego_trans.location.y, ego_trans.rotation.yaw])
                 self.task_idx.append(task_id)    
 
             if len(pose_episode) != 0:
@@ -706,6 +709,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         # if self.cfg.normalize_traj:
         #     self.target_point_pre = self.normalize_trajectories(self.target_point_pre)
         self.target_point = self.target_point_pre.copy()
+        self.ego_trans = np.array(self.ego_trans).astype(np.float32)
         self.ego_motion_seq = np.array(self.ego_motion_seq).astype(np.float32)
         self.target_point_seq = np.array(self.target_point_seq).astype(np.float32)
         self.acc_return = np.vstack(self.acc_return).astype(np.float32)
@@ -757,7 +761,7 @@ class CarlaDataset(torch.utils.data.Dataset):
         data = {}
         keys = ['image', 'depth', 'extrinsics', 'intrinsics', 'target_point', 'ego_motion', 'segmentation',
                 'gt_control', 'gt_acc', 'gt_steer', 'gt_reverse','gt_waypoint','delta_x', 'delta_y', 'delta_yaw',
-                'gt_target_point_traj', 'gt_control_traj', 'gt_acc_traj', 'gt_steer_traj', 'gt_reverse_traj']
+                'gt_target_point_traj', 'ego_trans_traj', 'gt_control_traj', 'gt_acc_traj', 'gt_steer_traj', 'gt_reverse_traj']
         for key in keys:
             data[key] = []
 
@@ -814,12 +818,16 @@ class CarlaDataset(torch.utils.data.Dataset):
         # accumulated reward
         data['acc_rew'] = torch.from_numpy(self.acc_return[index])
 
+        # ego_trans
+        data['ego_trans'] = torch.from_numpy(self.ego_trans[index])
+
         # Start diffusion Part
         start_task_idx, curr_task_idx = self.task_idx[index], self.task_idx[index]
         num_in_seq = 0
 
         while curr_task_idx == start_task_idx:
             data['gt_target_point_traj'].append(torch.from_numpy(self.target_point[index+num_in_seq]))
+            data['ego_trans_traj'].append(torch.from_numpy(self.ego_trans[index+num_in_seq]))
             data['gt_control_traj'].append(torch.from_numpy(self.control[index+num_in_seq]))
             data['gt_acc_traj'].append(torch.from_numpy(self.throttle_brake[index+num_in_seq]))
             data['gt_steer_traj'].append(torch.from_numpy(self.steer[index+num_in_seq]))
@@ -830,7 +838,7 @@ class CarlaDataset(torch.utils.data.Dataset):
             else:
                 break
 
-        data['gt_target_point_traj'], data['gt_control_traj'], data['gt_acc_traj'], data['gt_steer_traj'], data['gt_reverse_traj'] = torch.vstack(data['gt_target_point_traj']), torch.vstack(data['gt_control_traj']), torch.vstack(data['gt_acc_traj']), torch.vstack(data['gt_steer_traj']), torch.vstack(data['gt_reverse_traj'])
+        data['gt_target_point_traj'], data['ego_trans_traj'], data['gt_control_traj'], data['gt_acc_traj'], data['gt_steer_traj'], data['gt_reverse_traj'] = torch.vstack(data['gt_target_point_traj']), torch.vstack(data['ego_trans_traj']), torch.vstack(data['gt_control_traj']), torch.vstack(data['gt_acc_traj']), torch.vstack(data['gt_steer_traj']), torch.vstack(data['gt_reverse_traj'])
 
 
         return data

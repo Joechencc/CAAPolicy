@@ -69,7 +69,10 @@ class Configuration:
 
     planner_type = None
     normalize_traj = None
+    ego_centric_traj = None
     motion_head = None
+    data_aggregate_type = None
+    data_interval = None
 
 def get_cfg(cfg_yaml: dict):
     today = datetime.now()
@@ -143,6 +146,9 @@ def get_cfg(cfg_yaml: dict):
 
     cfg.planner_type = config['planner_type']
     cfg.normalize_traj = config['normalize_traj']
+    cfg.ego_centric_traj = config['ego_centric_traj']
     cfg.motion_head = config['motion_head']
+    cfg.data_aggregate_type = config['data_aggregate_type']
+    cfg.data_interval = config['data_interval']
 
     return cfg

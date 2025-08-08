@@ -380,9 +380,18 @@ class ParkingModelDiffusion(nn.Module):
 
     def forward(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+        if self.cfg.ego_centric_traj:
+            gt_target_point_traj = self.world_to_ego0(data["ego_trans_traj"])
+        else:
+            gt_target_point_traj = data["gt_target_point_traj"]
+
         if self.cfg.normalize_traj:
-            gt_target_point_traj = self.normalize_trajectories(data["gt_target_point_traj"], device = "cuda")
+            gt_target_point_traj = self.normalize_trajectories(gt_target_point_traj, device = "cuda")
             target_point = self.normalize_trajectories(data["target_point"], device = "cuda")
+        else:
+            gt_target_point_traj = gt_target_point_traj
+            target_point = target_point
+
         # if not self.training:
         #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
         #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
@@ -409,14 +418,26 @@ class ParkingModelDiffusion(nn.Module):
 
     def diffusion_loss(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
+
+        if self.cfg.ego_centric_traj:
+            gt_target_point_traj = self.world_to_ego0(data["ego_trans_traj"])
+        else:
+            gt_target_point_traj = data["gt_target_point_traj"]
+
         if self.cfg.normalize_traj:
-            gt_target_point_traj = self.normalize_trajectories(data["gt_target_point_traj"], device = "cuda")
+            gt_target_point_traj = self.normalize_trajectories(gt_target_point_traj, device = "cuda")
             target_point = self.normalize_trajectories(data["target_point"], device = "cuda")
+        else:
+            gt_target_point_traj = gt_target_point_traj
+            target_point = target_point
+
+
 
         if "global" in self.cfg.planner_type:
             start_end_relative_point = torch.cat((gt_target_point_traj[:,0:1,:], gt_target_point_traj[:,-1:,:]), dim=1)
         else:
             start_end_relative_point = gt_target_point_traj[:,0:1,:]
+            
         if self.cfg.motion_head == "embedding":
             seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(), "target_point": target_point}
         elif self.cfg.motion_head == "segmentation":
@@ -441,19 +462,26 @@ class ParkingModelDiffusion(nn.Module):
         
     def predict(self, data):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
-        # if not self.training:
-        #     fuse_feature = fuse_feature.clone().detach().requires_grad_(True)
-        #     fuse_feature_copy = fuse_feature.clone().detach().requires_grad_(True)
-        # else:
+
+        if self.cfg.normalize_traj:
+            target_point = self.normalize_trajectories(data["target_point"], device = "cpu")
+        else:
+            target_point = target_point
+
         fuse_feature.requires_grad_(True)
         fuse_feature_copy = fuse_feature.clone()
-        # approx_grad = self.grad_approx(fuse_feature_copy.transpose(1,2)).transpose(1,2)
-        # original control_predict
-        # pred_control = self.control_predict(fuse_feature, data['gt_control'].cuda())
-        start_relative_point = data["target_point"].unsqueeze(1)
-        if self.cfg.normalize_traj:
-            start_relative_point = self.normalize_trajectories(start_relative_point)
-        end_relative_point = torch.zeros_like(start_relative_point)
+
+        if self.cfg.ego_centric_traj:
+            end_relative_point = target_point.unsqueeze(1)
+            if self.cfg.normalize_traj:
+                end_relative_point = self.normalize_trajectories(end_relative_point)
+            start_relative_point = torch.zeros_like(end_relative_point)
+        else:
+            start_relative_point = target_point.unsqueeze(1)
+            if self.cfg.normalize_traj:
+                start_relative_point = self.normalize_trajectories(start_relative_point)
+            end_relative_point = torch.zeros_like(start_relative_point)
+
         if "global" in self.cfg.planner_type:
             start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         else:
@@ -461,20 +489,20 @@ class ParkingModelDiffusion(nn.Module):
         # start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         # torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
         if self.cfg.motion_head == "embedding":
-            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(1), "target_point": self.normalize_trajectories(data["target_point"]) if self.cfg.normalize_traj else data["target_point"]}
+            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(1), "target_point": target_point}
         elif self.cfg.motion_head == "segmentation":
-            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(1), "target_point": self.normalize_trajectories(data["target_point"]) if self.cfg.normalize_traj else data["target_point"]}
+            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(1), "target_point": target_point}
         else:
             pass        
         
-        pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
+        pred_traj = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
         if self.cfg.normalize_traj:
-            pred_control = self.denormalize_target_point(pred_control, device="cuda")
+            pred_traj = self.denormalize_target_point(pred_traj, device="cuda")
         # pred_control = self.denormalize_target_point(pred_control, mean=torch.Tensor([[-2.4473171, -0.39712235, 0.10734732]]).cuda(), std=torch.Tensor([[2.7895596, 3.3346443, 1.0033212]]).cuda())
 
-        # plot_trajectory_with_yaw((deg2rad_trajectory_2D(pred_control.squeeze(0))), invert_y=True)
+        # plot_trajectory_with_yaw(invert_trajectory_2D(deg2rad_trajectory_2D(pred_control.squeeze(0))), invert_y=True)
 
-        return pred_control, pred_segmentation, pred_depth, bev_target
+        return pred_traj, pred_segmentation, pred_depth, bev_target
 
     def normalize_trajectories(self, traj, device = "cpu"):
         normalized_traj = traj / torch.tensor([[10.0, 10.0, 180.0]], device=device)
@@ -488,6 +516,36 @@ class ParkingModelDiffusion(nn.Module):
         else:
             pass
         return traj
+
+    def world_to_ego0(self, ego_trans_world):
+        """
+        ego_trans_world: [B, T, 3] -> (x_w, y_w, yaw_deg_w)
+        returns:         [B, T, 3] -> (x_0, y_0, yaw_deg_rel) in ego_0 frame
+        """
+        def wrap_deg(d):
+            # wrap to (-180, 180]
+            return (d + 180.0) % 360.0 - 180.0
+
+        xw  = ego_trans_world[..., 0]
+        yw  = ego_trans_world[..., 1]
+        yaw = ego_trans_world[..., 2]          # degrees
+
+        x0   = xw[..., :1]                      # [B, 1]
+        y0   = yw[..., :1]                      # [B, 1]
+        yaw0 = yaw[..., :1]                     # [B, 1]
+
+        th0 = torch.deg2rad(yaw0)
+        c0, s0 = torch.cos(th0), torch.sin(th0)
+
+        # translate then rotate by -yaw0
+        dx = xw - x0
+        dy = yw - y0
+        x_rel =  c0 * dx + s0 * dy
+        y_rel = -s0 * dx + c0 * dy
+
+        yaw_rel = wrap_deg(yaw - yaw0)
+
+        return torch.stack([x_rel, y_rel, yaw_rel], dim=-1)
 
     def predict_control_logits(self, data):
         # with torch.enable_grad():
