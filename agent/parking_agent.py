@@ -7,6 +7,7 @@ import logging
 import time
 import pygame
 import os
+import types
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,6 +19,7 @@ from collections import OrderedDict
 from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
 from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint, convert_veh_coord, convert_veh_in_slot_frame
+from agents.navigation.controller import VehiclePIDController
 from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
@@ -278,6 +280,7 @@ class ParkingAgent:
         self.target_bev = None
 
         self.pre_target_point = None
+        self.buffered_traj = []
 
         self.model = None
         self.device = None
@@ -326,6 +329,12 @@ class ParkingAgent:
         self.gt_traj =[]
         self.track_traj = []
         self.dynamic_traj = []
+        self.final_steps = False
+
+        # Create the PID controller
+        args_lateral = {'K_P': 1.0, 'K_I': 0.0, 'K_D': 0.0}
+        args_longitudinal = {'K_P': 1.0, 'K_I': 0.0, 'K_D': 0.0}
+        self.pid_controller = VehiclePIDController(self.player, args_lateral=args_lateral, args_longitudinal=args_longitudinal)
 
         self.car_icon = Image.open("./car.png").convert("RGBA")
 
@@ -457,6 +466,7 @@ class ParkingAgent:
         self.gt_traj =[]
         self.track_traj = []
         self.dynamic_traj = []
+        self.final_steps = False
 
 
     def save_atten_avg_map(self, data):
@@ -494,6 +504,7 @@ class ParkingAgent:
             return
 
         if self.step % self.process_frequency == 0:
+            self.buffered_traj = []
             data_frame = self.world.sensor_data_frame
 
             if not data_frame:
@@ -553,7 +564,8 @@ class ParkingAgent:
             with torch.no_grad():
                 start_time = time.time()
 
-                pred_traj, pred_segmentation, _, target_bev = self.model.predict(data)
+                pred_traj, pred_segmentation, _, target_bev = self.model.predict(data, self.final_steps)
+                # self.buffered_traj = pred_traj.squeeze(0)
 
                 end_time = time.time()
                 self.net_eva.inference_time.append(end_time - start_time)
@@ -578,24 +590,38 @@ class ParkingAgent:
 
                 # import pdb; pdb.set_trace()
                 # draw waypoint WP1, WP2, WP3, WP4
-                for i, waypoint in enumerate(pred_traj.squeeze(0)):
-                    if i % 4 == 0:
+
+                for i, waypoint in enumerate(pred_traj):
+                    if i % 1 == 0:
                         #waypoint : [x,y,yaw] in egocentric
                         # waypoint = detokenize_waypoint(pred_waypoints[0].tolist()[i*3+1:i*3+4], self.cfg.token_nums)
                         waypoint = waypoint.tolist()
                         #convert to world frame
                         waypoint = convert_to_world(waypoint[0], waypoint[1], waypoint[2], ego_trans=data["ego_trans"])
-                        waypoint[-1] = 0.3 #z=0.3
-                        location = carla.Location(x=waypoint[0], y=waypoint[1], z=waypoint[2])
-                        # self.world._world.debug.draw_point(location, size=0.1, color=carla.Color(255, 0, 0), lifetime=0.2)
-                        self.world._world.debug.draw_string(location, '{}'.format(i + 1), draw_shadow=True,
-                                                            color=carla.Color(255, 0, 0))
+                        # waypoint[-1] = 0.3 #z=0.3
 
+                        target_tf = self.make_target_transform(0.3, waypoint[0], waypoint[1], waypoint[2])
+                        target_tf = types.SimpleNamespace(transform=target_tf)
+
+                        # carla_map = self.world.get_map()
+                        location = carla.Location(x=waypoint[0], y=waypoint[1], z=0.3)
+                        # self.world._world.debug.draw_point(location, size=0.1, color=carla.Color(255, 0, 0), lifetime=0.2)
+                        self.world._world.debug.draw_string(location, '{}'.format(i + 1), draw_shadow=True, color=carla.Color(255, 0, 0))
+                        self.buffered_traj.append(target_tf)
+                self.final_steps = True if abs(waypoint[0] - self.net_eva.eva_parking_goal[0]) < 2 and abs(waypoint[1] - self.net_eva.eva_parking_goal[1]) < 2 else False
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
 
-        # self.player.apply_control(self.trans_control)
+        idx_in_curr_loop = 6 # self.step % self.process_frequency + 1
+        control = self.pid_controller.run_step(target_speed=5.0, waypoint=self.buffered_traj[idx_in_curr_loop])
+        self.player.apply_control(control)
+
+    def make_target_transform(self, world_z, x, y, yaw_deg):
+        return carla.Transform(
+            carla.Location(x=float(x), y=float(y), z=float(world_z)),
+            carla.Rotation(yaw=float(yaw_deg))
+        )
 
     def lerp(self, a, b, t):  # linear interpolate 0..1
         return int(a + (b - a) * t)

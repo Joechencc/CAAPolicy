@@ -73,7 +73,7 @@ parking_model:
   action_weight: 1.0
   loss_discount: 1.0
   loss_weights: null
-  planner_type: local # local, global, local_interp, global_interp
+  planner_type: global # local, global, local_interp, global_interp
   normalize_traj: True
   motion_head: embedding # embedding, segmentation
   ego_centric_traj: True

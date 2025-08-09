@@ -460,7 +460,7 @@ class ParkingModelDiffusion(nn.Module):
 
         return pred_control, pred_waypoint
         
-    def predict(self, data):
+    def predict(self, data, final_steps = False):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
 
         if self.cfg.normalize_traj:
@@ -474,18 +474,20 @@ class ParkingModelDiffusion(nn.Module):
         if self.cfg.ego_centric_traj:
             end_relative_point = target_point.unsqueeze(1)
             if self.cfg.normalize_traj:
-                end_relative_point = self.normalize_trajectories(end_relative_point)
+                end_relative_point = (end_relative_point)
             start_relative_point = torch.zeros_like(end_relative_point)
         else:
             start_relative_point = target_point.unsqueeze(1)
             if self.cfg.normalize_traj:
-                start_relative_point = self.normalize_trajectories(start_relative_point)
+                start_relative_point = (start_relative_point)
             end_relative_point = torch.zeros_like(start_relative_point)
 
         if "global" in self.cfg.planner_type:
             start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         else:
             start_end_relative_point = start_relative_point
+            if final_steps:
+                start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         # start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         # torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
         if self.cfg.motion_head == "embedding":
@@ -499,6 +501,11 @@ class ParkingModelDiffusion(nn.Module):
         if self.cfg.normalize_traj:
             pred_traj = self.denormalize_target_point(pred_traj, device="cuda")
         # pred_control = self.denormalize_target_point(pred_control, mean=torch.Tensor([[-2.4473171, -0.39712235, 0.10734732]]).cuda(), std=torch.Tensor([[2.7895596, 3.3346443, 1.0033212]]).cuda())
+
+        if self.cfg.ego_centric_traj:
+            pred_traj = pred_traj.squeeze(0)
+        else:
+            pred_traj = self.world_to_ego0(pred_traj)
 
         # plot_trajectory_with_yaw(invert_trajectory_2D(deg2rad_trajectory_2D(pred_control.squeeze(0))), invert_y=True)
 

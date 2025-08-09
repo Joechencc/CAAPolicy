@@ -26,11 +26,14 @@ def diffusion_collate_fn(batch, seq_len, interval, aggregate, collate_option="gl
     traj_keys = [
         'gt_target_point_traj',
         'ego_trans_traj',
+    ]
+
+    unneccessary_keys = [        
         'gt_control_traj',
         'gt_acc_traj',
         'gt_steer_traj',
         'gt_reverse_traj'
-    ]
+        ]
 
     for key in traj_keys:
         resized = [resize_trajectory(item[key], seq_len, mode=collate_option, interval=interval, aggregate=aggregate, angle_col=2, angle_unit="deg") for item in batch]  # List of [fixed_steps, D]
@@ -38,45 +41,77 @@ def diffusion_collate_fn(batch, seq_len, interval, aggregate, collate_option="gl
 
     # Copy over all other keys directly (not resized)
     for key in batch[0]:
-        if key not in traj_keys:
+        if key not in traj_keys and key not in unneccessary_keys:
             batch_dict[key] = torch.utils.data.default_collate([item[key] for item in batch])
 
     return batch_dict
 
-def _block_reduce(tensor, interval, aggregate="last", angle_col=None, angle_unit="deg"):
-    """Collapse every `interval` steps into one row."""
+def _block_reduce(tensor, interval, aggregate="last", angle_col=None, angle_unit="deg", keep_endpoints=True):
+    """Collapse every `interval` steps into one row, optionally preserving first and last."""
     if interval <= 1:
         return tensor
 
     T, D = tensor.shape
-    out = []
-    for start in range(0, T, interval):
-        end = min(start + interval, T)
-        block = tensor[start:end]  # [L, D]
-        if aggregate == "last":
-            out.append(block[-1])
-        elif aggregate == "mean":
-            if angle_col is None:
-                out.append(block.mean(dim=0))
-            else:
-                # mean for non-angle dims
-                m = block.mean(dim=0)
-                # circular mean for angle dim
-                ang = block[:, angle_col]
-                if angle_unit == "deg":
-                    ang_rad = torch.deg2rad(ang)
+    if keep_endpoints and T > 2:
+        first = tensor[0:1]
+        last = tensor[-1:]
+        middle = tensor[1:-1]
+        # Reduce middle part
+        reduced_middle = []
+        for start in range(0, middle.shape[0], interval):
+            end = min(start + interval, middle.shape[0])
+            block = middle[start:end]
+            if aggregate == "last":
+                reduced_middle.append(block[-1])
+            elif aggregate == "mean":
+                if angle_col is None:
+                    reduced_middle.append(block.mean(dim=0))
                 else:
-                    ang_rad = ang
-                c = torch.cos(ang_rad).mean()
-                s = torch.sin(ang_rad).mean()
-                ang_mean = torch.atan2(s, c)  # in rad
-                if angle_unit == "deg":
-                    ang_mean = torch.rad2deg(ang_mean)
-                m[angle_col] = ang_mean
-                out.append(m)
-        else:
-            raise ValueError(f"Unknown aggregate: {aggregate}")
-    return torch.stack(out, dim=0)  # [T_block, D]
+                    m = block.mean(dim=0)
+                    ang = block[:, angle_col]
+                    if angle_unit == "deg":
+                        ang_rad = torch.deg2rad(ang)
+                    else:
+                        ang_rad = ang
+                    c = torch.cos(ang_rad).mean()
+                    s = torch.sin(ang_rad).mean()
+                    ang_mean = torch.atan2(s, c)
+                    if angle_unit == "deg":
+                        ang_mean = torch.rad2deg(ang_mean)
+                    m[angle_col] = ang_mean
+                    reduced_middle.append(m)
+            else:
+                raise ValueError(f"Unknown aggregate: {aggregate}")
+        reduced_middle = torch.stack(reduced_middle, dim=0) if reduced_middle else torch.empty((0, D), dtype=tensor.dtype, device=tensor.device)
+        return torch.cat([first, reduced_middle, last], dim=0)
+    else:
+        # Original reduce without keeping endpoints
+        out = []
+        for start in range(0, T, interval):
+            end = min(start + interval, T)
+            block = tensor[start:end]
+            if aggregate == "last":
+                out.append(block[-1])
+            elif aggregate == "mean":
+                if angle_col is None:
+                    out.append(block.mean(dim=0))
+                else:
+                    m = block.mean(dim=0)
+                    ang = block[:, angle_col]
+                    if angle_unit == "deg":
+                        ang_rad = torch.deg2rad(ang)
+                    else:
+                        ang_rad = ang
+                    c = torch.cos(ang_rad).mean()
+                    s = torch.sin(ang_rad).mean()
+                    ang_mean = torch.atan2(s, c)
+                    if angle_unit == "deg":
+                        ang_mean = torch.rad2deg(ang_mean)
+                    m[angle_col] = ang_mean
+                    out.append(m)
+            else:
+                raise ValueError(f"Unknown aggregate: {aggregate}")
+        return torch.stack(out, dim=0)
 
 
 def resize_trajectory(tensor, fixed_steps, mode="global",
