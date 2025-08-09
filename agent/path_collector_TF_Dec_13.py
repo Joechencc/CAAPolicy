@@ -51,7 +51,21 @@ from collections import deque
 
 sys.path.append('/home/ryan/ParkWithUncertainty-baseline/carla/PythonAPI/carla/agents/tools')
 
-from misc import get_speed
+from misc import get_speed as carla_get_speed
+
+def get_speed(vehicle):
+    '''
+    Added 5% noise to the speed
+    '''
+
+    base_speed = carla_get_speed(vehicle)
+    
+    noise_std = 0.01 * base_speed 
+    noise = np.random.normal(0, noise_std)
+    noisy_speed = base_speed + noise
+    
+    # Ensure speed doesn't become negative
+    return max(0.0, noisy_speed)
 
 from functools import reduce
 def convex_hull_graham(points):
@@ -198,7 +212,7 @@ class VehiclePIDController():
         control.manual_gear_shift = False
         self.past_steering = steering
 
-        return control
+        return control, current_speed
 
 
 class PIDLongitudinalController():

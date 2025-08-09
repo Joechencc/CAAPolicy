@@ -717,11 +717,11 @@ cdef list[PATH_rs] generate_path_rs(list q0, list q1, float maxc):
 
     paths = []
     paths = SCS(x, y, dth, paths)
-    #paths = CSC(x, y, dth, paths)
-    #paths = CCC(x, y, dth, paths)
-    #paths = CCCC(x, y, dth, paths)
-    #paths = CCSC(x, y, dth, paths)
-    #paths = CCSCC(x, y, dth, paths)
+    paths = CSC(x, y, dth, paths)
+    paths = CCC(x, y, dth, paths)
+    paths = CCCC(x, y, dth, paths)
+    paths = CCSC(x, y, dth, paths)
+    paths = CCSCC(x, y, dth, paths)
 
     return paths   
 

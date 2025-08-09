@@ -3222,12 +3222,17 @@ static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_LRL(float, float, float); /*proto*/
 static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_SCS(float, float, float, PyObject *); /*proto*/
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_SLS(float, float, float); /*proto*/
+static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_CSC(float, float, float, PyObject *); /*proto*/
+static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_CCC(float, float, float, PyObject *); /*proto*/
 static __pyx_ctuple_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_calc_tauOmega(float, float, float, float, float); /*proto*/
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_LRLRn(float, float, float); /*proto*/
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_LRLRp(float, float, float); /*proto*/
+static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_CCCC(float, float, float, PyObject *); /*proto*/
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_LRSR(float, float, float); /*proto*/
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_LRSL(float, float, float); /*proto*/
+static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_CCSC(float, float, float, PyObject *); /*proto*/
 static __pyx_ctuple_int__and_float__and_float__and_float __pyx_f_23hybrid_A_star_TF_Dec_13_LRSLR(float, float, float); /*proto*/
+static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_CCSCC(float, float, float, PyObject *); /*proto*/
 static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_generate_path_rs(PyObject *, PyObject *, float); /*proto*/
 static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_generate_local_course(float, PyObject *, PyObject *, float, float); /*proto*/
 static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_calc_all_paths(float, float, float, float, float, float, float, struct __pyx_opt_args_23hybrid_A_star_TF_Dec_13_calc_all_paths *__pyx_optional_args); /*proto*/
@@ -20331,7 +20336,7 @@ static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_generate_path_rs(PyObject *__
  * 
  *     paths = []             # <<<<<<<<<<<<<<
  *     paths = SCS(x, y, dth, paths)
- *     #paths = CSC(x, y, dth, paths)
+ *     paths = CSC(x, y, dth, paths)
  */
   __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 718, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
@@ -20342,16 +20347,76 @@ static PyObject *__pyx_f_23hybrid_A_star_TF_Dec_13_generate_path_rs(PyObject *__
  * 
  *     paths = []
  *     paths = SCS(x, y, dth, paths)             # <<<<<<<<<<<<<<
- *     #paths = CSC(x, y, dth, paths)
- *     #paths = CCC(x, y, dth, paths)
+ *     paths = CSC(x, y, dth, paths)
+ *     paths = CCC(x, y, dth, paths)
  */
   __pyx_t_3 = __pyx_f_23hybrid_A_star_TF_Dec_13_SCS(__pyx_v_x, __pyx_v_y, __pyx_v_dth, __pyx_v_paths); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 719, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __Pyx_DECREF_SET(__pyx_v_paths, ((PyObject*)__pyx_t_3));
   __pyx_t_3 = 0;
 
+  /* "hybrid_A_star_TF_Dec_13.pyx":720
+ *     paths = []
+ *     paths = SCS(x, y, dth, paths)
+ *     paths = CSC(x, y, dth, paths)             # <<<<<<<<<<<<<<
+ *     paths = CCC(x, y, dth, paths)
+ *     paths = CCCC(x, y, dth, paths)
+ */
+  __pyx_t_3 = __pyx_f_23hybrid_A_star_TF_Dec_13_CSC(__pyx_v_x, __pyx_v_y, __pyx_v_dth, __pyx_v_paths); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 720, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF_SET(__pyx_v_paths, ((PyObject*)__pyx_t_3));
+  __pyx_t_3 = 0;
+
+  /* "hybrid_A_star_TF_Dec_13.pyx":721
+ *     paths = SCS(x, y, dth, paths)
+ *     paths = CSC(x, y, dth, paths)
+ *     paths = CCC(x, y, dth, paths)             # <<<<<<<<<<<<<<
+ *     paths = CCCC(x, y, dth, paths)
+ *     paths = CCSC(x, y, dth, paths)
+ */
+  __pyx_t_3 = __pyx_f_23hybrid_A_star_TF_Dec_13_CCC(__pyx_v_x, __pyx_v_y, __pyx_v_dth, __pyx_v_paths); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 721, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF_SET(__pyx_v_paths, ((PyObject*)__pyx_t_3));
+  __pyx_t_3 = 0;
+
+  /* "hybrid_A_star_TF_Dec_13.pyx":722
+ *     paths = CSC(x, y, dth, paths)
+ *     paths = CCC(x, y, dth, paths)
+ *     paths = CCCC(x, y, dth, paths)             # <<<<<<<<<<<<<<
+ *     paths = CCSC(x, y, dth, paths)
+ *     paths = CCSCC(x, y, dth, paths)
+ */
+  __pyx_t_3 = __pyx_f_23hybrid_A_star_TF_Dec_13_CCCC(__pyx_v_x, __pyx_v_y, __pyx_v_dth, __pyx_v_paths); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 722, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF_SET(__pyx_v_paths, ((PyObject*)__pyx_t_3));
+  __pyx_t_3 = 0;
+
+  /* "hybrid_A_star_TF_Dec_13.pyx":723
+ *     paths = CCC(x, y, dth, paths)
+ *     paths = CCCC(x, y, dth, paths)
+ *     paths = CCSC(x, y, dth, paths)             # <<<<<<<<<<<<<<
+ *     paths = CCSCC(x, y, dth, paths)
+ * 
+ */
+  __pyx_t_3 = __pyx_f_23hybrid_A_star_TF_Dec_13_CCSC(__pyx_v_x, __pyx_v_y, __pyx_v_dth, __pyx_v_paths); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 723, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF_SET(__pyx_v_paths, ((PyObject*)__pyx_t_3));
+  __pyx_t_3 = 0;
+
+  /* "hybrid_A_star_TF_Dec_13.pyx":724
+ *     paths = CCCC(x, y, dth, paths)
+ *     paths = CCSC(x, y, dth, paths)
+ *     paths = CCSCC(x, y, dth, paths)             # <<<<<<<<<<<<<<
+ * 
+ *     return paths
+ */
+  __pyx_t_3 = __pyx_f_23hybrid_A_star_TF_Dec_13_CCSCC(__pyx_v_x, __pyx_v_y, __pyx_v_dth, __pyx_v_paths); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 724, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF_SET(__pyx_v_paths, ((PyObject*)__pyx_t_3));
+  __pyx_t_3 = 0;
+
   /* "hybrid_A_star_TF_Dec_13.pyx":726
- *     #paths = CCSCC(x, y, dth, paths)
+ *     paths = CCSCC(x, y, dth, paths)
  * 
  *     return paths             # <<<<<<<<<<<<<<
  * 

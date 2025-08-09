@@ -31,7 +31,7 @@ except ImportError:
     hybrid_astar_planning = None
 
 from agent.speed_dynamics_model import SpeedDynamicsModel
-from agent.path_collector_TF_Dec_13 import VehiclePIDController
+from agent.path_collector_TF_Dec_13 import VehiclePIDController, get_speed as get_noisy_speed
 
 
 def get_speed(vehicle):
@@ -516,6 +516,7 @@ class ParkingAgent:
         self.model = None
         self.device = None
         self.speed_dynamics_model = None
+        self.current_speed = 0.0
 
         self.cfg = Configuration()
         self.load_cfg(args)
@@ -591,6 +592,11 @@ class ParkingAgent:
         # Timestep counter for measurements saving
         self.timestep_counter = 0
         
+        # Target points trajectory storage for visualization
+        self.target_point_trajectory = []  # Store original target_point history
+        self.data_target_point_trajectory = []  # Store data["target_point"] history
+        self.trajectory_timestamps = []  # Store timestamps for each point
+        
         self.init_agent()
         # self.visualize = True
 
@@ -630,6 +636,90 @@ class ParkingAgent:
         # image_file = pathlib.Path(self.cfg.log_dir) / ('%04d.png' % self.step)
         # Image.fromarray(np.uint8(pred_seg_img), mode='L').save(image_file)
         self.seg_bev = pred_seg_img
+
+    def plot_target_points_trajectory(self, target_point, data_target_point, target_type):
+        """
+        Plot trajectory comparison between original target_point and processed data["target_point"]
+        """
+        # Skip plotting if we don't have enough data points
+        if len(self.target_point_trajectory) < 2:
+            return
+            
+        # Create or switch to the target points trajectory figure
+        fig = plt.figure("Target Points Trajectory", figsize=(12, 10))
+        plt.figure(fig.number)
+        plt.clf()
+        
+        # Convert trajectory lists to numpy arrays for easier plotting
+        target_traj = np.array(self.target_point_trajectory)
+        data_traj = np.array(self.data_target_point_trajectory)
+        
+        # Plot trajectory lines
+        plt.plot(target_traj[:, 1], target_traj[:, 0], 'b-', linewidth=2, alpha=0.7, label=f'Original target_point trajectory')
+        plt.plot(data_traj[:, 1], data_traj[:, 0], 'r-', linewidth=2, alpha=0.7, label=f'data["target_point"] trajectory ({target_type})')
+        
+        # Plot trajectory points
+        plt.scatter(target_traj[:, 1], target_traj[:, 0], s=30, c='blue', marker='o', alpha=0.6, zorder=5)
+        plt.scatter(data_traj[:, 1], data_traj[:, 0], s=30, c='red', marker='s', alpha=0.6, zorder=5)
+        
+        # Highlight current points (last points in trajectories)
+        current_target_x, current_target_y = target_traj[-1, 0], target_traj[-1, 1]
+        current_data_x, current_data_y = data_traj[-1, 0], data_traj[-1, 1]
+        
+        plt.scatter(current_target_y, current_target_x, s=100, c='darkblue', marker='o', 
+                   label='Current original', alpha=0.9, zorder=10, edgecolors='white', linewidth=2)
+        plt.scatter(current_data_y, current_data_x, s=100, c='darkred', marker='s', 
+                   label=f'Current {target_type}', alpha=0.9, zorder=10, edgecolors='white', linewidth=2)
+        
+        # Plot ego vehicle at origin
+        plt.scatter(0, 0, s=150, c='green', marker='^', label='Ego Vehicle', alpha=0.9, zorder=15)
+        
+        # Add arrow to show vehicle orientation
+        plt.arrow(0, 0, 0, 1.5, head_width=0.3, head_length=0.3, fc='green', ec='green', alpha=0.7)
+        
+        # Add start points
+        if len(target_traj) > 0:
+            plt.scatter(target_traj[0, 1], target_traj[0, 0], s=80, c='cyan', marker='*', 
+                       label='Start points', alpha=0.9, zorder=8)
+            plt.scatter(data_traj[0, 1], data_traj[0, 0], s=80, c='cyan', marker='*', alpha=0.9, zorder=8)
+        
+        # Calculate and display current difference
+        diff_x = current_data_x - current_target_x
+        diff_y = current_data_y - current_target_y
+        distance_diff = math.sqrt(diff_x**2 + diff_y**2)
+        
+        # Calculate trajectory statistics
+        trajectory_length = len(self.target_point_trajectory)
+        
+        # Info box
+        info_text = f'Trajectory Info:\nPoints: {trajectory_length}\nCurrent Difference:\nΔx: {diff_x:.3f}m\nΔy: {diff_y:.3f}m\nDistance: {distance_diff:.3f}m\nStep: {self.step}'
+        plt.text(0.02, 0.98, info_text, 
+                transform=plt.gca().transAxes, fontsize=10, 
+                bbox=dict(boxstyle="round,pad=0.5", facecolor='yellow', alpha=0.8),
+                verticalalignment='top')
+        
+        # Set labels and title
+        plt.xlabel('Lateral (Right) [m]')
+        plt.ylabel('Longitudinal (Forward) [m]')
+        plt.title(f'Target Points Trajectory Comparison - Mode: {target_type}')
+        plt.grid(True, alpha=0.3)
+        plt.legend(loc='upper right', fontsize=9)
+        plt.axis('equal')
+        
+        # Set reasonable axis limits based on all trajectory points
+        all_x = np.concatenate([target_traj[:, 0], data_traj[:, 0], [0]])
+        all_y = np.concatenate([target_traj[:, 1], data_traj[:, 1], [0]])
+        
+        x_range = np.max(all_x) - np.min(all_x)
+        y_range = np.max(all_y) - np.min(all_y)
+        margin = max(x_range, y_range, 5) * 0.15  # 15% margin, minimum based on range
+        
+        plt.xlim(np.min(all_y) - margin, np.max(all_y) + margin)
+        plt.ylim(np.min(all_x) - margin, np.max(all_x) + margin)
+        
+        plt.show(block=False)
+        plt.draw()
+        plt.pause(0.1)
 
     def plot_hybrid_astar_path(self, goal_ego, path_result, current_ego_pos=None):
         """
@@ -874,6 +964,11 @@ class ParkingAgent:
         self.current_phase = 'forward'
         self.forward_completed = False
         
+        # Clear trajectory data for new task
+        self.target_point_trajectory = []
+        self.data_target_point_trajectory = []
+        self.trajectory_timestamps = []
+        
         #logging.info("Agent reinitialized - all path data cleared for new task")
 
         args_lateral = {'K_P': 1.95, 'K_D': 0.01, 'K_I': 1.4, 'dt': 0.03}
@@ -986,6 +1081,9 @@ class ParkingAgent:
             #self._save_timestep_measurement(measurements_file)
             self.timestep_counter += 1
 
+            # Get noisy speed once and store it for consistent use in both PID controller and dynamics model
+            self.current_noisy_speed_kmh = get_noisy_speed(self.player)
+
             data = self.get_model_data(data_frame)
 
             self.model.eval()
@@ -994,7 +1092,31 @@ class ParkingAgent:
 
                 pred_controls, pred_waypoints, pred_segmentation, _, target_bev = self.model.predict(data)
 
-                if self.path is None or self.step % 100 == 0:
+                # Check if we should skip replanning during final reverse phase
+                # Only skip if we already have a path AND we're in final reverse phase
+                should_skip_replan = (
+                    self.path is not None and  # Only consider skipping if we already have a path
+                    self.current_phase == 'reverse' and 
+                    self.current_target_index is not None and 
+                    self.current_target_index <= 30
+                )
+                
+                if should_skip_replan:
+                    #logging.info(f"🛑 Skipping replan - in reverse phase with {self.current_target_index} points remaining")
+                    pass
+
+                if self.path is None or (self.step % 102 == 0 and not should_skip_replan):
+                    # Clear existing path for complete replanning
+                    if self.step % 102 == 0 and not should_skip_replan:
+                        print("Starting complete replan")
+                        #logging.info(f"🔄 Starting complete replan at step {self.step}")
+                        self.path = None
+                        self.forward_path = None
+                        self.reverse_path = None
+                        self.current_target_index = None
+                        self.current_phase = 'forward'
+                        self.forward_completed = False
+                    
                     # 1. Generate obstacle point cloud from segmentation
                     self.point_cloud = self.generate_point_cloud_from_segmentation(pred_segmentation)
                     #logging.info(f"Generated point cloud with {len(self.point_cloud)} points on step {self.step}.")
@@ -1141,12 +1263,9 @@ class ParkingAgent:
                         carla.Location(x=current_world_x, y=current_world_y, z=vehicle_transform.location.z),
                         vehicle_transform.rotation
                     )
-                    goal_ego = convert_slot_coord(vis_dynamic_transform, self.net_eva.eva_parking_goal)
-                    self.plot_hybrid_astar_path(goal_ego, self.path, current_ego_pos)
-
-                end_time = time.time()
-                self.net_eva.inference_time.append(end_time - start_time)
-
+                    goal_ego_for_vis = convert_slot_coord(vis_dynamic_transform, self.net_eva.eva_parking_goal)
+                    self.plot_hybrid_astar_path(goal_ego_for_vis, self.path, current_ego_pos)
+                
                 if self.show_eva_imgs:
                     self.save_prev_target(pred_segmentation)
                 
@@ -1249,7 +1368,7 @@ class ParkingAgent:
                                     target_speed = min(target_speed, 2.0)
                             
                             # Get PID control using expected direction
-                            pid_control = self.pid_controller.run_step(target_speed, waypoint, direction)
+                            pid_control, self.current_speed = self.pid_controller.run_step(target_speed, waypoint, direction)
                             
                             self.trans_control.throttle = pid_control.throttle
                             self.trans_control.brake = pid_control.brake
@@ -1495,6 +1614,7 @@ class ParkingAgent:
         ego_pos_torch = deepcopy(self.ego_xy_dynamic)
         ego_pos_torch.append(vehicle_transform.rotation.yaw)
         ego_pos_torch = torch.tensor(ego_pos_torch).to(self.device)
+        
         ego_motion_torch = torch.tensor([3.6*vehicle_velocity.x, 3.6*vehicle_velocity.y, 3.6*vehicle_velocity.z, imu_data.accelerometer.x, imu_data.accelerometer.y],
                                         dtype=torch.float).to(self.device)
         raw_control_torch = torch.tensor([data_frame['veh_control'].throttle, data_frame['veh_control'].brake, data_frame['veh_control'].steer, data_frame['veh_control'].reverse], dtype=torch.float).to(self.device)
@@ -1508,7 +1628,6 @@ class ParkingAgent:
         delta_mean, log_var, x_displacement_track, y_displacement_track = self.speed_dynamics_model.predict(input_data)
         self.ego_xy_dynamic[0] += delta_mean.squeeze(0)[0].detach().item()
         self.ego_xy_dynamic[1] += delta_mean.squeeze(0)[1].detach().item()
-        #print('self.ego_xy_dynamic:', self.ego_xy_dynamic)
         
         # Calculate target_point using dynamic model position (avoid CARLA location dependency)
         # Create a transform using dynamic model position but keeping CARLA's rotation
@@ -1517,7 +1636,7 @@ class ParkingAgent:
             vehicle_transform.rotation  # Keep CARLA's yaw - this is acceptable
         )
         target_point = convert_slot_coord(dynamic_transform, self.net_eva.eva_parking_goal)
-        
+        #print("target_point:", target_point)
         relative_x_world_dynamic = parking_goal_world[0] - self.ego_xy_dynamic[0]
         relative_y_world_dynamic = parking_goal_world[1] - self.ego_xy_dynamic[1]
 
@@ -1554,13 +1673,32 @@ class ParkingAgent:
                                              data_frame["imu"].accelerometer.z,
                                              roll,pitch, yaw)
 
-        velocity = (3.6 * math.sqrt(vehicle_velocity.x ** 2 + vehicle_velocity.y ** 2 + vehicle_velocity.z ** 2)) #km/h
-        data['ego_motion'] = torch.tensor([velocity, imu_data.accelerometer.x, imu_data.accelerometer.y],
-                                          dtype=torch.float).unsqueeze(0).unsqueeze(0)
+        # Use PID controller's current speed for forward velocity if available
+        if hasattr(self, 'current_speed') and self.current_speed is not None:
+            # current_speed from PID controller is already in km/h
+            velocity_ego_forword = self.current_speed
+            
+            # Apply direction based on current phase (reverse = negative forward velocity)
+            if hasattr(self, 'current_phase') and self.current_phase == 'reverse':
+                velocity_ego_forword = -abs(velocity_ego_forword)
+            elif hasattr(self, 'trans_control') and self.trans_control.reverse:
+                velocity_ego_forword = -abs(velocity_ego_forword)
+            else:
+                velocity_ego_forword = abs(velocity_ego_forword)
+        else:
+            # Fallback to CARLA velocity if PID speed not available
+            velocity_ego_forword = 3.6*velocity_ego[0]
+        
+        # Keep lateral velocity from CARLA (PID doesn't control lateral motion directly)
+        velocity_ego_lateral = 3.6*velocity_ego[1]
 
+        acc_ego_forword = acc_ego[0]
+        acc_ego_lateral = acc_ego[1]
+
+        data['ego_motion'] = torch.tensor([velocity_ego_forword,velocity_ego_lateral,acc_ego_forword,acc_ego_lateral],dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking","dynamics"]
-        target_type = target_types[1]
+        target_type = target_types[0]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
@@ -1574,8 +1712,8 @@ class ParkingAgent:
             else:
                 data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
         elif target_type == "dynamics":
-            data["target_point"][0][0] = torch.tensor(relative_x_ego_dynamic, dtype=torch.float).unsqueeze(0)
-            data["target_point"][0][1] = torch.tensor(relative_y_ego_dynamic, dtype=torch.float).unsqueeze(0)
+            data['target_point'] = torch.tensor([relative_x_ego_dynamic, relative_y_ego_dynamic, target_point[2]], dtype=torch.float).unsqueeze(0)
+            #print("target_point_from_dynamics:", data["target_point"])
         data['gt_control'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         data['gt_waypoint'] = torch.tensor([self.BOS_token], dtype=torch.int64).unsqueeze(0)
         if self.show_eva_imgs:
@@ -1593,6 +1731,25 @@ class ParkingAgent:
         #     f"Position Update - Ground Truth: ({vehicle_transform.location.x:.2f}, {vehicle_transform.location.y:.2f}), "
         #     f"Dynamic Model Prediction: ({self.ego_xy_dynamic[0]:.2f}, {self.ego_xy_dynamic[1]:.2f})"
         # )
+
+        # Store trajectory data for visualization
+        if self.show_eva_imgs:
+            # Save current data to trajectory
+            self.target_point_trajectory.append([target_point[0], target_point[1]])
+            data_tensor = data["target_point"].squeeze(0)
+            self.data_target_point_trajectory.append([data_tensor[0].item(), data_tensor[1].item()])
+            self.trajectory_timestamps.append(self.step)
+            
+            # Limit trajectory length to prevent memory issues (keep last 200 points)
+            max_trajectory_length = 200
+            if len(self.target_point_trajectory) > max_trajectory_length:
+                self.target_point_trajectory = self.target_point_trajectory[-max_trajectory_length:]
+                self.data_target_point_trajectory = self.data_target_point_trajectory[-max_trajectory_length:]
+                self.trajectory_timestamps = self.trajectory_timestamps[-max_trajectory_length:]
+            
+            # Plot trajectory comparison (only plot every 3 steps to reduce computational load)
+            if self.step % 3 == 0:
+                self.plot_target_points_trajectory(target_point, data["target_point"], target_type)
 
         return data
 
@@ -1725,3 +1882,4 @@ class ParkingAgent:
         return control
     
 
+30
