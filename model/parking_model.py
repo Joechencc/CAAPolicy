@@ -460,7 +460,7 @@ class ParkingModelDiffusion(nn.Module):
 
         return pred_control, pred_waypoint
         
-    def predict(self, data, final_steps = False):
+    def predict(self, data, final_steps = 0):
         fuse_feature, pred_segmentation, pred_depth, bev_target = self.encoder(data)
 
         if self.cfg.normalize_traj:
@@ -486,8 +486,8 @@ class ParkingModelDiffusion(nn.Module):
             start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         else:
             start_end_relative_point = start_relative_point
-            if final_steps:
-                start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
+            if final_steps != 0:
+                start_end_relative_point = torch.cat((start_relative_point, end_relative_point.repeat(1, final_steps, 1)), dim=1)
         # start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         # torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
         if self.cfg.motion_head == "embedding":

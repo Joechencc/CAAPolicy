@@ -291,51 +291,84 @@ class PIDLateralController:
         """Changes the offset"""
         self._offset = offset
 
-    def _pid_control(self, waypoint, vehicle_transform):
+    def _pid_control(self, target_wp, vehicle_transform):
         """
-        Estimate the steering angle of the vehicle based on the PID equations
+        Lateral PID controller: returns steering in [-1, 1].
 
-            :param waypoint: target waypoint
-            :param vehicle_transform: current transform of the vehicle
-            :return: steering control in the range [-1, 1]
+        Respects:
+        - self._offset (meters): lateral shift along waypoint right-vector
+        - self._k_p, self._k_i, self._k_d
+        - self._dt
+        - optional: self._use_wp_heading (bool), self._alpha in [0,1]
+            _alpha = 0.0 -> pure vector-to-waypoint (default)
+            _alpha = 1.0 -> pure waypoint heading
+            in-between -> blend
+        - optional: self._i_clamp (float) to limit integral term magnitude
         """
-        # Get the ego's location and forward vector
-        ego_loc = vehicle_transform.location
-        v_vec = vehicle_transform.get_forward_vector()
-        v_vec = np.array([v_vec.x, v_vec.y, 0.0])
 
-        # Get the vector vehicle-target_wp
-        if self._offset != 0:
-            # Displace the wp to the side
-            w_tran = waypoint.transform
-            r_vec = w_tran.get_right_vector()
-            w_loc = w_tran.location + carla.Location(x=self._offset*r_vec.x,
-                                                         y=self._offset*r_vec.y)
+        # --- 1) Get a carla.Transform from either a Waypoint or your SimpleNamespace ---
+        tf = getattr(target_wp, "transform", target_wp)
+
+        # --- 2) Ego forward unit vector (XY) ---
+        v_fwd = vehicle_transform.get_forward_vector()
+        v = np.array([v_fwd.x, v_fwd.y], dtype=np.float64)
+        v /= (np.linalg.norm(v) + 1e-9)
+
+        # --- 3) Target location with optional lateral offset along waypoint right-vector ---
+        if getattr(self, "_offset", 0.0) != 0.0:
+            r_vec = tf.get_right_vector()
+            w_loc = tf.location + carla.Location(
+                x=self._offset * r_vec.x,
+                y=self._offset * r_vec.y
+            )
         else:
-            w_loc = waypoint.location
+            w_loc = target_wp.location
 
-        w_vec = np.array([w_loc.x - ego_loc.x,
-                          w_loc.y - ego_loc.y,
-                          0.0])
+        # --- 4) Build candidate target directions (unit vectors in XY) ---
+        # 4a) Vector from ego to (possibly offset) waypoint
+        dx = w_loc.x - vehicle_transform.location.x
+        dy = w_loc.y - vehicle_transform.location.y
+        vec_to_wp = np.array([dx, dy], dtype=np.float64)
+        vec_to_wp /= (np.linalg.norm(vec_to_wp) + 1e-9)
 
-        wv_linalg = np.linalg.norm(w_vec) * np.linalg.norm(v_vec)
-        if wv_linalg == 0:
-            _dot = 1
+        # 4b) Waypoint heading
+        yaw_wp = math.radians(target_wp.rotation.yaw)
+        wp_heading = np.array([math.cos(yaw_wp), math.sin(yaw_wp)], dtype=np.float64)
+
+        # --- 5) Select/blend target vector ---
+        use_wp_heading = getattr(self, "_use_wp_heading", True)
+        alpha = float(getattr(self, "_alpha", 0.0))
+        alpha = min(max(alpha, 0.0), 1.0)
+
+        if use_wp_heading and alpha >= 1.0 - 1e-9:
+            t = wp_heading
+        elif not use_wp_heading and alpha <= 1.0 + 1e-9:
+            t = vec_to_wp
         else:
-            _dot = math.acos(np.clip(np.dot(w_vec, v_vec) / (wv_linalg), -1.0, 1.0))
-        _cross = np.cross(v_vec, w_vec)
-        if _cross[2] < 0:
-            _dot *= -1.0
+            t = alpha * wp_heading + (1.0 - alpha) * vec_to_wp
+            t /= (np.linalg.norm(t) + 1e-9)
 
-        self._e_buffer.append(_dot)
+        # --- 6) Signed heading error using atan2(cross_z, dot) ---
+        cross_z = v[0] * t[1] - v[1] * t[0]
+        dot     = v[0] * t[0] + v[1] * t[1]
+        e = math.atan2(cross_z, dot)  # radians in (-pi, pi]
+
+        # --- 7) PID terms (with simple guards) ---
+        dt = max(getattr(self, "_dt", 0.05), 1e-3)
+        self._e_buffer.append(e)
         if len(self._e_buffer) >= 2:
-            _de = (self._e_buffer[-1] - self._e_buffer[-2]) / self._dt
-            _ie = sum(self._e_buffer) * self._dt
+            de = (self._e_buffer[-1] - self._e_buffer[-2]) / dt
+            ie = sum(self._e_buffer) * dt
         else:
-            _de = 0.0
-            _ie = 0.0
+            de, ie = 0.0, 0.0
 
-        return np.clip((self._k_p * _dot) + (self._k_d * _de) + (self._k_i * _ie), -1.0, 1.0)
+        # Optional integral clamp to avoid windup (set self._i_clamp, e.g. 0.5)
+        i_clamp = getattr(self, "_i_clamp", None)
+        if i_clamp is not None:
+            ie = float(np.clip(ie, -abs(i_clamp), abs(i_clamp)))
+
+        steer = (self._k_p * e) + (self._k_d * de) + (self._k_i * ie)
+        return float(np.clip(steer, -1.0, 1.0))
 
     def change_parameters(self, K_P, K_I, K_D, dt):
         """Changes the PID parameters"""
