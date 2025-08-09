@@ -88,8 +88,8 @@ def cosine_beta_schedule(timesteps, s=0.008, dtype=torch.float32):
 
 def apply_conditioning(x, conditions, action_dim):
     x[:,0,:] = conditions[:,0,:] 
-    if conditions.shape[1] == 2:
-        x[:,-1,:] = conditions[:,-1,:] 
+    if conditions.shape[1] >= 2:
+        x[:,-(conditions.shape[1]-1):,:] = conditions[:,-(conditions.shape[1]-1):,:] 
     return x
 
 def _check_times(times, t_0, t_T):
