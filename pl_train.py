@@ -68,22 +68,22 @@ def train():
                               log_every_n_steps=cfg.log_every_n_steps,
                               check_val_every_n_epoch=cfg.check_val_every_n_epoch,
                               profiler='simple')
-    parking_trainer.fit_loop.epoch_progress.current.completed = 15
+    # parking_trainer.fit_loop.epoch_progress.current.completed = 15
     
     # Load checkpoint manually
-    ckpt = torch.load(cfg.model_path, map_location='cpu')
+    # ckpt = torch.load(cfg.model_path, map_location='cpu')
     # Get only the model weights
-    state_dict = ckpt['state_dict'] if 'state_dict' in ckpt else ckpt
+    # state_dict = ckpt['state_dict'] if 'state_dict' in ckpt else ckpt
     # Remove all keys related to grad_approx (which has mismatched shape)
-    filtered_state_dict = {
-        k: v for k, v in state_dict.items()
-        if not k.startswith('parking_model.trajectory_predict')
-    }
+    # filtered_state_dict = {
+    #     k: v for k, v in state_dict.items()
+    #     if not k.startswith('parking_model.trajectory_predict')
+    # }
 
     # # Option 1: Load with strict=False to allow partial load
-    missing, unexpected = parking_model.load_state_dict(filtered_state_dict, strict=False)
-    print("Missing keys:", missing)
-    print("Unexpected keys:", unexpected)
+    # missing, unexpected = parking_model.load_state_dict(filtered_state_dict, strict=False)
+    # print("Missing keys:", missing)
+    # print("Unexpected keys:", unexpected)
 
     parking_trainer.fit(
         parking_model, 

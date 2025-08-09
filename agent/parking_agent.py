@@ -20,6 +20,7 @@ from tool.geometry import update_intrinsics
 from tool.config import Configuration, get_cfg
 from dataset.carla_dataset import ProcessImage, convert_slot_coord, ProcessSemantic, detokenize_waypoint, convert_veh_coord, convert_veh_in_slot_frame
 from agents.navigation.controller import VehiclePIDController
+from agents.navigation.controller_with_yaw import YawPositionPIDController
 from dataset.carla_dataset import detokenize_control
 from data_generation.network_evaluator import NetworkEvaluator
 from data_generation.tools import encode_npy_to_pil
@@ -335,6 +336,7 @@ class ParkingAgent:
         args_lateral = {'K_P': 1.0, 'K_I': 0.0, 'K_D': 0.0}
         args_longitudinal = {'K_P': 1.0, 'K_I': 0.0, 'K_D': 0.0}
         self.pid_controller = VehiclePIDController(self.player, args_lateral=args_lateral, args_longitudinal=args_longitudinal)
+        # self.pid_controller = YawPositionPIDController(self.player, lat_kp=1.4, lat_kd=0.12, yaw_kp=1.0, yaw_kd=0.06, lon_kp=0.9, lon_kd=0.08)
 
         self.car_icon = Image.open("./car.png").convert("RGBA")
 
@@ -603,18 +605,49 @@ class ParkingAgent:
                         target_tf = self.make_target_transform(0.3, waypoint[0], waypoint[1], waypoint[2])
                         target_tf = types.SimpleNamespace(transform=target_tf)
 
-                        # carla_map = self.world.get_map()
                         location = carla.Location(x=waypoint[0], y=waypoint[1], z=0.3)
-                        # self.world._world.debug.draw_point(location, size=0.1, color=carla.Color(255, 0, 0), lifetime=0.2)
-                        self.world._world.debug.draw_string(location, '{}'.format(i + 1), draw_shadow=True, color=carla.Color(255, 0, 0))
+
+                        yaw_deg = waypoint[2]      # If you store yaw in degrees
+                        arrow_length = 2.0         # meters
+                        life_time = 0.1            # seconds
+
+                        # Convert yaw to a forward direction vector
+                        yaw_rad = math.radians(yaw_deg)
+                        dx = math.cos(yaw_rad) * arrow_length
+                        dy = math.sin(yaw_rad) * arrow_length
+
+                        start_loc = location
+                        end_loc = carla.Location(
+                            x=location.x + dx,
+                            y=location.y + dy,
+                            z=location.z
+                        )
+
+                        # Draw arrow
+                        self.world._world.debug.draw_arrow(
+                            start_loc,
+                            end_loc,
+                            thickness=0.1,
+                            arrow_size=0.3,
+                            color=carla.Color(0, 255, 0),
+                            life_time=life_time
+                        )
+
+
+                        # location = carla.Location(x=waypoint[0], y=waypoint[1], z=0.3)
+                        # self.world._world.debug.draw_string(location, '{}'.format(i + 1), draw_shadow=True, color=carla.Color(255, 0, 0))
+
+
                         self.buffered_traj.append(target_tf)
                 self.final_steps = True if abs(waypoint[0] - self.net_eva.eva_parking_goal[0]) < 2 and abs(waypoint[1] - self.net_eva.eva_parking_goal[1]) < 2 else False
             self.prev_xy_thea = [vehicle_transform.location.x,
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
 
-        idx_in_curr_loop = 6 # self.step % self.process_frequency + 1
-        control = self.pid_controller.run_step(target_speed=5.0, waypoint=self.buffered_traj[idx_in_curr_loop])
+        idx_in_curr_loop = 1 # self.step % self.process_frequency + 1
+        control = self.pid_controller.run_step(target_speed=4.0, waypoint=self.buffered_traj[idx_in_curr_loop])
+        # dt = self.world._world.get_settings().fixed_delta_seconds or 0.05
+        # control = self.pid_controller.run_step(target_speed=1.2, waypoint=self.buffered_traj[idx_in_curr_loop], dt=dt)
         self.player.apply_control(control)
 
     def make_target_transform(self, world_z, x, y, yaw_deg):

@@ -46,20 +46,19 @@ class FeatureFusion(nn.Module):
                 nn.init.xavier_uniform_(p)
         trunc_normal_(self.pos_embed, std=.02)
 
-    def forward(self, bev_feature, ego_motion, target_point):
+    def forward(self, bev_feature, target_point):
 
 
         bev_feature = bev_feature.transpose(1, 2)
         # bev_feature.shape
         # torch.Size([1, 256, 256])
 
-        motion_feature = self.motion_encoder(ego_motion).transpose(1, 2).expand(-1, -1, 4)
-        target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 4)
+        target_feature = self.target_encoder(target_point).transpose(1, 2).expand(-1, -1, 8)
 
         # motion_feature.shape
         # torch.Size([1, 256, 2])
 
-        fuse_feature = torch.cat([bev_feature, motion_feature, target_feature], dim=2)
+        fuse_feature = torch.cat([bev_feature, target_feature], dim=2)
 
         fuse_feature = self.pos_drop(fuse_feature + self.pos_embed)
 

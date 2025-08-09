@@ -100,7 +100,7 @@ class ParkingModel(nn.Module):
         bev_down_sample = self.bev_encoder(bev_feature)
 
         target_point = target_point.unsqueeze(1)
-        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
+        fuse_feature = self.feature_fusion(bev_down_sample, target_point)
 
         # pred_segmentation = self.segmentation_head(fuse_feature)
         filmed_fuse_feature = self.film_modulate(fuse_feature, target_point)
@@ -318,7 +318,7 @@ class ParkingModelDiffusion(nn.Module):
         bev_down_sample = self.bev_encoder(bev_feature)
 
         target_point = target_point.unsqueeze(1)
-        fuse_feature = self.feature_fusion(bev_down_sample, ego_motion, target_point)
+        fuse_feature = self.feature_fusion(bev_down_sample, target_point)
 
         # pred_segmentation = self.segmentation_head(fuse_feature)
         filmed_fuse_feature = self.film_modulate(fuse_feature, target_point)
@@ -406,9 +406,9 @@ class ParkingModelDiffusion(nn.Module):
         else:
             start_end_relative_point = gt_target_point_traj[:,0:1,:]
         if self.cfg.motion_head == "embedding":
-            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(), "target_point": target_point}
+            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "target_point": target_point}
         elif self.cfg.motion_head == "segmentation":
-            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(), "target_point": target_point}
+            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "target_point": target_point}
         else:
             pass
         pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
@@ -439,9 +439,9 @@ class ParkingModelDiffusion(nn.Module):
             start_end_relative_point = gt_target_point_traj[:,0:1,:]
             
         if self.cfg.motion_head == "embedding":
-            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(), "target_point": target_point}
+            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "target_point": target_point}
         elif self.cfg.motion_head == "segmentation":
-            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(), "target_point": target_point}
+            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "target_point": target_point}
         else:
             pass
         loss = self.trajectory_predict.loss(gt_target_point_traj, seg_egoMotion_tgtPose, start_end_relative_point)[0]
@@ -491,9 +491,9 @@ class ParkingModelDiffusion(nn.Module):
         # start_end_relative_point = torch.cat((start_relative_point, end_relative_point), dim=1)
         # torch.cat((data["gt_target_point_traj"][:,0:1,:], data["gt_target_point_traj"][:,-1:,:]), dim=1)
         if self.cfg.motion_head == "embedding":
-            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "ego_motion": data["ego_motion"].squeeze(1), "target_point": target_point}
+            seg_egoMotion_tgtPose = {"pred_segmentation": fuse_feature, "target_point": target_point}
         elif self.cfg.motion_head == "segmentation":
-            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "ego_motion": data["ego_motion"].squeeze(1), "target_point": target_point}
+            seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "target_point": target_point}
         else:
             pass        
         
