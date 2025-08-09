@@ -113,7 +113,7 @@ class ParkingTrainingModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
-        pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+        pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
 
         # control_loss = self.parking_model.diffusion_loss(batch)
         # loss_dict.update({
@@ -172,7 +172,7 @@ class ParkingTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_loss_dict = {}
         with torch.enable_grad():
-            pred_control, pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
+            pred_segmentation, pred_depth, fuse_feature = self.parking_model(batch)
             # diffusion_loss = self.parking_model.diffusion_loss(batch)
             # val_loss_dict.update({
             #     "diffusion_loss": diffusion_loss

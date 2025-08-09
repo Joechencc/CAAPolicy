@@ -411,10 +411,10 @@ class ParkingModelDiffusion(nn.Module):
             seg_egoMotion_tgtPose = {"pred_segmentation": pred_segmentation, "target_point": target_point}
         else:
             pass
-        pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
+        # pred_control = self.trajectory_predict(seg_egoMotion_tgtPose, start_end_relative_point)
         # pred_waypoint = self.waypoint_predict(pred_segmentation, data['gt_waypoint'].cuda())
 
-        return pred_control, pred_segmentation, pred_depth, fuse_feature
+        return pred_segmentation, pred_depth, fuse_feature
 
     def diffusion_loss(self, data):
         fuse_feature, pred_segmentation, pred_depth, _ = self.encoder(data)
