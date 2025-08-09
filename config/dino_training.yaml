@@ -7,7 +7,7 @@ parking_model:
   check_val_every_n_epoch: 1
 
   epochs: 15 # 26
-  learning_rate: 0.001
+  learning_rate: 0.0001
   weight_decay: 0.0001
   batch_size: 16 # 16
 
@@ -73,9 +73,9 @@ parking_model:
   action_weight: 1.0
   loss_discount: 1.0
   loss_weights: null
-  planner_type: global # global, global, local_interp, global_interp
+  planner_type: local # local, global, local_interp, global_interp
   normalize_traj: True
-  motion_head: embedding # embedding, segmentation
+  motion_head: segmentation # embedding, segmentation
   ego_centric_traj: True
   data_aggregate_type: mean
   data_interval: 4

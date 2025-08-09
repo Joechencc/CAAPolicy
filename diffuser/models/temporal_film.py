@@ -147,8 +147,8 @@ class ConditionalUnet1D(nn.Module):
         
         self.segmentation_encoder = EncoderCNN(config=cfg, in_channels = 267 if cfg.motion_head == "embedding" else 1, d_model=cfg.tf_de_dim, height=200, width=200, output_dim=global_cond_dim[1])
         # self.segmentation_encoder = SegmentationEncoder(in_channels=3, d_model=32, height=200, width=200)
-        self.motion_encoder = EncoderFC(input_dim=motion_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[2])
-        self.target_encoder = EncoderFC(input_dim=target_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[3])
+        # self.motion_encoder = EncoderFC(input_dim=motion_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[2])
+        self.target_encoder = EncoderFC(input_dim=target_feature_num, hidden_dim = hidden_dim, output_dim = global_cond_dim[2])
         
 
         # if lstm_out_dim != 0:
@@ -270,10 +270,10 @@ class ConditionalUnet1D(nn.Module):
                 # segmentation_encoded = torch.zeros_like(segmentation_encoded).cuda()
                 global_feature = torch.cat([segmentation_encoded, global_feature], axis=-1)
                 # INFO: encode the start with FC
-            if 'ego_motion' in global_cond.keys():
-                egoMotion_encoded = self.motion_encoder(global_cond['ego_motion'])
-                # egoMotion_encoded = torch.zeros_like(egoMotion_encoded).cuda()
-                global_feature = torch.cat([egoMotion_encoded, global_feature], axis=-1)
+            # if 'ego_motion' in global_cond.keys():
+            #     egoMotion_encoded = self.motion_encoder(global_cond['ego_motion'])
+            #     # egoMotion_encoded = torch.zeros_like(egoMotion_encoded).cuda()
+            #     global_feature = torch.cat([egoMotion_encoded, global_feature], axis=-1)
             if 'target_point' in global_cond.keys():
                 targetPoint_encoded = self.target_encoder(global_cond['target_point'])
                 # targetPoint_encoded = torch.zeros_like(targetPoint_encoded).cuda()
