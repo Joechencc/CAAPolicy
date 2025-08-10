@@ -625,7 +625,7 @@ class ParkingAgent:
                         )
 
                         # Draw arrow
-                        if 0:
+                        if 1:
                             self.world._world.debug.draw_arrow(
                                 start_loc,
                                 end_loc,
@@ -647,7 +647,7 @@ class ParkingAgent:
                     loc = tf.transform.location
                     dist = math.sqrt((loc.x - goal_x)**2 +
                                     (loc.y - goal_y)**2)
-                    if dist <= 2.0:
+                    if dist <= 0.6:
                         self.final_steps += 1
 
             self.prev_xy_thea = [vehicle_transform.location.x,
@@ -656,7 +656,7 @@ class ParkingAgent:
 
         idx_in_curr_loop = 4 # self.step % self.process_frequency + 1
         control = self.pid_controller.run_step(target_speed=4.0, waypoint=self.buffered_traj[idx_in_curr_loop])
-        # self.player.apply_control(control)
+        self.player.apply_control(control)
 
     def make_target_transform(self, world_z, x, y, yaw_deg):
         return carla.Transform(
