@@ -118,11 +118,12 @@ class VehiclePIDController:
         proj = dx * fx + dy * fy   # > 0 => target is ahead; < 0 => behind
 
         reverse_mode = (proj < 0.0)
+        # print("project to decide reverse: ", proj)
 
         # (Optional) throttle scaling when reversing (gentler)
-        reverse_speed_scale = getattr(self, "reverse_speed_scale", 0.6)
+        reverse_speed_scale = getattr(self, "reverse_speed_scale", 0.7)
         fwd_speed = target_speed
-        rev_speed = max(0.0, target_speed) * reverse_speed_scale
+        rev_speed = max(0.0, target_speed) * reverse_speed_scale if abs(proj) > 0.1 else 0
 
         # --- Longitudinal control (use your existing PID) ---
         # Keep your current longitudinal PID interface: it returns a signed "acceleration" scalar.
@@ -332,16 +333,21 @@ class PIDLateralController:
         vec_to_wp /= (np.linalg.norm(vec_to_wp) + 1e-9)
 
         # 4b) Waypoint heading
+        # print("Waypoint Yaw in World(Degree): ", target_wp.rotation.yaw)
+        # print("Car Yaw in World(Degree): ", vehicle_transform.rotation.yaw)
         yaw_wp = math.radians(target_wp.rotation.yaw)
+        
         wp_heading = np.array([math.cos(yaw_wp), math.sin(yaw_wp)], dtype=np.float64)
 
         # --- 5) Select/blend target vector ---
         use_wp_heading = getattr(self, "_use_wp_heading", True)
         alpha = float(getattr(self, "_alpha", 0.0))
         alpha = min(max(alpha, 0.0), 1.0)
+        alpha = 0.5
 
         if use_wp_heading and alpha >= 1.0 - 1e-9:
             t = wp_heading
+            print("Using yaw.")
         elif not use_wp_heading and alpha <= 1.0 + 1e-9:
             t = vec_to_wp
         else:

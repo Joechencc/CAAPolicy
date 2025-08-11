@@ -216,7 +216,8 @@ def get_atten_avg_map(att_map, grid_index, image, grid_size=16, car_icon=None):
     if not isinstance(grid_size, tuple):
         grid_size = (grid_size, grid_size)
 
-    grid_image = highlight_grid_triangle(image, [grid_index], grid_size)
+    # grid_image = highlight_grid_triangle(image, [grid_index], grid_size)
+    grid_image = highlight_grid(image, [grid_index], grid_size)
 
     att_map = att_map.squeeze()
     average_att_map = att_map.mean(axis=0)
@@ -333,7 +334,7 @@ class ParkingAgent:
         self.final_steps = 0
 
         # Create the PID controller
-        args_lateral = {'K_P': 0.5, 'K_I': 0.0, 'K_D': 0.0}
+        args_lateral = {'K_P': 1.0, 'K_I': 0.0, 'K_D': 0.0}
         args_longitudinal = {'K_P': 0.5, 'K_I': 0.0, 'K_D': 0.0}
         self.pid_controller = VehiclePIDController(self.player, args_lateral=args_lateral, args_longitudinal=args_longitudinal)
         # self.pid_controller = YawPositionPIDController(self.player, lat_kp=1.4, lat_kd=0.12, yaw_kp=1.0, yaw_kd=0.06, lon_kp=0.9, lon_kd=0.08)
@@ -625,7 +626,7 @@ class ParkingAgent:
                         )
 
                         # Draw arrow
-                        if 1:
+                        if 0:
                             self.world._world.debug.draw_arrow(
                                 start_loc,
                                 end_loc,
@@ -654,8 +655,8 @@ class ParkingAgent:
                                  vehicle_transform.location.y,
                                  imu_data.compass if np.isnan(imu_data.compass) else 0]
 
-        idx_in_curr_loop = 4 # self.step % self.process_frequency + 1
-        control = self.pid_controller.run_step(target_speed=4.0, waypoint=self.buffered_traj[idx_in_curr_loop])
+        idx_in_curr_loop = 5 # self.step % self.process_frequency + 1
+        control = self.pid_controller.run_step(target_speed=5.0, waypoint=self.buffered_traj[idx_in_curr_loop])
         self.player.apply_control(control)
 
     def make_target_transform(self, world_z, x, y, yaw_deg):
@@ -825,7 +826,7 @@ class ParkingAgent:
                                           dtype=torch.float).unsqueeze(0).unsqueeze(0)
 
         target_types = ["gt","predicted","tracking","dynamics"]
-        target_type = target_types[2]
+        target_type = target_types[0]
         if target_type =="tracking":
             data['target_point'] = torch.tensor(target_point, dtype=torch.float).unsqueeze(0)
             data["target_point"][0][0] = data["relative_target"][0][0]
