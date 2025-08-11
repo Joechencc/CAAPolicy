@@ -113,6 +113,14 @@ def main():
         default='./config/training.yaml',
         help='path to model training.yaml')
     argparser.add_argument(
+        '--model_path_dynamic',
+        default='./ckpt/dynamic_model.ckpt',
+        help='path to dynamic_model.ckpt')
+    argparser.add_argument(
+        '--model_seq_path_dynamic',
+        default='./ckpt/dynamics_model/exp_2025_7_21_22_40_55/last.ckpt',
+        help='path to dynamic_seq_model.ckpt')
+    argparser.add_argument(
         '--eva_epochs',
         default=4,
         type=int,

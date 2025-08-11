@@ -17,6 +17,7 @@ parking_model:
   hist_frame_nums: 10
   token_nums: 204
   image_crop: 256
+  seq_length: 4
 
   # bev encoder
   bev_encoder_in_channel: 64
@@ -42,8 +43,10 @@ parking_model:
   tf_en_layers: 4
   tf_en_dropout: 0.05
   tf_en_bev_length: 256
-  tf_en_motion_length: 4
+  tf_en_motion_length: 3
   tf_en_target_length: 3
+
+
   # transformer decoder
   tf_de_dim: 264
   tf_de_heads: 6
