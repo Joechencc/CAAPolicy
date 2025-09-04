@@ -50,17 +50,6 @@ https://user-images.githubusercontent.com/49095445/223448374-6317a8d9-4eb8-4ef8-
 **Cascade-Occupancy-Network framwork**
 ![occupancy-conet](https://user-images.githubusercontent.com/49095445/223452679-cb8fdd95-5102-4563-adda-ef3645d48353.png)
 
-# Bibtex
-If this work is helpful for your research, please consider citing the following BibTeX entry.
-
-```
-@article{wang2023openoccupancy,
-  title={Openoccupancy: A large scale benchmark for surrounding semantic occupancy perception},
-  author={Wang, Xiaofeng and Zhu, Zheng and Xu, Wenbo and Zhang, Yunpeng and Wei, Yi and Chi, Xu and Ye, Yun and Du, Dalong and Lu, Jiwen and Wang, Xingang},
-  journal={arXiv preprint arXiv:2303.03991},
-  year={2023}
-}
-```
 
 # Acknowledgement
 
